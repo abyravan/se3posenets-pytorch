@@ -1,15 +1,11 @@
-#ifndef TH_GENERIC_FILE
-#define TH_GENERIC_FILE "generic/NTfm3D_cpu.c"
-#else
+#include <TH/TH.h>
+#include <assert.h>
 
-#include <stdbool.h>
-
-void THNN_(NTfm3D_updateOutput)(
-			THNNState *state,
-			THTensor *points,
-			THTensor *masks,
-			THTensor *tfms,
-			THTensor *tfmpoints)
+int NTfm3D_forward_float(
+			THFloatTensor *points,
+			THFloatTensor *masks,
+			THFloatTensor *tfms,
+			THFloatTensor *tfmpoints)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -17,15 +13,16 @@ void THNN_(NTfm3D_updateOutput)(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
+	 assert(ndim == 3);
 
     // Resize output and set defaults
-    THTensor_(resizeAs)(tfmpoints, points);
+    THFloatTensor_resizeAs(tfmpoints, points);
 
     // Get data pointers
-    real *points_data 	 = THTensor_(data)(points);
-    real *masks_data 	 = THTensor_(data)(masks);
-    real *tfms_data      = THTensor_(data)(tfms);
-    real *tfmpoints_data = THTensor_(data)(tfmpoints);
+    float *points_data 	  = THFloatTensor_data(points);
+    float *masks_data 	  = THFloatTensor_data(masks);
+    float *tfms_data      = THFloatTensor_data(tfms);
+    float *tfmpoints_data = THFloatTensor_data(tfmpoints);
 
     // Get strides
     long *ps = points->stride;
@@ -42,18 +39,18 @@ void THNN_(NTfm3D_updateOutput)(
             {
                 // Get input point (p)
                 long valp = b*ps[0] + r*ps[2] + c*ps[3]; // Don't add stride along 3D dim
-                real x = *(points_data + 0*ps[1] + valp);
-                real y = *(points_data + 1*ps[1] + valp);
-                real z = *(points_data + 2*ps[1] + valp);
+                float x = *(points_data + 0*ps[1] + valp);
+                float y = *(points_data + 1*ps[1] + valp);
+                float z = *(points_data + 2*ps[1] + valp);
 
                 // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                real xt = 0, yt = 0, zt = 0;
+                float xt = 0, yt = 0, zt = 0;
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
-                    real w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th transform "
-                    real *T = tfms_data + b*ts[0] + k*ts[1];   // Get the 'k'th transform
+                    float w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th transform "
+                    float *T  = tfms_data + b*ts[0] + k*ts[1];   // Get the 'k'th transform
 
                     // Add w_k * (R_k*p + t_k) (for X,Y,Z coordinates)
                     xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]); // w_k * (R_k * p_x + t_k)
@@ -68,18 +65,19 @@ void THNN_(NTfm3D_updateOutput)(
             }
         }
     }
+
+	 return 1;
 }
 
-void THNN_(NTfm3D_updateGradInput)(
-			THNNState *state,
-			THTensor *points,
-			THTensor *masks,
-			THTensor *tfms,
-			THTensor *tfmpoints,
-			THTensor *gradPoints,
-			THTensor *gradMasks,
-			THTensor *gradTfms,
-			THTensor *gradTfmpoints)
+int NTfm3D_backward_float(
+			THFloatTensor *points,
+			THFloatTensor *masks,
+			THFloatTensor *tfms,
+			THFloatTensor *tfmpoints,
+			THFloatTensor *gradPoints,
+			THFloatTensor *gradMasks,
+			THFloatTensor *gradTfms,
+			THFloatTensor *gradTfmpoints)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -87,20 +85,21 @@ void THNN_(NTfm3D_updateGradInput)(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
+	 assert(ndim == 3);
 
     // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
-    THTensor_(fill)(gradPoints, 0);
-    THTensor_(fill)(gradTfms, 0);
+    THFloatTensor_fill(gradPoints, 0);
+    THFloatTensor_fill(gradTfms, 0);
 
     // Get data pointers
-    real *points_data        = THTensor_(data)(points);
-    real *masks_data         = THTensor_(data)(masks);
-    real *tfms_data          = THTensor_(data)(tfms);
-    real *gradPoints_data 	 = THTensor_(data)(gradPoints);
-    real *gradMasks_data 	 = THTensor_(data)(gradMasks);
-    real *gradTfms_data      = THTensor_(data)(gradTfms);
-    real *gradTfmpoints_data = THTensor_(data)(gradTfmpoints);
-    real *tfmpoints_data     = THTensor_(data)(tfmpoints);
+    float *points_data        = THFloatTensor_data(points);
+    float *masks_data         = THFloatTensor_data(masks);
+    float *tfms_data          = THFloatTensor_data(tfms);
+    float *gradPoints_data 	= THFloatTensor_data(gradPoints);
+    float *gradMasks_data 	   = THFloatTensor_data(gradMasks);
+    float *gradTfms_data      = THFloatTensor_data(gradTfms);
+    float *gradTfmpoints_data = THFloatTensor_data(gradTfmpoints);
+    //float *tfmpoints_data     = THFloatTensor_data(tfmpoints);
 
     // Get strides
     long *ps = points->stride;
@@ -117,23 +116,23 @@ void THNN_(NTfm3D_updateGradInput)(
             {
                 // Get input point (p)
                 long valp = b*ps[0] + r*ps[2] + c*ps[3]; // Don't add stride along 3D dim
-                real x = *(points_data + 0*ps[1] + valp);
-                real y = *(points_data + 1*ps[1] + valp);
-                real z = *(points_data + 2*ps[1] + valp);
+                float x = *(points_data + 0*ps[1] + valp);
+                float y = *(points_data + 1*ps[1] + valp);
+                float z = *(points_data + 2*ps[1] + valp);
 
                 // Get gradient w.r.t output point (gpt)
-                real gxt = *(gradTfmpoints_data + 0*ps[1] + valp);
-                real gyt = *(gradTfmpoints_data + 1*ps[1] + valp);
-                real gzt = *(gradTfmpoints_data + 2*ps[1] + valp);
+                float gxt = *(gradTfmpoints_data + 0*ps[1] + valp);
+                float gyt = *(gradTfmpoints_data + 1*ps[1] + valp);
+                float gzt = *(gradTfmpoints_data + 2*ps[1] + valp);
 
                 // Gradients w.r.t pts, masks & tfms
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                real gx = 0, gy = 0, gz = 0; // Grads w.r.t input pts
+                float gx = 0, gy = 0, gz = 0; // Grads w.r.t input pts
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
-                    real w_k = *(masks_data + k*ms[1] + valm);   // Get the weight for the 'k'th transform "
-                    real *T  = tfms_data + b*ts[0] + k*ts[1];     // Get the 'k'th transform
+                    float w_k = *(masks_data + k*ms[1] + valm);   // Get the weight for the 'k'th transform "
+                    float *T  = tfms_data + b*ts[0] + k*ts[1];     // Get the 'k'th transform
 
                     // === Gradient w.r.t input point (p = R^T * gpt, summed across all the "k" transforms)
                     gx += w_k * (T[0] * gxt + T[4] * gyt + T[8]  * gzt);
@@ -146,7 +145,7 @@ void THNN_(NTfm3D_updateGradInput)(
                                                          gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
 
                     // === Gradients w.r.t transforms (t_k)
-                    real *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
+                    float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
 
                     // Grads w.r.t rotation parameters (sum across all pts)
                     gT[0]  += w_k * x * gxt;
@@ -172,7 +171,6 @@ void THNN_(NTfm3D_updateGradInput)(
             }
         }
     }
+
+	 return 1;
 }
-
-#endif
-

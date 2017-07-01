@@ -1,10 +1,18 @@
-#include "utils.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define WARPSIZE 32
+#include <stdio.h>
+#include <math.h>
+#include <float.h>
+#include <assert.h>
+#include "cudautils.h"
 
 __constant__ float constTfms[15000];  // ... or some other big enough number
 
 // =============== FWD PASS ================== //
+
+///////////// Kernel
 // Compute the transformed points by transforming each input point by all the "k" transforms, weighting the results
 // by the mask values and summing the resulting weighted points (in parallel)
 __global__ void computeTransformedPoints(const float *points, const float *masks, float *tfmpoints,
@@ -48,50 +56,14 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
     *(tfmpoints + 2*ps1 + valp) = zt;
 }
 
-// FWD pass
-static int cunn_NTfm3D_updateOutput(lua_State *L)
+///////////////// FWD pass launcher
+int NTfm3DForwardLauncher(const float *points, const float *masks, const float *tfms, float *tfmpoints, 
+								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
+								  const long *ps, const long *ms, const long *ts,
+								  cudaStream_t stream)
 {
-    // Get tensors
-    THCState *state         = getCutorchState(L);
-    THCudaTensor *points    = (THCudaTensor*)luaT_checkudata(L, 2, "torch.CudaTensor");
-    THCudaTensor *masks     = (THCudaTensor*)luaT_checkudata(L, 3, "torch.CudaTensor");
-    THCudaTensor *tfms      = (THCudaTensor*)luaT_checkudata(L, 4, "torch.CudaTensor");
-    THCudaTensor *tfmpoints = (THCudaTensor*)luaT_getfieldcheckudata(L, 1, "output", "torch.CudaTensor");
-    THAssert(THCudaTensor_checkGPU(state, 4, points, masks, tfms, tfmpoints)); // Check if they are all on same GPU
-
-    // Initialize vars
-    int batchSize = points->size[0];
-    int ndim      = points->size[1];
-    int nrows     = points->size[2];
-    int ncols     = points->size[3];
-    int nSE3      = masks->size[1];
-    THAssert(ndim == 3); // 3D points
-
-    // Check if we can fit all transforms within constant memory
-    int nTfmParams = THCudaTensor_nElement(state, tfms);
-    if (nTfmParams > 15000)
-    {
-        printf("Number of transform parameters (%d) > 15000. Can't be stored in constant memory."
-               "Please use NonRigidTransform3D layer instead \n", nTfmParams);
-        THAssert(false); // Exit
-    }
-
-    // Resize output
-    THCudaTensor_resizeAs(state, tfmpoints, points);
-
-    // Get strides
-    long *ps = points->stride;
-    long *ms = masks->stride;
-    long *ts = tfms->stride;
-
-    // Get data pointers
-    float *points_data 	  = THCudaTensor_data(state, points);
-    float *masks_data 	  = THCudaTensor_data(state, masks);
-    float *tfmpoints_data = THCudaTensor_data(state, tfmpoints);
-
     // Copy transforms to constant memory to reduce global memory read overhead
-    float *tfms_data      = THCudaTensor_data(state, tfms);
-    cudaMemcpyToSymbol(constTfms, tfms_data, nTfmParams * sizeof(float));
+    cudaMemcpyToSymbol(constTfms, tfms, nTfmParams * sizeof(float));
 
     // Block and thread structure - we have one large set of points, so use 1d block/threads
     int npoints = batchSize * nrows * ncols;
@@ -106,27 +78,27 @@ static int cunn_NTfm3D_updateOutput(lua_State *L)
 //    cudaEventRecord(start);
 
     // Project the points and run the depth test first (parallelize across number of points)
-    computeTransformedPoints <<< blocks, threads, 0, THCState_getCurrentStream(state) >>>(
-                                                                                            points_data,
-                                                                                            masks_data,
-                                                                                            tfmpoints_data,
-                                                                                            nrows,
-                                                                                            ncols,
-                                                                                            npoints,
-                                                                                            nSE3,
-                                                                                            (int) ps[0],
-                                                                                            (int) ps[1],
-                                                                                            (int) ps[2],
-                                                                                            (int) ps[3],
-                                                                                            (int) ms[0],
-                                                                                            (int) ms[1],
-                                                                                            (int) ms[2],
-                                                                                            (int) ms[3],
-                                                                                            (int) ts[0],
-                                                                                            (int) ts[1],
-                                                                                            (int) ts[2],
-                                                                                            (int) ts[3]
-                                                                                                        );
+    computeTransformedPoints <<< blocks, threads, 0, stream >>>(
+                                                                 points,
+                                                                 masks,
+                                                                 tfmpoints,
+                                                                 nrows,
+                                                                 ncols,
+                                                                 npoints,
+                                                                 nSE3,
+                                                                 (int) ps[0],
+                                                                 (int) ps[1],
+                                                                 (int) ps[2],
+                                                                 (int) ps[3],
+                                                                 (int) ms[0],
+                                                                 (int) ms[1],
+                                                                 (int) ms[2],
+                                                                 (int) ms[3],
+                                                                 (int) ts[0],
+                                                                 (int) ts[1],
+                                                                 (int) ts[2],
+                                                                 (int) ts[3]
+                                                                             );
 
     // Wait for kernel to finish
     cudaDeviceSynchronize();
@@ -141,22 +113,14 @@ static int cunn_NTfm3D_updateOutput(lua_State *L)
     // check for errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("error in NTfm3D.updateOutput: %s\n", cudaGetErrorString(err));
-        THError("aborting");
+        printf("error in NTfm3DForwardLauncher: %s\n", cudaGetErrorString(err));
+        assert(false);
     }
 
     return 1;
 }
 
 // ============= BWD PASS =================== //
-
-// Warp-shuffle to compute the sum across the warp very efficiently
-__inline__ __device__
-float warpReduceSum(float val) {
-  for (int offset = WARPSIZE/2; offset > 0; offset /= 2)
-    val += __shfl_down(val, offset);
-  return val;
-}
 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
 __global__ void computeGradients(const float *points, const float *masks,
@@ -302,56 +266,16 @@ __global__ void computeGradients(const float *points, const float *masks,
     }
 }
 
-// Actual BWD pass
-static int cunn_NTfm3D_updateGradInput(lua_State *L)
+////////////////////////////////////
+// == BWD pass code
+int NTfm3DBackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints, 
+									float *gradPoints, float *gradMasks, float *gradTfms, const float *gradTfmpoints,
+									int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
+									const long *ps, const long *ms, const long *ts,
+									cudaStream_t stream)
 {
-    // Get tensors
-    THCState *state             = getCutorchState(L);
-    THCudaTensor *points        = (THCudaTensor*)luaT_checkudata(L, 2, "torch.CudaTensor");
-    THCudaTensor *masks         = (THCudaTensor*)luaT_checkudata(L, 3, "torch.CudaTensor");
-    THCudaTensor *tfms          = (THCudaTensor*)luaT_checkudata(L, 4, "torch.CudaTensor");
-    THCudaTensor *gradPoints    = (THCudaTensor*)luaT_checkudata(L, 5, "torch.CudaTensor");
-    THCudaTensor *gradMasks     = (THCudaTensor*)luaT_checkudata(L, 6, "torch.CudaTensor");
-    THCudaTensor *gradTfms      = (THCudaTensor*)luaT_checkudata(L, 7, "torch.CudaTensor");
-    THCudaTensor *gradTfmpoints = (THCudaTensor*)luaT_checkudata(L, 8, "torch.CudaTensor");
-
-    // Initialize vars
-    long batchSize = points->size[0];
-    long ndim      = points->size[1];
-    long nrows     = points->size[2];
-    long ncols     = points->size[3];
-    long nSE3      = masks->size[1];
-    THAssert(ndim == 3); // 3D points
-
-    // Check if we can fit all transforms within constant memory
-    int nTfmParams = THCudaTensor_nElement(state, tfms);
-    if (nTfmParams > 15000)
-    {
-        printf("Number of transform parameters (%d) > 15000. Can't be stored in constant memory."
-               "Please use NonRigidTransform3D layer instead \n", nTfmParams);
-        THAssert(false); // Exit
-    }
-
-    // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
-    THCudaTensor_fill(state, gradPoints, 0);
-    THCudaTensor_fill(state, gradTfms, 0);
-
-    // Get data pointers
-    float *points_data        = THCudaTensor_data(state, points);
-    float *masks_data         = THCudaTensor_data(state, masks);
-    float *gradPoints_data 	  = THCudaTensor_data(state, gradPoints);
-    float *gradMasks_data 	  = THCudaTensor_data(state, gradMasks);
-    float *gradTfms_data      = THCudaTensor_data(state, gradTfms);
-    float *gradTfmpoints_data = THCudaTensor_data(state, gradTfmpoints);
-
     // Copy transforms to constant memory to reduce global memory read overhead
-    float *tfms_data = THCudaTensor_data(state, tfms);
-    cudaMemcpyToSymbol(constTfms, tfms_data, nTfmParams * sizeof(float));
-
-    // Get strides
-    long *ps = points->stride;
-    long *ms = masks->stride;
-    long *ts = tfms->stride;
+    cudaMemcpyToSymbol(constTfms, tfms, nTfmParams * sizeof(float));
 
     // Compute gradients w.r.t the input tfms next
     dim3 threads(16,16,1);
@@ -360,8 +284,8 @@ static int cunn_NTfm3D_updateGradInput(lua_State *L)
     if (sharedMemSize > 32000)
     {
         printf("Shared memory size for transform gradients (%d) > 32000. Can't be stored in shared memory."
-               "Please use NonRigidTransform3D layer or reduce number of threads per block \n", sharedMemSize);
-        THAssert(false); // Exit
+               "Please reduce number of threads per block \n", sharedMemSize);
+        assert(false); // Exit
     }
 
 //    // Timer
@@ -370,29 +294,29 @@ static int cunn_NTfm3D_updateGradInput(lua_State *L)
 //    cudaEventCreate(&stop);
 //    cudaEventRecord(start);
 
-    computeGradients<<< blocks, threads, sharedMemSize, THCState_getCurrentStream(state) >>>(
-                                                                                               points_data,
-                                                                                               masks_data,
-                                                                                               gradPoints_data,
-                                                                                               gradMasks_data,
-                                                                                               gradTfms_data,
-                                                                                               gradTfmpoints_data,
-                                                                                               nrows,
-                                                                                               ncols,
-                                                                                               nSE3,
-                                                                                               (int) ps[0],
-                                                                                               (int) ps[1],
-                                                                                               (int) ps[2],
-                                                                                               (int) ps[3],
-                                                                                               (int) ms[0],
-                                                                                               (int) ms[1],
-                                                                                               (int) ms[2],
-                                                                                               (int) ms[3],
-                                                                                               (int) ts[0],
-                                                                                               (int) ts[1],
-                                                                                               (int) ts[2],
-                                                                                               (int) ts[3]
-                                                                                                           );
+    computeGradients<<< blocks, threads, sharedMemSize, stream >>>(
+                                                                    points,
+                                                                    masks,
+                                                                    gradPoints,
+                                                                    gradMasks,
+                                                                    gradTfms,
+                                                                    gradTfmpoints,
+                                                                    nrows,
+                                                                    ncols,
+                                                                    nSE3,
+                                                                    (int) ps[0],
+                                                                    (int) ps[1],
+                                                                    (int) ps[2],
+                                                                    (int) ps[3],
+                                                                    (int) ms[0],
+                                                                    (int) ms[1],
+                                                                    (int) ms[2],
+                                                                    (int) ms[3],
+                                                                    (int) ts[0],
+                                                                    (int) ts[1],
+                                                                    (int) ts[2],
+                                                                    (int) ts[3]
+                                                                                );
 
     // Wait for kernel to finish
     cudaDeviceSynchronize();
@@ -407,23 +331,13 @@ static int cunn_NTfm3D_updateGradInput(lua_State *L)
     // check for errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("error in NTfm3D.updateGradInput: %s\n", cudaGetErrorString(err));
-        THError("aborting");
+        printf("error in NTfm3DBackwardLauncher: %s\n", cudaGetErrorString(err));
+        assert(false);
     }
 
     return 1;
 }
 
-
-static const struct luaL_Reg cunn_NTfm3D__ [] = {
-  {"NTfm3D_updateOutput", cunn_NTfm3D_updateOutput},
-  {"NTfm3D_updateGradInput", cunn_NTfm3D_updateGradInput},
-  {NULL, NULL}
-};
-
-static void cunn_NTfm3D_init(lua_State *L)
-{
-  luaT_pushmetatable(L, "torch.CudaTensor");
-  luaT_registeratname(L, cunn_NTfm3D__, "nn");
-  lua_pop(L,1);
+#ifdef __cplusplus
 }
+#endif

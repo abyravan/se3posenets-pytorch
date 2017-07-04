@@ -23,11 +23,13 @@ class NTfm3DFunction(Function):
 			self.output.resize_as_(points);
 		
 		# Run the FWD pass
-		self.save_for_backward(points, masks, transforms); # Save for FWD pass
-		if not points.is_cuda:
-			se3layers.NTfm3D_forward_float(points, masks, transforms, self.output);
-		else:
+		self.save_for_backward(points, masks, transforms); # Save for BWD pass
+		if points.is_cuda:
 			se3layers.NTfm3D_forward_cuda(points, masks, transforms, self.output);
+		elif points.type() == 'torch.DoubleTensor':
+			se3layers.NTfm3D_forward_double(points, masks, transforms, self.output);
+		else:
+			se3layers.NTfm3D_forward_float(points, masks, transforms, self.output);
 		
 		# Return
 		return self.output
@@ -43,12 +45,15 @@ class NTfm3DFunction(Function):
 		grad_transforms = transforms.new().resize_as_(transforms)
 		
 		# Run the BWD pass
-		if not grad_output.is_cuda:
-			se3layers.NTfm3D_backward_float(points, masks, transforms, self.output,
-													  grad_points, grad_masks, grad_transforms, grad_output);
-		else:
+		if grad_output.is_cuda:
 			se3layers.NTfm3D_backward_cuda(points, masks, transforms, self.output,
-													 grad_points, grad_masks, grad_transforms, grad_output);
+										   grad_points, grad_masks, grad_transforms, grad_output);
+		elif grad_output.type() == 'torch.DoubleTensor':
+			se3layers.NTfm3D_backward_double(points, masks, transforms, self.output,
+											 grad_points, grad_masks, grad_transforms, grad_output);
+		else:
+			se3layers.NTfm3D_backward_float(points, masks, transforms, self.output,
+											grad_points, grad_masks, grad_transforms, grad_output);
 		
 		# Return
 		return grad_points, grad_masks, grad_transforms;

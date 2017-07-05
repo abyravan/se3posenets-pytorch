@@ -414,7 +414,7 @@ from layers.DepthImageToDense3DPoints import DepthImageToDense3DPoints
 scale = 0.5/8
 ht,wd,fy,fx,cy,cx = int(480*scale), int(640*scale), 589*scale, 589*scale, 240*scale, 320*scale
 DPts = DepthImageToDense3DPoints(ht,wd,fy,fx,cy,cx)
-torch.set_default_tensor_type('torch.FloatTensor')
+torch.set_default_tensor_type('torch.DoubleTensor')
 input = Variable(torch.rand(2,1,ht,wd), requires_grad=True)
 assert(gradcheck(DPts, [input]));
 

@@ -2,6 +2,18 @@ import torch
 from torch.autograd import Function
 from torch.nn import Module
 
+'''
+	--------------------- Compose multiple transformations ------------------------------
+   ComposeRtPair() :
+   ComposeRtPair.forward(input1, input2)
+   ComposeRtPair.backward(grad_output)
+
+   ComposeRtPair will compose the given pair of input transforms (T_n, T_n-1) => of size (B x N x 3 x 4) 
+   resulting in a set of composed transforms T_n * T_n-1 (also of size B x N x 3 x 4). 
+   Each 3D transform is a (3x4) matrix [R|t],
+   where "R" is a (3x3) affine matrix and "t" is a translation (3x1).
+'''
+
 ## FWD/BWD pass function
 class ComposeRtPairFunction(Function):
 	def forward(self, A, B):

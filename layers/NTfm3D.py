@@ -3,6 +3,21 @@ from torch.autograd import Function
 from torch.nn import Module
 from _ext import se3layers
 
+'''
+	--------------------- Non-Rigidly deform the input point cloud by transforming and blending across multiple SE3s ------------------------------
+   NTfm3D() :
+   NTfm3D.forward(3D points, masks, Rt)
+   NTfm3D.backward(grad_output)
+
+   NTfm3D will transform the given input points "x" (B x 3 x N x M) and "k" masks (B x k x N x M) via a set of 3D affine transforms (B x k x 3 x 4), 
+	resulting in a set of transformed 3D points (B x 3 x N x M). The transforms will be applied to all the points 
+	and their outputs are interpolated based on the mask weights:
+		output = mask(1,...) .* (R_1 * x + t_1) + mask(2,...) .* (R_2 * x + t_2) + .....
+	Each 3D transform is a (3x4) matrix [R|t], where "R" is a (3x3) affine matrix and "t" is the translation (3x1).
+	Note: The mask values have to sum to 1.0
+		sum(mask,2) = 1
+'''
+
 ## FWD/BWD pass function
 class NTfm3DFunction(Function):
 	def __init__(self):

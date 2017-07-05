@@ -355,3 +355,125 @@ CoRt = ComposeRt();
 torch.set_default_tensor_type('torch.DoubleTensor')
 input1 = Variable(torch.rand(2,8,3,4), requires_grad=True)
 assert(gradcheck(CoRt, [input1]));
+
+#################################################################
+## DepthImageToDensePoints3D
+
+def DepthImageToDensePoints3D(depth,height,width,fy,fx,cy,cx):
+	# Check dimensions (B x 1 x H x W)
+	batch_size, num_channels, num_rows, num_cols = depth.size()
+	assert (num_channels == 1)
+	assert (num_rows == height)
+	assert (num_cols == width)
+
+	# Generate basegrid once
+	base_grid = depth.expand(batch_size,3,num_rows,num_cols).clone()  # (x,y,1)
+	for j in xrange(0, width):  # +x is increasing columns
+		base_grid[:, 0, :, j] = (j - cx) / fx
+	for i in xrange(0, height):  # +y is increasing rows
+		base_grid[:, 1, i, :] = (i - cy) / fy
+	base_grid[:,2,:,:] = 1
+
+	# Compute output = (x, y, depth)
+	z  = depth  # z = depth
+	xy = (z.expand(batch_size, 2, num_rows, num_cols) *
+		  base_grid.narrow(1, 0, 2).expand(batch_size, 2, num_rows, num_cols))
+
+	# Return
+	return torch.cat([xy, z], 1)
+
+### Test DepthImageToDense3DPoints
+# Input/Target
+scale = 0.5/8
+ht,wd,fy,fx,cy,cx = int(480*scale), int(640*scale), 589*scale, 589*scale, 240*scale, 320*scale
+input  = Variable(torch.rand(2,1,ht,wd), requires_grad=True)
+target = Variable(torch.rand(2,3,ht,wd))
+
+# Auto-grad
+output = DepthImageToDense3DPoints(input,ht,wd,fy,fx,cy,cx)
+err    = nn.MSELoss()(output,target)
+err.backward()
+gauto = input.grad.clone()
+
+# Analytical grad
+input.grad.data.zero_()
+from layers.DepthImageToDense3DPoints import DepthImageToDense3DPoints as DepthImageToDense3DPointsA
+output1 = DepthImageToDense3DPointsA(ht,wd,fy,fx,cy,cx)(input)
+err1 	= nn.MSELoss()(output1, target)
+err1.backward()
+ganalytical = input.grad.clone()
+
+# Compare
+diff = gauto - ganalytical
+print("{}, {}, {}".format(diff.data.max(),diff.data.min(),diff.data.abs().view(-1).median(0)[0][0]));
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.DepthImageToDense3DPoints import DepthImageToDense3DPoints
+scale = 0.5/8
+ht,wd,fy,fx,cy,cx = int(480*scale), int(640*scale), 589*scale, 589*scale, 240*scale, 320*scale
+DPts = DepthImageToDense3DPoints(ht,wd,fy,fx,cy,cx)
+torch.set_default_tensor_type('torch.FloatTensor')
+input = Variable(torch.rand(2,1,ht,wd), requires_grad=True)
+assert(gradcheck(DPts, [input]));
+
+#################################################################
+## Noise
+
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+
+def Noise(input, train, max_std, slope_std, iter_count, start_iter):
+	iter = 1 + (iter_count[0] - start_iter)
+	if (iter > 0):
+		std = min((iter / 125000) * slope_std, max_std)
+	else:
+		std = 0
+	if train:
+		noise = input.clone()
+		if std == 0:
+			noise.fill_(0)  # no noise
+		else:
+			noise.data.normal_(0, std)  # Gaussian noise with 0-mean, std-standard deviation
+		output = input + noise
+	else:
+		output = input
+
+	# Return
+	return output
+
+### Test Noise
+# Input/Target
+train, max_std, slope_std, iter_count, start_iter = False, 0.1, 2, torch.FloatTensor([1000]), 1001
+input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
+target = Variable(torch.rand(2,4,9,9))
+
+# Auto-grad
+output = Noise(input, train, max_std, slope_std, iter_count, start_iter)
+err    = nn.MSELoss()(output,target)
+err.backward()
+gauto = input.grad.clone()
+
+# Analytical grad
+input.grad.data.zero_()
+from layers.Noise import Noise as NoiseA
+output1 = NoiseA(max_std, slope_std, iter_count, start_iter)(input)
+err1 	= nn.MSELoss()(output1, target)
+err1.backward()
+ganalytical = input.grad.clone()
+
+# Compare
+diff = gauto - ganalytical
+print("{}, {}, {}".format(diff.data.max(),diff.data.min(),diff.data.abs().view(-1).median(0)[0][0]));
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.Noise import Noise
+train, max_std, slope_std, iter_count, start_iter = True, 0.1, 2, torch.FloatTensor([1000]), 0
+Ns = Noise(max_std, slope_std, iter_count, start_iter)
+torch.set_default_tensor_type('torch.DoubleTensor')
+input = Variable(torch.rand(2,4,9,9), requires_grad=True)
+assert(gradcheck(Ns, [input]));

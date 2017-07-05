@@ -2,6 +2,16 @@ import torch
 from torch.autograd import Function
 from torch.nn import Module
 
+'''
+	--------------------- Invert transformations of type R|t ------------------------------
+   RtInverse() :
+   RtInverse.forward(input)
+   RtInverse.backward(grad_output)
+
+   Inverts the transform: Given [R|t], returns [R^T | -R^T*t]
+   Size of inputs/outputs: (B x k x 3 x 4)
+'''
+
 ## FWD/BWD pass function
 class RtInverseFunction(Function):
 	def forward(self, input):

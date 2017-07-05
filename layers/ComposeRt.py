@@ -2,6 +2,28 @@ import torch
 from torch.autograd import Function
 from torch.nn import Module
 
+'''
+	--------------------- Compose multiple transformations ------------------------------
+   ComposeRt() :
+   ComposeRt.forward(input)
+   ComposeRt.backward(grad_output)
+
+   ComposeRt will transform the given input transforms (B x N x 3 x 4) 
+   resulting in a set of composed transforms (B x N x 3 x 4). Currently, the order of composition is fixed
+	to be 1->2->3->...N where each transform is the composition of all other transforms before and including it.
+   Each 3D transform is a (3x4) matrix [R|t],
+   where "R" is a (3x3) affine matrix and "t" is a translation (3x1).
+	Assuming an input [T1,T2,T3,T4], we have two options based on the flag "rightToLeft":
+	if (rightToLeft) then
+		[T1', T2', T3', T4'] = [T1, T2*T1, T3*T2*T1, T4*T3*T2*T1] where we go from right to left when counting from 1 to 4
+		This makes sense if the points are all specified in T1's frame of reference (eg: in camera)
+	else 
+		[T1', T2', T3', T4'] = [T1, T1*T2, T1*T2*T3, T1*T2*T3*T4] where we go from left to right when counting from 1 to 4
+		This makes sense if the points are specified in the body frame of reference (eg: joint frames)
+	end
+	By default, rightToLeft is "false"
+'''
+
 ## FWD/BWD pass function
 class ComposeRtFunction(Function):
 	def __init__(self, rightToLeft = False):

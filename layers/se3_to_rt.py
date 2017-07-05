@@ -54,11 +54,19 @@ class SE3ToRt(torch.nn.Module):
         self.transform_type = transform_type
 
     def _computeUnitQuaternionFromQuaternion(self, quat):
-        # N = quat.size(0)
         norm2 = torch.pow(quat, 2).sum(1)
         norm = norm2.sqrt()
 
         unitquat = torch.div(quat, norm.expand_as(quat))
+
+        # post-processing
+        # threshold = 1e-12
+        # N = quat.size(0)
+        # for n in range(N):
+        #     if norm2[n].data[0] < threshold:
+        #         unitquat[n, 0:3] = 0.0
+        #         unitquat[n, 3] = 1.0
+
         return unitquat
 
     def _createRotFromUnitQuaternion(self, unitquat):
@@ -122,7 +130,6 @@ class SE3ToRt(torch.nn.Module):
 
         transparams = features.view(totSE3, -1, 1).narrow(1, 0, 3)
 
-        ipdb.set_trace()
         output = torch.cat([rotations, transparams], dim=2).view(
             [batch_size, numSE3s, 3, ncols]).contiguous()
 

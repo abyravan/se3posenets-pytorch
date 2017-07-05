@@ -477,3 +477,53 @@ Ns = Noise(max_std, slope_std, iter_count, start_iter)
 torch.set_default_tensor_type('torch.DoubleTensor')
 input = Variable(torch.rand(2,4,9,9), requires_grad=True)
 assert(gradcheck(Ns, [input]));
+
+#################################################################
+## HuberLoss
+
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+
+def HuberLoss(input, target, size_average, delta):
+	absDiff = (input - target).abs_()
+	minDiff = torch.clamp(absDiff, max=delta)  # cmin
+	output = 0.5 * (minDiff * (2 * absDiff - minDiff)).sum()
+	if size_average:
+		output *= (1.0 / input.nelement())
+
+	# Return
+	return output
+
+### Test Noise
+# Input/Target
+size_average, delta = True, 0.1
+input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
+target = Variable(torch.rand(2,4,9,9))
+
+# Auto-grad
+output = HuberLoss(input, target, size_average, delta )
+output.backward()
+gauto = input.grad.clone()
+
+# Analytical grad
+input.grad.data.zero_()
+from layers.HuberLoss import HuberLoss as HuberLossA
+output1 = HuberLossA(size_average, delta)(input, target)
+output1.backward()
+ganalytical = input.grad.clone()
+
+# Compare
+diff = gauto - ganalytical
+print("{}, {}, {}".format(diff.data.max(),diff.data.min(),diff.data.abs().view(-1).median(0)[0][0]));
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.HuberLoss import HuberLoss
+size_average, delta = True, 0.1
+H = HuberLoss(size_average, delta)
+torch.set_default_tensor_type('torch.DoubleTensor')
+input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
+target = Variable(torch.rand(2,4,9,9))
+assert(gradcheck(H, [input, target]));

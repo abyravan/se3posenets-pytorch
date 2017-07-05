@@ -2,6 +2,18 @@ import torch
 from torch.autograd import Function
 from torch.nn import Module
 
+'''
+	--------------------- Collapses [R|t|pivots] to [R|t'] where t' = p + t - Rp ------------------------------
+   CollapseRtPivots() :
+   CollapseRtPivots.forward(input)
+   CollapseRtPivots.backward(grad_output)
+
+   CollapseRtPivots will transform the given input transforms [R|t|p] (B x N x 3 x 5) to a set of outputs [R'|t'] (B x N x 3 x 4) where 
+	R' = R & t' = t + p - Rp
+   Each 3D transform is a (3x5) matrix [R|t|p],
+   where "R" is a (3x3) affine matrix, "t" is a translation (3x1) and "p" is a pivot (3x1).
+'''
+
 ## FWD/BWD pass function
 class CollapseRtPivotsFunction(Function):
 	def forward(self, input):

@@ -17,12 +17,16 @@ from torch.nn import Module
 				(cx,cy) are the centers of projection in (x,y) => (col,row)
   	  	Z   = 0 is the image plane
 	  	Z   > 0 goes forward from the image plane
-	The parameters (fy,fx,cy,cx) are optional - they default to values for a 240 x 320 image
+	The parameters (fy,fx,cy,cx) are optional - they default to values for a 240 x 320 image from an Asus Xtion Pro
 '''
 
 ## FWD/BWD pass function
 class DepthImageToDense3DPointsFunction(Function):
-	def __init__(self, height, width, fy, fx, cy, cx, base_grid):
+	def __init__(self, height, width, base_grid,
+				 fy = 589.3664541825391 * 0.5,
+				 fx = 589.3664541825391 * 0.5,
+				 cy = 240.5 * 0.5,
+				 cx = 320.5 * 0.5):
 		# Image dimensions
 		assert (height > 1 and width > 1)
 		self.height    = height
@@ -30,10 +34,10 @@ class DepthImageToDense3DPointsFunction(Function):
 		self.base_grid = base_grid
 
 		# Declare params(default for a 240 x 320 image)
-		self.fx = fx or (589.3664541825391 * 0.5)
-		self.fy = fy or (589.3664541825391 * 0.5)
-		self.cx = cx or (320.5 * 0.5)
-		self.cy = cy or (240.5 * 0.5)
+		self.fx = fx
+		self.fy = fy
+		self.cx = cx
+		self.cy = cy
 		assert (self.fx > 0 and self.fy > 0 and
 				self.cx >= 0 and self.cx < self.width and
 				self.cy >= 0 and self.cy < self.height)
@@ -68,7 +72,11 @@ class DepthImageToDense3DPointsFunction(Function):
 
 ## FWD/BWD pass module
 class DepthImageToDense3DPoints(Module):
-	def __init__(self, height, width, fy, fx, cy, cx):
+	def __init__(self, height, width,
+				 fy = 589.3664541825391 * 0.5,
+				 fx = 589.3664541825391 * 0.5,
+				 cy = 240.5 * 0.5,
+				 cx = 320.5 * 0.5):
 		super(DepthImageToDense3DPoints, self).__init__()
 
 		# Image dimensions
@@ -78,10 +86,10 @@ class DepthImageToDense3DPoints(Module):
 		self.base_grid = None
 
 		# Declare params(default for a 240 x 320 image)
-		self.fx = fx or (589.3664541825391 * 0.5)
-		self.fy = fy or (589.3664541825391 * 0.5)
-		self.cx = cx or (320.5 * 0.5)
-		self.cy = cy or (240.5 * 0.5)
+		self.fx = fx
+		self.fy = fy
+		self.cx = cx
+		self.cy = cy
 		assert (self.fx > 0 and self.fy > 0 and
 				self.cx >= 0 and self.cx < self.width and
 				self.cy >= 0 and self.cy < self.height)
@@ -97,6 +105,5 @@ class DepthImageToDense3DPoints(Module):
 				self.base_grid[:, 1, i, :].fill_((i - self.cy) / self.fy)
 
 		# Run the rest of the FWD pass
-		return DepthImageToDense3DPointsFunction(self.height, self.width,
-												 self.fy, self.fx, self.cy, self.cx,
-												 self.base_grid)(input)
+		return DepthImageToDense3DPointsFunction(self.height, self.width, self.base_grid,
+												 self.fy, self.fx, self.cy, self.cx)(input)

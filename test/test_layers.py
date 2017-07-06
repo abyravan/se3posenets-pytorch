@@ -394,10 +394,12 @@ input1 = Variable(torch.rand(2, 8, 3, 4), requires_grad=True)
 assert(gradcheck(CoRt, [input1]))
 
 #################################################################
-# DepthImageToDensePoints3D
+# DepthImageToDense3DPoints
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
 
-
-def DepthImageToDensePoints3D(depth, height, width, fy, fx, cy, cx):
+def DepthImageToDense3DPoints(depth, height, width, fy, fx, cy, cx):
         # Check dimensions (B x 1 x H x W)
     batch_size, num_channels, num_rows, num_cols = depth.size()
     assert (num_channels == 1)
@@ -634,3 +636,107 @@ points  = Variable(torch.rand(2,4,3,3), requires_grad=True)
 temp = torch.rand(2,8,3,3);
 weights = Variable(temp / temp.sum(1).expand_as(temp), requires_grad=True)
 assert(gradcheck(W, [points, weights]));
+
+#################################################################
+# NormalizedMSELoss
+
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+
+def NormalizedMSELoss(input, target, size_average, scale, defsigma):
+	# Compute loss
+	sigma = (scale * target.abs()) + defsigma  # sigma	= scale * abs(target)  + defsigma
+	residual = ((input - target) / sigma)  # res = (x - mu) / sigma
+	output = 0.5 * residual.dot(residual)  # -- SUM [ 0.5 * ((x-mu)/sigma)^2 ]
+	if size_average:
+		output *= (1.0 / input.nelement())
+
+	# Return
+	return output
+
+# Test Noise
+# Input/Target
+size_average, scale, defsigma = True, 0.5, 0.005
+input = Variable(torch.randn(2, 4, 9, 9), requires_grad=True)
+target = Variable(torch.randn(2, 4, 9, 9))
+
+# Auto-grad
+output = NormalizedMSELoss(input, target, size_average, scale, defsigma)
+output.backward()
+gauto = input.grad.clone()
+
+# Analytical grad
+input.grad.data.zero_()
+from layers.NormalizedMSELoss import NormalizedMSELoss as NormalizedMSELossA
+output1 = NormalizedMSELossA(size_average, scale, defsigma)(input, target)
+output1.backward()
+ganalytical = input.grad.clone()
+
+# Compare
+diff = gauto - ganalytical
+print("{}, {}, {}".format(diff.data.max(), diff.data.min(),
+                          diff.data.abs().view(-1).median(0)[0][0]))
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.NormalizedMSELoss import NormalizedMSELoss
+size_average, scale, defsigma = True, 0.5, 0.005
+H = NormalizedMSELoss(size_average, scale, defsigma)
+torch.set_default_tensor_type('torch.DoubleTensor')
+input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
+target = Variable(torch.rand(2,4,9,9))
+assert(gradcheck(H, [input, target]));
+
+#################################################################
+# NormalizedMSESqrtLoss
+
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+
+def NormalizedMSESqrtLoss(input, target, size_average, scale, defsigma):
+	# Compute loss
+	sigma = (scale * target.abs()) + defsigma  # sigma	= scale * abs(target)  + defsigma
+	residual = (input - target).pow(2)  # res = (x - mu)^2
+	output = 0.5 * (residual / sigma).sum()  # -- SUM [ 0.5 * ((x-mu)^2/sigma) ]
+	if size_average:
+		output *= (1.0 / input.nelement())
+
+	# Return
+	return output
+
+# Test Noise
+# Input/Target
+size_average, scale, defsigma = True, 0.5, 0.005
+input = Variable(torch.randn(2, 4, 9, 9), requires_grad=True)
+target = Variable(torch.randn(2, 4, 9, 9))
+
+# Auto-grad
+output = NormalizedMSESqrtLoss(input, target, size_average, scale, defsigma)
+output.backward()
+gauto = input.grad.clone()
+
+# Analytical grad
+input.grad.data.zero_()
+from layers.NormalizedMSESqrtLoss import NormalizedMSESqrtLoss as NormalizedMSESqrtLossA
+output1 = NormalizedMSESqrtLossA(size_average, scale, defsigma)(input, target)
+output1.backward()
+ganalytical = input.grad.clone()
+
+# Compare
+diff = gauto - ganalytical
+print("{}, {}, {}".format(diff.data.max(), diff.data.min(),
+                          diff.data.abs().view(-1).median(0)[0][0]))
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.NormalizedMSESqrtLoss import NormalizedMSESqrtLoss
+size_average, scale, defsigma = True, 0.5, 0.005
+H = NormalizedMSESqrtLoss(size_average, scale, defsigma)
+torch.set_default_tensor_type('torch.DoubleTensor')
+input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
+target = Variable(torch.rand(2,4,9,9))
+assert(gradcheck(H, [input, target]));

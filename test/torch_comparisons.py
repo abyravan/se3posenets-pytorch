@@ -118,7 +118,7 @@ err.backward()
 pred,grad = output.data, input.grad
 
 ########
-# Huber
+# HuberLoss
 import torch
 from torch import nn
 from torch.autograd import Variable
@@ -145,3 +145,31 @@ output = WeightedAveragePoints()(pts, masks)
 err    = nn.MSELoss()(output, target)
 err.backward()
 pred,gradpts,gradmasks = output.data, pts.grad, masks.grad
+
+########
+# NormalizedMSELoss
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.NormalizedMSELoss import NormalizedMSELoss
+torch.manual_seed(100) # seed
+input  = Variable(torch.randn(2,8,3,5), requires_grad=True)
+target = Variable(torch.randn(2,8,3,5))
+size_average, scale, defsigma = True, 0.5, 0.005
+output = NormalizedMSELoss(size_average, scale, defsigma)(input, target)
+output.backward()
+pred,grad = output.data, input.grad
+
+########
+# NormalizedMSESqrtLoss
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.NormalizedMSESqrtLoss import NormalizedMSESqrtLoss
+torch.manual_seed(100) # seed
+input  = Variable(torch.randn(2,8,3,5), requires_grad=True)
+target = Variable(torch.randn(2,8,3,5))
+size_average, scale, defsigma = True, 0.5, 0.005
+output = NormalizedMSESqrtLoss(size_average, scale, defsigma)(input, target)
+output.backward()
+pred,grad = output.data, input.grad

@@ -113,7 +113,7 @@ graderr = err:backward(output,target);
 grad = l:backward(input, graderr);
 
 ----------
--- Huber 
+-- HuberCriterion
 require 'se3depthpred';
 torch.manualSeed(100); 
 input  = torch.rand(2,8,3,5); 
@@ -137,3 +137,25 @@ err:forward(output,target);
 graderr = err:backward(output,target);
 grad = l:backward({pts,masks}, graderr);
 gradpts, gradmasks = unpack(grad);
+
+----------
+-- NormalizedMSECriterion
+require 'se3depthpred';
+torch.manualSeed(100);
+input  = torch.randn(2,8,3,5);
+target = torch.randn(2,8,3,5);
+size_average, scale, defsigma = true, 0.5, 0.005
+l = nn.NormalizedMSECriterion(size_average, scale, defsigma);
+output = l:forward(input, target);
+grad = l:backward(input, target);
+
+----------
+-- NormalizedMSESqrtCriterion
+require 'se3depthpred';
+torch.manualSeed(100);
+input  = torch.randn(2,8,3,5);
+target = torch.randn(2,8,3,5);
+size_average, scale, defsigma = true, 0.5, 0.005
+l = nn.NormalizedMSESqrtCriterion(size_average, scale, defsigma);
+output = l:forward(input, target);
+grad = l:backward(input, target);

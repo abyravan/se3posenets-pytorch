@@ -112,3 +112,28 @@ err:forward(output,target);
 graderr = err:backward(output,target); 
 grad = l:backward(input, graderr);
 
+----------
+-- Huber 
+require 'se3depthpred';
+torch.manualSeed(100); 
+input  = torch.rand(2,8,3,5); 
+target = torch.rand(2,8,3,5); 
+size_average, delta = true, 0.1
+l = nn.HuberCriterion(size_average, delta); 
+output = l:forward(input, target);
+grad = l:backward(input, target);
+
+----------
+-- WeightedAveragePoints
+require 'se3depthpred';
+torch.manualSeed(100);
+pts    = torch.rand(2,3,9,9);
+masks  = torch.rand(2,8,9,9);
+target = torch.rand(2,8,3);
+l = nn.WeightedAveragePoints();
+output = l:forward({pts,masks});
+err = nn.MSECriterion();
+err:forward(output,target);
+graderr = err:backward(output,target);
+grad = l:backward({pts,masks}, graderr);
+gradpts, gradmasks = unpack(grad);

@@ -116,3 +116,32 @@ output = Noise(max_std, slope_std, iter_count, start_iter)(input)
 err    = nn.MSELoss()(output, target)
 err.backward()
 pred,grad = output.data, input.grad
+
+########
+# Huber
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.HuberLoss import HuberLoss
+torch.manual_seed(100) # seed
+input  = Variable(torch.rand(2,8,3,5), requires_grad=True)
+target = Variable(torch.rand(2,8,3,5))
+size_average, delta = True, 0.1
+output = HuberLoss(size_average, delta)(input, target)
+output.backward()
+pred,grad = output.data, input.grad
+
+########
+# WeightedAveragePoints
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.WeightedAveragePoints import WeightedAveragePoints
+torch.manual_seed(100) # seed
+pts    = Variable(torch.rand(2,3,9,9), requires_grad=True)
+masks  = Variable(torch.rand(2,8,9,9), requires_grad=True)
+target = Variable(torch.rand(2,8,3))
+output = WeightedAveragePoints()(pts, masks)
+err    = nn.MSELoss()(output, target)
+err.backward()
+pred,gradpts,gradmasks = output.data, pts.grad, masks.grad

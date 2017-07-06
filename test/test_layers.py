@@ -486,7 +486,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 
 def HuberLoss(input, target, size_average, delta):
-	absDiff = (input - target).abs_()
+	absDiff = (input - target).abs()
 	minDiff = torch.clamp(absDiff, max=delta)  # cmin
 	output = 0.5 * (minDiff * (2 * absDiff - minDiff)).sum()
 	if size_average:
@@ -527,3 +527,65 @@ torch.set_default_tensor_type('torch.DoubleTensor')
 input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
 target = Variable(torch.rand(2,4,9,9))
 assert(gradcheck(H, [input, target]));
+
+#################################################################
+## WeightedAveragePoints
+
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+
+def WeightedAveragePoints(points, weights):
+	# Check dimensions (B x J x H x W)
+	B, J, H, W = points.size()
+	K = weights.size(1)
+	assert (weights.size(0) == B and weights.size(2) == H and weights.size(3) == W)
+
+	# Compute output = B x K x J
+	output = []
+	for i in xrange(K):
+		M = weights.view(B, K, H * W).narrow(1, i, 1).expand(B, J, H * W)  # Get weights
+		S = M.sum(2).clamp(min=1e-12)  # Clamp normalizing constant
+		output.append((M * points).sum(2) / S)  # Compute convex combination
+
+	# Return
+	return torch.cat(output, 1)
+
+### Test Noise
+# Input/Target
+points  = Variable(torch.rand(2,4,3,3), requires_grad=True)
+temp = torch.rand(2,8,3,3);
+weights = Variable(temp / temp.sum(1).expand_as(temp), requires_grad=True)
+target = Variable(torch.rand(2,8,4))
+
+# Auto-grad
+output = WeightedAveragePoints(points, weights)
+err    = nn.MSELoss()(output,target)
+err.backward()
+gauto1, gauto2 = points.grad.clone(), weights.grad.clone()
+
+# Analytical grad
+points.grad.data.zero_(); weights.grad.data.zero_()
+from layers.WeightedAveragePoints import WeightedAveragePoints as WeightedAveragePointsA
+output1 = WeightedAveragePointsA()(points, weights)
+err1 	= nn.MSELoss()(output1, target)
+err1.backward()
+ganalytical1, ganalytical2 = points.grad.clone(), weights.grad.clone()
+
+# Compare
+diff1 = gauto1 - ganalytical1
+diff2 = gauto2 - ganalytical2
+print("{}, {}, {}".format(diff1.data.max(),diff1.data.min(),diff1.data.abs().view(-1).median(0)[0][0]));
+print("{}, {}, {}".format(diff2.data.max(),diff2.data.min(),diff2.data.abs().view(-1).median(0)[0][0]));
+
+# Grad-Check
+import torch
+from torch.autograd import gradcheck, Variable
+from layers.WeightedAveragePoints import WeightedAveragePoints
+W = WeightedAveragePoints()
+torch.set_default_tensor_type('torch.DoubleTensor')
+points  = Variable(torch.rand(2,4,3,3), requires_grad=True)
+temp = torch.rand(2,8,3,3);
+weights = Variable(temp / temp.sum(1).expand_as(temp), requires_grad=True)
+assert(gradcheck(W, [points, weights]));
+

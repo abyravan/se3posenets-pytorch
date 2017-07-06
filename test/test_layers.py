@@ -4,8 +4,6 @@ import torch.nn as nn
 
 #################################################################
 # RT INVERSE
-
-
 def RtInverse(input):
     # Check dimensions
     bsz, nse3, nrows, ncols = input.size()
@@ -494,8 +492,7 @@ def Noise(input, train, max_std, slope_std, iter_count, start_iter):
 
 # Test Noise
 # Input/Target
-train, max_std, slope_std, iter_count, start_iter = False, 0.1, 2, torch.FloatTensor([
-                                                                                     1000]), 1001
+train, max_std, slope_std, iter_count, start_iter = False, 0.1, 2, torch.FloatTensor([1000]), 1001
 input = Variable(torch.rand(2, 4, 9, 9), requires_grad=True)
 target = Variable(torch.rand(2, 4, 9, 9))
 
@@ -522,8 +519,7 @@ print("{}, {}, {}".format(diff.data.max(), diff.data.min(),
 import torch
 from torch.autograd import gradcheck, Variable
 from layers.Noise import Noise
-train, max_std, slope_std, iter_count, start_iter = True, 0.1, 2, torch.FloatTensor([
-                                                                                    1000]), 0
+train, max_std, slope_std, iter_count, start_iter = True, 0.1, 2, torch.FloatTensor([1000]), 0
 Ns = Noise(max_std, slope_std, iter_count, start_iter)
 torch.set_default_tensor_type('torch.DoubleTensor')
 input = Variable(torch.rand(2, 4, 9, 9), requires_grad=True)
@@ -536,16 +532,13 @@ import torch
 from torch.autograd import Variable
 import torch.nn as nn
 
-
 def HuberLoss(input, target, size_average, delta):
 	absDiff = (input - target).abs()
 	minDiff = torch.clamp(absDiff, max=delta)  # cmin
 	output = 0.5 * (minDiff * (2 * absDiff - minDiff)).sum()
 	if size_average:
 		output *= (1.0 / input.nelement())
-    # Return
-    return output
-
+	return output
 
 # Test Noise
 # Input/Target
@@ -577,7 +570,6 @@ from layers.HuberLoss import HuberLoss
 size_average, delta = True, 0.1
 H = HuberLoss(size_average, delta)
 torch.set_default_tensor_type('torch.DoubleTensor')
-<<<<<<< HEAD
 input  = Variable(torch.rand(2,4,9,9), requires_grad=True)
 target = Variable(torch.rand(2,4,9,9))
 assert(gradcheck(H, [input, target]));
@@ -642,10 +634,3 @@ points  = Variable(torch.rand(2,4,3,3), requires_grad=True)
 temp = torch.rand(2,8,3,3);
 weights = Variable(temp / temp.sum(1).expand_as(temp), requires_grad=True)
 assert(gradcheck(W, [points, weights]));
-
-=======
-input = Variable(torch.rand(2, 4, 9, 9), requires_grad=True)
-target = Variable(torch.rand(2, 4, 9, 9))
-assert(gradcheck(H, [input, target]))
->>>>>> > 1dfe3e5ee8177a18a67203ee2095c8486e25abda
->>>>>>> cea9d4bcb0f48f4e0c54df6e8fccda86349004a0

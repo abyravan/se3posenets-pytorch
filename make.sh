@@ -9,6 +9,7 @@ if [ -d "$CUDA_PATH" ]; then
 	nvcc -c -o lib/reorg_kernel.cu.o reorg_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	nvcc -c -o lib/roi_pooling_kernel.cu.o roi_pooling_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	nvcc -c -o lib/ntfm3d_kernel.cu.o ntfm3d_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
+    nvcc -c -o lib/project3dpts_kernel.cu.o project3dpts_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	cd ../../
 	python build.py
 	cd ../

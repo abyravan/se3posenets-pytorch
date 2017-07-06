@@ -1,3 +1,6 @@
+#ifndef _CUDA_UTILS_H
+#define _CUDA_UTILS_H
+
 #define WARPSIZE 32
 
 // Warp-shuffle to compute the sum across the warp very efficiently
@@ -24,3 +27,5 @@ __device__ void getCoordinates(const int tid, const int nrows, const int ncols,
     // Get batch id
     batch = id;
 }
+
+#endif

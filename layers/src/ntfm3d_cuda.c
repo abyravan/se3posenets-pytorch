@@ -47,7 +47,7 @@ int NTfm3D_forward_cuda(
 	 cudaStream_t stream = THCState_getCurrentStream(state);
 
 	 // Run the kernel
-    NTfm3DForwardLauncher(
+    NTfm3D_ForwardLauncher(
 		  points_data, masks_data, tfms_data, tfmpoints_data,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  ps, ms, ts,
@@ -107,7 +107,7 @@ int NTfm3D_backward_cuda(
 	 cudaStream_t stream = THCState_getCurrentStream(state);
 
 	 // Run the kernel
-    NTfm3DBackwardLauncher(
+    NTfm3D_BackwardLauncher(
 		  points_data, masks_data, tfms_data, tfmpoints_data,
 		  gradPoints_data, gradMasks_data, gradTfms_data, gradTfmpoints_data,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,

@@ -57,7 +57,7 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
 }
 
 ///////////////// FWD pass launcher
-int NTfm3DForwardLauncher(const float *points, const float *masks, const float *tfms, float *tfmpoints, 
+int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float *tfms, float *tfmpoints,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 								  const long *ps, const long *ms, const long *ts,
 								  cudaStream_t stream)
@@ -113,7 +113,7 @@ int NTfm3DForwardLauncher(const float *points, const float *masks, const float *
     // check for errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("error in NTfm3DForwardLauncher: %s\n", cudaGetErrorString(err));
+        printf("error in NTfm3D_ForwardLauncher: %s\n", cudaGetErrorString(err));
         assert(false);
     }
 
@@ -268,7 +268,7 @@ __global__ void computeGradients(const float *points, const float *masks,
 
 ////////////////////////////////////
 // == BWD pass code
-int NTfm3DBackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints, 
+int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints,
 									float *gradPoints, float *gradMasks, float *gradTfms, const float *gradTfmpoints,
 									int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 									const long *ps, const long *ms, const long *ts,
@@ -331,7 +331,7 @@ int NTfm3DBackwardLauncher(const float *points, const float *masks, const float 
     // check for errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
-        printf("error in NTfm3DBackwardLauncher: %s\n", cudaGetErrorString(err));
+        printf("error in NTfm3D_BackwardLauncher: %s\n", cudaGetErrorString(err));
         assert(false);
     }
 

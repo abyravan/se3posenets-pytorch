@@ -173,3 +173,28 @@ size_average, scale, defsigma = True, 0.5, 0.005
 output = NormalizedMSESqrtLoss(size_average, scale, defsigma)(input, target)
 output.backward()
 pred,grad = output.data, input.grad
+
+########
+# SE3ToRt
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.SE3ToRt import SE3ToRt
+torch.manual_seed(100) # seed
+bsz, nse3 = 2, 2
+se3_type, has_pivot = 'se3quat', True
+npivot = 3 if has_pivot else 0
+ncols  = 5 if has_pivot else 4
+if (se3_type == 'se3aa' or se3_type == 'se3euler' or se3_type == 'se3spquat'):
+    input = Variable(torch.rand(bsz, nse3, 6+npivot), requires_grad=True)
+elif se3_type == 'se3quat':
+    input = Variable(torch.rand(bsz, nse3, 7+npivot), requires_grad=True)
+elif se3_type == 'affine':
+    input = Variable(torch.rand(bsz, nse3, 12+npivot), requires_grad=True)
+else:
+    assert(False);
+target = Variable(torch.rand(bsz, nse3, 3, ncols))
+output = SE3ToRt(se3_type, has_pivot)(input)
+err    = nn.MSELoss()(output, target)
+err.backward()
+pred,grad = output.data, input.grad

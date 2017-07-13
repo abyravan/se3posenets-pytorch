@@ -159,3 +159,22 @@ size_average, scale, defsigma = true, 0.5, 0.005
 l = nn.NormalizedMSESqrtCriterion(size_average, scale, defsigma);
 output = l:forward(input, target);
 grad = l:backward(input, target);
+
+----------
+-- SE3ToRt
+require 'nn';
+dofile('SE3ToRt.lua')
+torch.manualSeed(100);
+bsz, nse3, se3_type, has_pivot = 2, 2, 'se3quat', true
+ncols  = has_pivot and 5 or 4
+npivot = has_pivot and 3 or 0
+ndim   = ((se3_type == 'se3quat') and  7) or
+         ((se3_type == 'affine')  and 12) or 6;
+input  = torch.rand(bsz, nse3, ndim+npivot)
+target = torch.rand(bsz, nse3, 3, ncols);
+l = nn.SE3ToRt(se3_type, has_pivot);
+pred = l:forward(input);
+err  = nn.MSECriterion();
+err:forward(pred,target);
+graderr = err:backward(pred,target);
+grad = l:backward(input, graderr);

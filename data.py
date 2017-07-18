@@ -1,8 +1,8 @@
 import csv
 import torch
-from skimage import io, transform
 import numpy as np
 import cv2
+import os
 
 ############
 ### Helper functions for reading baxter data
@@ -86,3 +86,48 @@ def read_flow_image_xyz(filename, ht = 240, wd = 320, scale = 1e-4):
     else:
         imgscale = imgf
     return torch.Tensor(imgscale.transpose((2,0,1))) # NOTE: OpenCV reads BGR so it's already xyz when it is read
+
+############
+###  RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
+
+### Helper functions for reading the data directories & loading train/test files
+def read_recurrent_baxter_dataset(load_dir, num_load, img_suffix,
+                                  step_len, seq_len):
+    # Get folder names & data statistics
+    dirs = os.listdir(load_dir)
+
+
+    # Get the names of all the valid data files
+    dataset = {'path'   : path,
+               'suffix' : img_suffix,
+               'start'  : start,
+               'end'    : end,
+               'step'   : step_len,
+               'seq'    : seq_len}
+    return dataset
+
+### Generate the data files (with all the depth, flow etc.) for each sequence
+def generate_baxter_sequence(dataset, id):
+    # Get stuff from the dataset
+    path, step, seq, suffix = dataset['path'], dataset['step'], dataset['seq'], dataset['suffix']
+    assert(id >= dataset['start'] and id < dataset['end']);
+    # Setup start/end IDs of the sequence
+    start, end = id, id + (step * seq)
+    sequence, ct, stepid = {}, 0, step
+    for k in xrange(start, end+1, step):
+        sequence[ct] = {'depth'     : path + 'depth'  + suffix + str(k) + '.png',
+                        'label'     : path + 'labels' + suffix + str(k) + '.png',
+                        'state1'    : path + 'state' + str(k)   + '.txt',
+                        'state2'    : path + 'state' + str(k+1) + '.txt',
+                        'se3state1' : path + 'se3state' + str(k) + '.txt',
+                        'se3state2' : path + 'se3state' + str(k+1) + '.txt',
+                        'flow'      : path + 'flow_' + str(stepid)
+                                      + '/flow' + suffix + str(start) + '.png'}
+        stepid += step # Get flow from start image to the next step
+        ct += 1        # Increment counter
+    return sequence
+
+
+'''
+
+'''

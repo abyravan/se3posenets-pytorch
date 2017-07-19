@@ -88,23 +88,47 @@ def read_flow_image_xyz(filename, ht = 240, wd = 320, scale = 1e-4):
     return torch.Tensor(imgscale.transpose((2,0,1))) # NOTE: OpenCV reads BGR so it's already xyz when it is read
 
 ############
-###  RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
+###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
 
 ### Helper functions for reading the data directories & loading train/test files
-def read_recurrent_baxter_dataset(load_dir, num_load, img_suffix,
-                                  step_len, seq_len):
-    # Get folder names & data statistics
-    dirs = os.listdir(load_dir)
+def read_recurrent_baxter_dataset(load_dirs, img_suffix, train_per, step_len, seq_len):
+	# Get all the load directories
+	load_dir_splits = load_dirs.split(',,') # Get all the load directories
 
+	# Iterate over each load directory to find the datasets
+	datasets = {'train': [], 'test': [], 'ntrain': [], 'ntest': []}
+	for load_dir in load_dir_splits:
+		# Get folder names & data statistics for a single load-directory
+		dirs = os.listdir(load_dir)
+		for dir in dirs:
+			path = os.path.join(load_dir, dir)
+			if (os.path.isdir(path)):
+				# Get number of images in the folder
+				statsfile = os.path.join(path, 'postprocessstats.txt')
+				assert(os.path.exists(statsfile))
+				reader  = csv.reader(statsfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
+				nimages = reader.next()[0]
+				print('Found {} images in the dataset: {}'.format(nimages, path))
 
-    # Get the names of all the valid data files
-    dataset = {'path'   : path,
-               'suffix' : img_suffix,
-               'start'  : start,
-               'end'    : end,
-               'step'   : step_len,
-               'seq'    : seq_len}
-    return dataset
+				# Setup training and test splits in the dataset
+				ntrain = int(train_per * nimages) # Use first train_per images for training
+				train = {'path'   : path,
+						 'suffix' : img_suffix,
+						 'start'  : 0,
+						 'end'    : ntrain-1,
+						 'step'   : step_len,
+						 'seq'    : seq_len} # start & end inclusive
+				test  = {'path'   : path,
+						 'suffix' : img_suffix,
+						 'start'  : ntrain,
+						 'end'    : nimages-1,
+						 'step'   : step_len,
+						 'seq'    : seq_len} # start & end inclusive
+				datasets['train'].append(train)
+				datasets['test'].append(test)
+				datasets['ntrain'].append(ntrain)
+				datasets['ntest'].append(nimages-ntrain)
+	return datasets
 
 ### Generate the data files (with all the depth, flow etc.) for each sequence
 def generate_baxter_sequence(dataset, id):

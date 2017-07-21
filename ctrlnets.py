@@ -31,6 +31,16 @@ def get_se3_dimension(se3_type, use_pivot):
         se3_dim += 3
     return se3_dim
 
+# MSE Loss that gives gradients w.r.t both input & target
+# NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
+def BiMSELoss(input, target, size_average=True):
+    diff = input - target
+    loss = 0.5 * diff.dot(diff)
+    if size_average:
+        return loss / input.nelement()
+    else:
+        return loss
+
 ########## MODELS
 
 ### Pose-Mask Encoder
@@ -110,8 +120,8 @@ class PoseMaskEncoder(nn.Module):
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
 
-        # Return masks and poses
-        return [m, p]
+        # Return poses and masks
+        return [p, m]
 
 # Basic Conv + Pool + BN + Non-linearity structure
 class BasicConv2D(nn.Module):

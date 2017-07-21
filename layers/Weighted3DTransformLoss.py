@@ -1,6 +1,7 @@
 import torch
 from torch.autograd import Function
-from torch.nn import Module
+#from torch.nn import Module
+import torch.nn.modules.loss as Loss
 from _ext import se3layers
 
 '''
@@ -72,10 +73,7 @@ class Weighted3DTransformLossFunction(Function):
 
 
 ## FWD/BWD pass module
-class Weighted3DTransformLoss(Module):
-    def __init__(self, size_average=True):
-        super(Weighted3DTransformLoss, self).__init__()
-        self.size_average = size_average
-
+class Weighted3DTransformLoss(Loss._Loss):
     def forward(self, inputpts, inputmasks, inputtfms, targetpts):
+        Loss._assert_no_grad(targetpts)
         return Weighted3DTransformLossFunction(self.size_average)(inputpts, inputmasks, inputtfms, targetpts)

@@ -11,3 +11,4 @@ from layers.NTfm3D import NTfm3D
 from layers.RtInverse import RtInverse
 from layers.SE3ToRt import SE3ToRt
 from layers.WeightedAveragePoints import WeightedAveragePoints
+from layers.Weighted3DTransformLoss import Weighted3DTransformLoss

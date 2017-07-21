@@ -882,3 +882,19 @@ elif se3_type == 'affine':
 else:
     assert (False);
 assert (gradcheck(SR, [input]))
+
+###############################################################
+# Weighted3DTransformLoss
+
+# Grad-Check
+import torch
+from layers.Weighted3DTransformLoss import Weighted3DTransformLoss
+from torch.autograd import gradcheck, Variable
+
+w = Weighted3DTransformLoss()
+torch.set_default_tensor_type('torch.DoubleTensor')
+pts = Variable(torch.rand(2, 3, 24, 32), requires_grad=True)
+masks = Variable(torch.rand(2, 4, 24, 32), requires_grad=True)
+tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
+targetpts = Variable(torch.rand(2, 3, 24, 32), requires_grad=False)
+assert (gradcheck(w, [pts, masks, tfms, targetpts]))

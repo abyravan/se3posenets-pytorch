@@ -178,3 +178,29 @@ err  = nn.MSECriterion();
 err:forward(pred,target);
 graderr = err:backward(pred,target);
 grad = l:backward(input, graderr);
+
+----------
+-- Weighted3DTransformLoss
+require 'se3depthpred';
+torch.manualSeed(100);
+pts    = torch.rand(2,3,9,9);
+masks  = torch.rand(2,8,9,9);
+tfms   = torch.rand(2,8,3,4);
+target = torch.rand(2,3,9,9);
+l = nn.Weighted3DTransformCriterion(true);
+output = l:forward({pts,masks,tfms},  target);
+grad   = l:backward({pts,masks,tfms}, target);
+gradpts, gradmasks, gradtfms = unpack(grad);
+
+----------
+-- Weighted3DTransformLoss - CUDA
+require 'se3depthpred'; require 'cunn';
+torch.manualSeed(100);
+pts    = torch.rand(2,3,9,9):cuda();
+masks  = torch.rand(2,8,9,9):cuda();
+tfms   = torch.rand(2,8,3,4):cuda();
+target = torch.rand(2,3,9,9):cuda();
+l = nn.Weighted3DTransformCriterion(true):cuda();
+output = l:forward({pts,masks,tfms},  target);
+grad   = l:backward({pts,masks,tfms}, target);
+gradpts, gradmasks, gradtfms = unpack(grad);

@@ -11,7 +11,7 @@ int NTfm3D_forward_float(
 {
     // Initialize vars
     long batchSize = points->size[0];
-    long ndim      = points->size[1];
+    //long ndim      = points->size[1];
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
@@ -83,7 +83,7 @@ int NTfm3D_backward_float(
 {
     // Initialize vars
     long batchSize = points->size[0];
-    long ndim      = points->size[1];
+    //long ndim      = points->size[1];
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
@@ -187,7 +187,7 @@ int NTfm3D_forward_double(
 {
     // Initialize vars
     long batchSize = points->size[0];
-    long ndim      = points->size[1];
+    //long ndim      = points->size[1];
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
@@ -259,7 +259,7 @@ int NTfm3D_backward_double(
 {
     // Initialize vars
     long batchSize = points->size[0];
-    long ndim      = points->size[1];
+    //long ndim      = points->size[1];
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];

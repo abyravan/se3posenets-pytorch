@@ -198,3 +198,33 @@ output = SE3ToRt(se3_type, has_pivot)(input)
 err    = nn.MSELoss()(output, target)
 err.backward()
 pred,grad = output.data, input.grad
+
+########
+# Weighted3DTransformLoss
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.Weighted3DTransformLoss import Weighted3DTransformLoss
+torch.manual_seed(100) # seed
+pts    = Variable(torch.rand(2,3,9,9), requires_grad=True)
+masks  = Variable(torch.rand(2,8,9,9), requires_grad=True)
+tfms   = Variable(torch.rand(2,8,3,4), requires_grad=True)
+target = Variable(torch.rand(2,3,9,9))
+output = Weighted3DTransformLoss()(pts, masks, tfms, target)
+output.backward()
+pred,gradpts,gradmasks,gradtfms = output.data, pts.grad, masks.grad, tfms.grad
+
+########
+# Weighted3DTransformLoss - CUDA
+import torch
+from torch import nn
+from torch.autograd import Variable
+from layers.Weighted3DTransformLoss import Weighted3DTransformLoss
+torch.manual_seed(100) # seed
+pts    = Variable(torch.rand(2,3,9,9).cuda(), requires_grad=True)
+masks  = Variable(torch.rand(2,8,9,9).cuda(), requires_grad=True)
+tfms   = Variable(torch.rand(2,8,3,4).cuda(), requires_grad=True)
+target = Variable(torch.rand(2,3,9,9).cuda())
+output = Weighted3DTransformLoss()(pts, masks, tfms, target)
+output.backward()
+pred,gradpts,gradmasks,gradtfms = output.data, pts.grad, masks.grad, tfms.grad

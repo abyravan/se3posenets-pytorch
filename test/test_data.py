@@ -21,7 +21,8 @@ options['cameraData'] = data.read_cameradata_file(
 # Get datasets
 D = data.read_recurrent_baxter_dataset(options['loadDir'], options['imgSuffix'], options['stepLength'],
                                        options['seqLength'])
-fnc = lambda d, i: data.read_baxter_sequence_from_disk(d, i, options)
+fnc = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=240, img_wd=320, img_scale=1e-4, ctrl_type='actdiffvel',
+                                                       mesh_ids=options['meshIds'], camera_data=options['cameraData'])
 L = data.BaxterSeqDataset(D, fnc, 'val')
 
 def show_batch(batch):

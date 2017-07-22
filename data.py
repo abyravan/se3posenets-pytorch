@@ -167,25 +167,30 @@ def generate_baxter_sequence(dataset, id):
 ### DATA LOADERS: FUNCTION TO LOAD DATA FROM DISK & TORCH DATASET CLASS
 
 ### Load baxter sequence from disk
-def read_baxter_sequence_from_disk(dataset, id, options):
+def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
+                                   ctrl_type='actdiffvel', mesh_ids=torch.Tensor(), camera_data={}):
+    # Setup vars
+    num_ctrl = 14 if ctrl_type.find('both') else 7      # Num ctrl dimensions
+    seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
+
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
-    depths      = torch.FloatTensor(options['seqLength'] + 1, 1, options['imgHeight'], options['imgWidth'])
-    labels      = torch.ByteTensor( options['seqLength'] + 1, 1, options['imgHeight'], options['imgWidth'])
-    gtfwdflows  = torch.FloatTensor(options['seqLength'],     3, options['imgHeight'], options['imgWidth'])
-    actconfigs  = torch.FloatTensor(options['seqLength'] + 1, 7)
-    comconfigs  = torch.FloatTensor(options['seqLength'] + 1, 7)
-    controls    = torch.FloatTensor(options['seqLength'], options['nCtrl'])
-    poses       = torch.FloatTensor(options['seqLength'] + 1, options['meshIds'].nelement() + 1, 3, 4).zero_()
+    depths      = torch.FloatTensor(seq_len + 1, 1, img_ht, img_wd)
+    labels      = torch.ByteTensor( seq_len + 1, 1, img_ht, img_wd)
+    gtfwdflows  = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
+    actconfigs  = torch.FloatTensor(seq_len + 1, 7)
+    comconfigs  = torch.FloatTensor(seq_len + 1, 7)
+    controls    = torch.FloatTensor(seq_len, num_ctrl)
+    poses       = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 
     # Load sequence
-    dt = options['stepLength'] * (1.0 / 30.0)
+    dt = step_len * (1.0 / 30.0)
     for k in xrange(len(sequence)):
         # Get data table
         s = sequence[k]
 
         # Load depth & label
-        depths[k] = read_depth_image(s['depth'], options['imgHeight'], options['imgWidth'], options['imgScale'])
+        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale)
         labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1))
 
         # Load configs
@@ -196,33 +201,33 @@ def read_baxter_sequence_from_disk(dataset, id, options):
         # Load SE3 state
         se3state = read_baxter_se3state_file(s['se3state1'])
         poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
-        for j in xrange(options['meshIds'].nelement()):
-            meshid = options['meshIds'][j]
-            se3tfm = options['cameraData']['modelView'] * se3state[meshid]  # Camera data is part of options
+        for j in xrange(mesh_ids.nelement()):
+            meshid = mesh_ids[j]
+            se3tfm = camera_data['modelView'] * se3state[meshid]  # Camera data is part of options
             poses[k][j + 1] = se3tfm[0:3, :]  # 3 x 4 transform
 
         # Load controls and FWD flows (for the first "N" items)
-        if k < options['seqLength']:
+        if k < seq_len:
             # Load flow
-            gtfwdflows[k] = read_flow_image_xyz(s['flow'], options['imgHeight'], options['imgWidth'],
-                                                options['imgScale'])
+            gtfwdflows[k] = read_flow_image_xyz(s['flow'], img_ht, img_wd,
+                                                img_scale)
 
             # Load controls
-            if options['baxterCtrlType'] == 'comvel':  # Right arm joint velocities
+            if ctrl_type == 'comvel':  # Right arm joint velocities
                 controls[k] = state['comjtvel']
-            elif options['baxterCtrlType'] == 'actvel':
+            elif ctrl_type == 'actvel':
                 controls[k] = state['actjtvel']
-            elif options['baxterCtrlType'] == 'comacc':  # Right arm joint accelerations
+            elif ctrl_type == 'comacc':  # Right arm joint accelerations
                 controls[k] = state['comjtacc']
-            elif options['baxterCtrlType'] == 'comboth':
+            elif ctrl_type == 'comboth':
                 controls[k][0:7] = state['comjtvel']  # 0-6  = Joint velocities
                 controls[k][7:14] = state['comjtacc']  # 7-13 = Joint accelerations
 
     # Different control types
-    if options['baxterCtrlType'] == 'actdiffvel':
-        controls = (actconfigs[1:options['seqLength'] + 1, :] - actconfigs[0:options['seqLength'], :]) / dt
-    elif options['baxterCtrlType'] == 'comdiffvel':
-        controls = (comconfigs[1:options['seqLength'] + 1, :] - comconfigs[0:options['seqLength'], :]) / dt
+    if ctrl_type == 'actdiffvel':
+        controls = (actconfigs[1:seq_len + 1, :] - actconfigs[0:seq_len, :]) / dt
+    elif ctrl_type == 'comdiffvel':
+        controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt
 
     # Return loaded data
     data = {'depths': depths, 'labels': labels, 'gtfwdflows': gtfwdflows, 'controls': controls,

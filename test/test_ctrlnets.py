@@ -5,6 +5,46 @@ from torch.autograd import Variable
 import torch.nn as nn
 import se3layers as se3nn
 
+#### Test SE3-Pose-Model
+bsz, ht, wd, nse3, nctrl = 4, 240, 320, 8, 7
+se3type = 'se3aa'
+model = ctrlnets.SE3PoseModel(num_ctrl=nctrl, num_se3=nse3, se3_type=se3type,
+                              use_pivot=False, input_channels=3, use_bn=True,
+                              use_kinchain=False, nonlinearity='prelu')
+for k in xrange(10):
+    # Generate data
+    ptcloud_0, ptcloud_1, ctrls = torch.rand(bsz, 3, ht, wd), torch.rand(bsz, 3, ht, wd), torch.rand(bsz, nctrl)
+    tgtptcloud_0, tgtptcloud_1 = torch.rand(bsz, 3, ht, wd), torch.rand(bsz, 3, ht, wd)
+    ptcloud_0_var = Variable(ptcloud_0, requires_grad=True)
+    ptcloud_1_var = Variable(ptcloud_1, requires_grad=True)
+    ctrls_var = Variable(ctrls, requires_grad=True)
+    tgtptcloud_0_var = Variable(tgtptcloud_0, requires_grad=False)
+    tgtptcloud_1_var = Variable(tgtptcloud_1, requires_grad=False)
+
+    # Run forward pass
+    [pose_0, mask_0], [pose_1, mask_1], [deltapose_t_01, pose_t_1] = model([ptcloud_0_var,
+                                                                            ptcloud_1_var,
+                                                                            ctrls_var])
+    deltapose_t_10 = se3nn.RtInverse()(deltapose_t_01) # Invert the delta-pose
+
+    # Now compute 3D loss @ t1 & t2
+    ptloss_0 = se3nn.Weighted3DTransformLoss()(ptcloud_0_var, mask_0, deltapose_t_01, tgtptcloud_0_var) # Predict pts in FWD dirn and compare to target @ t1
+    ptloss_1 = se3nn.Weighted3DTransformLoss()(ptcloud_1_var, mask_1, deltapose_t_10, tgtptcloud_1_var) # Predict pts in BWD dirn and compare to target @ t0
+    poseloss = ctrlnets.BiMSELoss(pose_1, pose_t_1) # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+
+    # Total loss is sum of these
+    loss = ptloss_0 + ptloss_1 + 0.01 * poseloss
+    model.zero_grad()  # Zero model gradients
+    loss.backward() # Compute BWD
+
+    # Print some grad data
+    print "Iter: {}".format(k)
+    print ptcloud_0_var.grad.max(), ptcloud_0_var.grad.min()
+    print ptcloud_1_var.grad.max(), ptcloud_1_var.grad.min()
+    print ctrls_var.grad.max(), ctrls_var.grad.min()
+
+time.sleep(100)
+
 #### Test entire setup
 bsz, ht, wd, nse3, nctrl = 4, 240, 320, 8, 7
 se3type = 'se3aa'

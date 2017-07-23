@@ -226,3 +226,34 @@ class TransitionModel(nn.Module):
 
         # Return
         return [x, y] # Return both the deltas and the composed next pose
+
+### SE3-Pose-Model
+class SE3PoseModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True,
+                 nonlinearity='prelu'):
+        super(SE3PoseModel, self).__init__()
+
+        # Initialize the pose-mask model
+        self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                             use_kinchain=use_kinchain, input_channels=input_channels,
+                                             use_bn=use_bn, nonlinearity=nonlinearity)
+        # Initialize the transition model
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+                                               se3_type=se3_type, use_kinchain=use_kinchain,
+                                               nonlinearity=nonlinearity)
+
+    # Forward pass through the model
+    def forward(self, x):
+        # Get input vars
+        ptcloud_0, ptcloud_1, ctrl_0 = x
+
+        # Get pose & mask predictions @ t0 & t1
+        pose_0, mask_0 = self.posemaskmodel(ptcloud_0)  # ptcloud @ t0
+        pose_1, mask_1 = self.posemaskmodel(ptcloud_1)  # ptcloud @ t1
+
+        # Get transition model predicton of pose_1
+        deltapose_t_01, pose_t_1 = self.transitionmodel([pose_0, ctrl_0])  # Predicts [delta-pose, pose]
+
+        # Return outputs
+        return [pose_0, mask_0], [pose_1, mask_1],  [deltapose_t_01, pose_t_1]

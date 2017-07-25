@@ -296,11 +296,18 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts_1    = to_var(sample['points'][:,0].clone(), requires_grad=True)
-        pts_2    = to_var(sample['points'][:,1].clone(), requires_grad=True)
-        ctrls_1  = to_var(sample['controls'][:,0].clone(), requires_grad=True)
-        fwdflows = to_var(sample['fwdflows'][:,0].clone(), requires_grad=False)
-        bwdflows = to_var(sample['bwdflows'][:,0].clone(), requires_grad=False)
+        if args.cuda:
+            pts_1    = to_var(sample['points'][:,0].cuda(), requires_grad=True)
+            pts_2    = to_var(sample['points'][:,1].cuda(), requires_grad=True)
+            ctrls_1  = to_var(sample['controls'][:,0].cuda(), requires_grad=True)
+            fwdflows = to_var(sample['fwdflows'][:,0].cuda(), requires_grad=False)
+            bwdflows = to_var(sample['bwdflows'][:,0].cuda(), requires_grad=False)
+        else:
+            pts_1 = to_var(sample['points'][:, 0].clone(), requires_grad=True)
+            pts_2 = to_var(sample['points'][:, 1].clone(), requires_grad=True)
+            ctrls_1 = to_var(sample['controls'][:, 0].clone(), requires_grad=True)
+            fwdflows = to_var(sample['fwdflows'][:, 0].clone(), requires_grad=False)
+            bwdflows = to_var(sample['bwdflows'][:, 0].clone(), requires_grad=False)
         tarpts_1 = to_var(pts_1.data + fwdflows.data, requires_grad=False)
         tarpts_2 = to_var(pts_2.data + bwdflows.data, requires_grad=False)
 

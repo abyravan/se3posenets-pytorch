@@ -140,8 +140,9 @@ def main():
     print('Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(args.fwd_wt, args.bwd_wt, args.consis_wt))
 
     ### Create save directory and start tensorboard logger
-    create_dir(args.save_dir); # Create directory
-    tblogger = TBLogger(args.save_dir + '/logs') # Start tensorboard logger
+    create_dir(args.save_dir) # Create directory
+    now = time.strftime("%c")
+    tblogger = TBLogger(args.save_dir + '/logs/' + now) # Start tensorboard logger
 
     # TODO: Add option for using encoder pose for tfm t2
     # TODO: Add options for mask sharpening approach

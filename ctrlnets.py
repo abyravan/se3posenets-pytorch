@@ -169,7 +169,7 @@ class BasicDeconv2D(nn.Module):
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, use_pivot=False, se3_type='se3aa',
-                 use_kinchain=False, nonlinearity='prelu'):
+                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False):
         super(TransitionModel, self).__init__()
         self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
         self.num_se3 = num_se3
@@ -198,6 +198,20 @@ class TransitionModel(nn.Module):
             get_nonlinearity(nonlinearity),
             nn.Linear(128, self.num_se3 * self.se3_dim)
         )
+
+        # Initialize the SE3 decoder to predict identity SE3
+        if init_se3_iden:
+            print("Initializing SE3 prediction layer of the transition model to predict identity transform")
+            m = self.deltase3decoder[4] # Get final SE3 prediction module
+            m.weight.data.uniform_(-0.001, 0.001) # Initialize weights to near identity
+            m.bias.data.uniform_(-0.01, 0.01)      # Initialize biases to near identity
+            # Special initialization for specific SE3 types
+            if se3_type == 'affine':
+                bs = m.bias.view(num_se3, -1)
+                bs.narrow(1,3,9).copy_(torch.eye(3).view(1,3,3).expand(num_se3,3,3))
+            elif se3_type == 'se3quat':
+                bs = m.bias.view(num_se3, -1)
+                bs.narrow(1,6,1).fill_(1) # ~ [0,0,0,1]
 
         # Create pose decoder (convert to r/t)
         self.deltaposedecoder = nn.Sequential()
@@ -231,7 +245,7 @@ class TransitionModel(nn.Module):
 class SE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True,
-                 nonlinearity='prelu'):
+                 nonlinearity='prelu', init_transse3_iden = False):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -241,7 +255,7 @@ class SE3PoseModel(nn.Module):
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
-                                               nonlinearity=nonlinearity)
+                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
 
     # Forward pass through the model
     def forward(self, x):

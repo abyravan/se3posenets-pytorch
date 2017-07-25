@@ -54,6 +54,8 @@ parser.add_argument('--pred-pivot', action='store_true', default=False,
                     help='Predict pivot in addition to the SE3 parameters (default: False)')
 parser.add_argument('-n', '--num-se3', type=int, default=8,
                     help='Number of SE3s to predict (default: 8)')
+parser.add_argument('--init-transse3-iden', action='store_true', default=False,
+                    help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
 
 # Loss options
 parser.add_argument('--fwd-wt', default=1.0, type=float,
@@ -179,7 +181,7 @@ def main():
     model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                   se3_type=args.se3_type, use_pivot=args.pred_pivot,
                                   use_kinchain=False, input_channels=3, use_bn=args.batch_norm,
-                                  nonlinearity=args.nonlin)
+                                  nonlinearity=args.nonlin, init_transse3_iden=args.init_transse3_iden)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

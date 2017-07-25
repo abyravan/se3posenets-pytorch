@@ -4,7 +4,8 @@ import numpy as np
 import cv2
 import os
 from torch.utils.data import Dataset
-
+import se3layers as se3nn
+from torch.autograd import Variable
 
 ############
 ### Helper functions for reading baxter data
@@ -162,7 +163,6 @@ def generate_baxter_sequence(dataset, id):
         ct += 1  # Increment counter
     return sequence
 
-
 ############
 ### DATA LOADERS: FUNCTION TO LOAD DATA FROM DISK & TORCH DATASET CLASS
 
@@ -177,7 +177,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     depths      = torch.FloatTensor(seq_len + 1, 1, img_ht, img_wd)
     labels      = torch.ByteTensor( seq_len + 1, 1, img_ht, img_wd)
-    gtfwdflows  = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
+    fwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
     actconfigs  = torch.FloatTensor(seq_len + 1, 7)
     comconfigs  = torch.FloatTensor(seq_len + 1, 7)
     controls    = torch.FloatTensor(seq_len, num_ctrl)
@@ -209,7 +209,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Load controls and FWD flows (for the first "N" items)
         if k < seq_len:
             # Load flow
-            gtfwdflows[k] = read_flow_image_xyz(s['flow'], img_ht, img_wd,
+            fwdflows[k] = read_flow_image_xyz(s['flow'], img_ht, img_wd,
                                                 img_scale)
 
             # Load controls
@@ -230,10 +230,61 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt
 
     # Return loaded data
-    data = {'depths': depths, 'labels': labels, 'gtfwdflows': gtfwdflows, 'controls': controls,
+    data = {'depths': depths, 'labels': labels, 'fwdflows': fwdflows, 'controls': controls,
             'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
     return data
 
+### Convert torch tensor to autograd.variable
+def to_var(x, to_cuda=False, requires_grad=False):
+    if torch.cuda.is_available() and to_cuda:
+        x = x.cuda()
+    return Variable(x, requires_grad=requires_grad)
+
+############
+### Process data sample from Baxter
+class BaxterSeqDataTransformer(object):
+    '''
+    Post-process data sample to generate masks, flows etc
+    '''
+    def __init__(self, height, width, intrinsics, meshids):
+        self.meshids = meshids
+        self.height = height
+        self.width = width
+        self.DepthTo3DPoints = se3nn.DepthImageToDense3DPoints(height=height,
+                                                               width=width,
+                                                               fx=intrinsics['fx'],
+                                                               fy=intrinsics['fy'],
+                                                               cx=intrinsics['cx'],
+                                                               cy=intrinsics['cy'])
+    # TODO: Assumes that it takes in 'Variable'
+    def process_sample(self, depths, labels, poses):
+        # Convert to vars
+        depths_v, labels_v, poses_v = to_var(depths), to_var(labels), to_var(poses)
+
+        # Compute 3D points from the depths
+        points   = torch.zeros(depths.size(0), depths.size(1), 3, self.height, self.width)
+        points_v = self.DepthTo3DPoints(depths_v.view(-1,1,self.height,self.width)).view_as(points)
+        points.copy_(points_v.data) # Copy data
+
+        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
+        nmeshes  = self.meshids.nelement() # Num meshes
+        masks = torch.zeros(depths.size(0), depths.size(1), nmeshes+1, self.height, self.width).type_as(depths)
+        for k in xrange(nmeshes):
+            masks[:,:,k+1] = labels.eq(self.meshids[k]) # Mask out that mesh ID
+            if (k == nmeshes-1):
+                masks[:,:,k+1] = labels.ge(self.meshids[k]) # Everything in the end-effector
+        masks[:,:,0] = masks.narrow(2,1,nmeshes).sum(2).eq(0) # All other masks are BG
+
+        # Compute BWD flows (use pts @ time t+1, and delta-transforms + masks to compute the flows in the opposite dirn)
+        bwdflows = torch.zeros(depths.size(0), depths.size(1)-1, 3, self.height, self.width).type_as(depths)
+        for k in xrange(bwdflows.size(1)):
+            pts_2, masks_2 = points_v[:,k+1].clone(), to_var(masks[:,k+1]) # Pts @ t+1
+            pose_1, pose_2 = poses_v[:,k].clone(), poses_v[:,k+1].clone() # Poses @ t & t+1
+            poses_2_to_1   = se3nn.ComposeRtPair()(pose_1, se3nn.RtInverse()(pose_2)) # P_1 * P_2^-1
+            predpts_1      = se3nn.NTfm3D()(pts_2, masks_2, poses_2_to_1) # Predict pts @ t
+            bwdflows[:,k]  = (predpts_1 - pts_2).data # Flows that take pts @ t+1 to pts @ t
+
+        return points, masks, bwdflows
 
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):

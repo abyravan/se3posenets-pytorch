@@ -171,11 +171,16 @@ def main():
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
+    # Create a data-collater for combining the samples of the data into batches along with some post-processing
+    # TODO: Batch along dim 1 instead of dim 0
+    data_collater = data.BaxterSeqDatasetCollater(height=args.img_ht, width=args.img_wd, intrinsics=args.cam_intrinsics,
+                                                  meshids=args.mesh_ids)
+
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                        shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda))
-    val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size,
-                                        shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda))
+    train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                                        num_workers=args.num_workers, pin_memory=args.cuda, collate_fn=data_collater.collate_batch))
+    val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
+                                        num_workers=args.num_workers, pin_memory=args.cuda, collate_fn=data_collater.collate_batch))
 
     ########################
     ############ Load models & optimization stuff
@@ -213,9 +218,9 @@ def main():
     if args.evaluate:
         print('==== Evaluating pre-trained network on test data ===')
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
-        test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                                                 shuffle=False, num_workers=args.num_workers,
-                                                                 sampler=sampler, pin_memory=args.cuda))
+        test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+                                        num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
+                                        collate_fn=data_collater.collate_batch))
         iterate(test_loader, model, tblogger, len(test_loader), mode='test')
         return # Finish
 
@@ -276,9 +281,9 @@ def main():
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
-    test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                                             shuffle=False, num_workers=args.num_workers,
-                                                             sampler=sampler, pin_memory=args.cuda))
+    test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+                                    num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
+                                    collate_fn=data_collater.collate_batch))
     iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
@@ -303,12 +308,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         assert (mode == 'test' or mode == 'val'), "Mode can be train/test/val. Input: {}"+mode
         model.eval()
 
-    # Create a data-transformer (once per epoch)
-    # TODO: Make this cleaner - put this into the data loader directly (collate_fn)
-    # TODO: Batch along dim 1 instead of dim 0
-    DataTransform = data.BaxterSeqDataTransformer(height=args.img_ht, width=args.img_wd,
-                                                  intrinsics=args.cam_intrinsics,
-                                                  meshids=args.mesh_ids)
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -318,12 +317,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         # ============ Load data ============#
         # Get a sample
         j, sample = data_loader.next()
-
-        # Post-process sample
-        sample['points'], sample['masks'], sample['bwdflows'] \
-                = DataTransform.process_sample(sample['depths'].type(deftype),
-                                               sample['labels'].type(deftype),
-                                               sample['poses'].type(deftype))
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -388,10 +381,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # ============ Visualization ============#
         # Compute flow predictions and errors
-        fwdflows = sample['fwdflows'][:, 0].clone().float()
-        bwdflows = sample['bwdflows'][:, 0].clone().float()
-        predfwdflows = (predpts_1 - pts_1).data.float()
-        predbwdflows = (predpts_2 - pts_2).data.float()
+        fwdflows = sample['fwdflows'][:, 0].clone().cpu()
+        bwdflows = sample['bwdflows'][:, 0].clone().cpu()
+        predfwdflows = (predpts_1 - pts_1).data.cpu()
+        predbwdflows = (predpts_2 - pts_2).data.cpu()
         flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.unsqueeze(1),
                                                                            fwdflows.unsqueeze(1))
         flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.unsqueeze(1),

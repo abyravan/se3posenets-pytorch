@@ -4,13 +4,13 @@ import time
 import torchvision
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.sampler import SequentialSampler
 
 options = {'imgHeight': 240, 'imgWidth': 320, 'imgScale': 1e-4, 'imgSuffix': 'sub', 'seqLength': 3, 'stepLength': 2,
            'baxterCtrlType': 'actdiffvel', 'nCtrl': 7}
-options[
-    'loadDir'] = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/,,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_wfixjts_5hrs_Feb10_17/postprocessmotionshalf/'
+options['loadDir'] = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/,,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_wfixjts_5hrs_Feb10_17/postprocessmotionshalf/'
 
 baxterlabels = data.read_baxter_labels_file(
     '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/statelabels.txt')
@@ -27,7 +27,7 @@ L = data.BaxterSeqDataset(D, fnc, 'val')
 
 def show_batch(batch):
     # Get a random sample in the batch and display them
-    fig, axes = plt.subplots(3, 1)
+    fig, axes = plt.subplots(4, 1)
     fig.show()
 
     # Show a single example from the batch
@@ -46,11 +46,17 @@ def show_batch(batch):
         npgrid = (npgrid - npgrid.min()) / (npgrid.max() - npgrid.min())
         axes[1].imshow(npgrid)
 
-        axes[2].set_title("Flows: {}".format(id))
-        grid = torchvision.utils.make_grid(batch['gtfwdflows'][id])
+        axes[2].set_title("FWD-Flows: {}".format(id))
+        grid = torchvision.utils.make_grid(batch['fwdflows'][id])
         npgrid = grid.numpy().transpose(1, 2, 0).astype(np.float32)
         npgrid = (npgrid - npgrid.min()) / (npgrid.max() - npgrid.min())
         axes[2].imshow(npgrid)
+
+        axes[3].set_title("BWD-Flows: {}".format(id))
+        grid = torchvision.utils.make_grid(batch['bwdflows'][id])
+        npgrid = grid.numpy().transpose(1, 2, 0).astype(np.float32)
+        npgrid = (npgrid - npgrid.min()) / (npgrid.max() - npgrid.min())
+        axes[3].imshow(npgrid)
 
         fig.canvas.draw()
         time.sleep(1)
@@ -60,9 +66,16 @@ def show_batch(batch):
 
 # Create DataLoader
 #sampler = SequentialSampler(L)
-trainloader = DataLoader(L, batch_size=8, shuffle=True, num_workers=4) #, sampler = sampler)
+options['camIntrinsics'] = {'fx': 589.3664541825391/2,
+                            'fy': 589.3664541825391/2,
+                            'cx': 320.5/2,
+                            'cy': 240.5/2}
+DataCollater = data.BaxterSeqDatasetCollater(height=240, width=320, intrinsics=options['camIntrinsics'], meshids=options['meshIds'], cuda=False)
+trainloader = torch.utils.data.DataLoader(L, batch_size=8, shuffle=True, num_workers=4,
+                                          collate_fn=DataCollater.collate_batch) #, sampler = sampler)
+
 for i, sample in enumerate(trainloader):
-    print(i, sample['depths'].size(), sample['gtfwdflows'].size())
+    print(i, sample['depths'].size(), sample['fwdflows'].size())
 
     # observe 4th batch and stop.
     if i == 3:

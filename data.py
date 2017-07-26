@@ -211,7 +211,6 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
             # Load flow
             fwdflows[k] = read_flow_image_xyz(s['flow'], img_ht, img_wd,
                                                 img_scale)
-
             # Load controls
             if ctrl_type == 'comvel':  # Right arm joint velocities
                 controls[k] = state['comjtvel']
@@ -241,12 +240,12 @@ def to_var(x, to_cuda=False, requires_grad=False):
     return Variable(x, requires_grad=requires_grad)
 
 ############
-### Process data sample from Baxter
-class BaxterSeqDataTransformer(object):
+### Collate samples from the Baxter Sequential Dataset & collate them into a batch
+class BaxterSeqDatasetCollater(object):
     '''
     Post-process data sample to generate masks, flows etc
     '''
-    def __init__(self, height, width, intrinsics, meshids):
+    def __init__(self, height, width, intrinsics, meshids, cuda=False):
         self.meshids = meshids
         self.height = height
         self.width = width
@@ -256,9 +255,15 @@ class BaxterSeqDataTransformer(object):
                                                                fy=intrinsics['fy'],
                                                                cx=intrinsics['cx'],
                                                                cy=intrinsics['cy'])
-    # TODO: Assumes that it takes in 'Variable'
-    def process_sample(self, depths, labels, poses):
-        # Convert to vars
+        assert (not cuda), "Cannot support post-processing using CUDA currently"
+        self.proctype = 'torch.cuda.FloatTensor' if cuda else 'torch.FloatTensor'
+
+    # Post process a training sample
+    def postprocess_collated_batch(self, batch):
+        # Get tensors and convert to vars
+        depths, labels, poses = batch['depths'].type(self.proctype), \
+                                batch['labels'].type(self.proctype), \
+                                batch['poses'].type(self.proctype)
         depths_v, labels_v, poses_v = to_var(depths), to_var(labels), to_var(poses)
 
         # Compute 3D points from the depths
@@ -284,7 +289,29 @@ class BaxterSeqDataTransformer(object):
             predpts_1      = se3nn.NTfm3D()(pts_2, masks_2, poses_2_to_1) # Predict pts @ t
             bwdflows[:,k]  = (predpts_1 - pts_2).data # Flows that take pts @ t+1 to pts @ t
 
-        return points, masks, bwdflows
+        # Convert to proper type and add to batch
+        batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
+                                                             masks.type_as(batch['depths']), \
+                                                             bwdflows.type_as(batch['depths'])
+
+    ### Collate the batch together
+    def collate_batch(self, batch):
+        # Check if there are any nans in the sampled poses. If there are, then discard the sample
+        filtered_batch = []
+        for sample in batch:
+            if sample['poses'].eq(sample['poses']).all(): # test for nans
+                filtered_batch.append(sample)
+            #else:
+            #    print('Found a dataset with NaNs in the poses. Discarding it')
+
+        # Collate the other samples together using the default collate function
+        collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
+
+        # Post-process the collated batch
+        self.postprocess_collated_batch(collated_batch)
+
+        # Return post-processed batch
+        return collated_batch
 
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):

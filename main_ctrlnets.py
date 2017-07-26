@@ -177,11 +177,6 @@ def main():
     val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size,
                                         shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda))
 
-    sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset) # Run sequentially along the test dataset
-    test_loader  = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                        shuffle=False, num_workers=args.num_workers, sampler = sampler,
-                                        pin_memory=args.cuda))
-
     ########################
     ############ Load models & optimization stuff
 
@@ -214,10 +209,15 @@ def main():
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     ########################
-    ############ Test
+    ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
         print('==== Evaluating pre-trained network on test data ===')
+        sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+        test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
+                                                                 shuffle=False, num_workers=args.num_workers,
+                                                                 sampler=sampler, pin_memory=args.cuda))
         iterate(test_loader, model, tblogger, len(test_loader), mode='test')
+        return # Finish
 
     ########################
     ############ Train / Validate
@@ -273,11 +273,15 @@ def main():
         print('\n')
 
     # Do final testing (if not asked to evaluate)
-    if not args.evaluate:
-        print('==== Evaluating trained network on test data ====')
-        iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
-        print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
-                                                                             best_epoch))
+    # (don't create the data loader unless needed, creates 4 extra threads)
+    print('==== Evaluating trained network on test data ====')
+    sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+    test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
+                                                             shuffle=False, num_workers=args.num_workers,
+                                                             sampler=sampler, pin_memory=args.cuda))
+    iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
+    print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
+                                                                         best_epoch))
 
 ################# HELPER FUNCTIONS
 
@@ -309,37 +313,25 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     end = time.time()
+    deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Get a sample
         j, sample = data_loader.next()
 
         # Post-process sample
-        if args.cuda:
-            sample['points'], sample['masks'], sample['bwdflows'] \
-                = DataTransform.process_sample(sample['depths'].cuda(), sample['labels'].cuda(),
-                                               sample['poses'].cuda())
-        else:
-            sample['points'], sample['masks'], sample['bwdflows']\
-                = DataTransform.process_sample(sample['depths'], sample['labels'],
-                                               sample['poses'])
+        sample['points'], sample['masks'], sample['bwdflows'] \
+                = DataTransform.process_sample(sample['depths'].type(deftype),
+                                               sample['labels'].type(deftype),
+                                               sample['poses'].type(deftype))
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        if args.cuda:
-            pts_1    = to_var(sample['points'][:,0].clone(), requires_grad=True)
-            pts_2    = to_var(sample['points'][:,1].clone(), requires_grad=True)
-            ctrls_1  = to_var(sample['controls'][:,0].cuda(), requires_grad=True)
-            fwdflows = to_var(sample['fwdflows'][:,0].cuda(), requires_grad=False)
-            bwdflows = to_var(sample['bwdflows'][:,0].clone(), requires_grad=False)
-        else:
-            pts_1 = to_var(sample['points'][:, 0].clone(), requires_grad=True)
-            pts_2 = to_var(sample['points'][:, 1].clone(), requires_grad=True)
-            ctrls_1 = to_var(sample['controls'][:, 0].clone(), requires_grad=True)
-            fwdflows = to_var(sample['fwdflows'][:, 0].clone(), requires_grad=False)
-            bwdflows = to_var(sample['bwdflows'][:, 0].clone(), requires_grad=False)
-        tarpts_1 = to_var(pts_1.data + fwdflows.data, requires_grad=False)
-        tarpts_2 = to_var(pts_2.data + bwdflows.data, requires_grad=False)
+        pts_1    = to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=True)
+        pts_2    = to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=True)
+        ctrls_1  = to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=True)
+        tarpts_1 = to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
+        tarpts_2 = to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
 
         # Measure data loading time
         data_time.update(time.time() - end)
@@ -396,12 +388,14 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # ============ Visualization ============#
         # Compute flow predictions and errors
-        predfwdflows = (predpts_1 - pts_1).float()
-        predbwdflows = (predpts_2 - pts_2).float()
-        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1),
-                                                                           fwdflows.data.unsqueeze(1))
-        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1),
-                                                                           bwdflows.data.unsqueeze(1))
+        fwdflows = sample['fwdflows'][:, 0].clone().float()
+        bwdflows = sample['bwdflows'][:, 0].clone().float()
+        predfwdflows = (predpts_1 - pts_1).data.float()
+        predbwdflows = (predpts_2 - pts_2).data.float()
+        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.unsqueeze(1),
+                                                                           fwdflows.unsqueeze(1))
+        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.unsqueeze(1),
+                                                                           bwdflows.unsqueeze(1))
 
         # Update stats
         flowlossm_sum_f.update(flowloss_sum_fwd); flowlossm_sum_b.update(flowloss_sum_bwd)
@@ -447,9 +441,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # (3) Log the images
             # TODO: Numpy or matplotlib
-            id = random.randint(0, args.batch_size-1)
-            gtfwdflows_n    = normalize_img(sample['fwdflows'][id,0], min=-0.01, max=0.01)
-            gtbwdflows_n    = normalize_img(sample['bwdflows'][id,0], min=-0.01, max=0.01)
+            id = random.randint(0, sample['depths'].size(0)-1)
+            gtfwdflows_n    = normalize_img(fwdflows[id], min=-0.01, max=0.01)
+            gtbwdflows_n    = normalize_img(bwdflows[id], min=-0.01, max=0.01)
             predfwdflows_n  = normalize_img(predfwdflows[id], min=-0.01, max=0.01)
             predbwdflows_n  = normalize_img(predbwdflows[id], min=-0.01, max=0.01)
             info = {
@@ -459,8 +453,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 'gtbwdflows': to_np(gtbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
                 'predfwdflows': to_np(predfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
                 'predbwdflows': to_np(predbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                'predmasks-1' : to_np(mask_1[id].view(args.num_se3, args.img_ht, args.img_wd)),
-                'predmasks-2' : to_np(mask_2[id].view(args.num_se3, args.img_ht, args.img_wd)),
+                'predmasks-1' : to_np(mask_1.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
+                'predmasks-2' : to_np(mask_2.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
             }
 
             for tag, images in info.items():
@@ -473,7 +467,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     ### Print stats at the end
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
     print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
-                samplecurr=len(data_loader), sampletotal=len(data_loader),
+                samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
                 loss=lossm, fwdloss=ptlossm_f,
                 bwdloss=ptlossm_b, consisloss=consislossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,

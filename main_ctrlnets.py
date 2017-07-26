@@ -293,9 +293,14 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
     for i, sample in enumerate(data_loader):
         # ============ Load data ============#
         # Post-process sample
-        sample['points'], sample['masks'], sample['bwdflows']\
-            = DataTransform.process_sample(sample['depths'], sample['labels'],
-                                           sample['poses'])
+        if args.cuda:
+            sample['points'], sample['masks'], sample['bwdflows'] \
+                = DataTransform.process_sample(sample['depths'].cuda(), sample['labels'].cuda(),
+                                               sample['poses'].cuda())
+        else:
+            sample['points'], sample['masks'], sample['bwdflows']\
+                = DataTransform.process_sample(sample['depths'], sample['labels'],
+                                               sample['poses'])
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -371,9 +376,9 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
         predfwdflows = (predpts_1 - pts_1).float()
         predbwdflows = (predpts_2 - pts_2).float()
         flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1),
-                                                                       fwdflows.data.unsqueeze(1))
+                                                                           fwdflows.data.unsqueeze(1))
         flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1),
-                                                                       bwdflows.data.unsqueeze(1))
+                                                                           bwdflows.data.unsqueeze(1))
 
         # Update stats
         flowlossm_sum_f.update(flowloss_sum_fwd); flowlossm_sum_b.update(flowloss_sum_bwd)

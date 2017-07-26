@@ -200,11 +200,11 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
         # Load SE3 state
         se3state = read_baxter_se3state_file(s['se3state1'])
-        poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        poses[k,0,:,0:3] = torch.eye(3).float()  # Identity transform for BG
         for j in xrange(mesh_ids.nelement()):
             meshid = mesh_ids[j]
-            se3tfm = camera_data['modelView'] * se3state[meshid]  # Camera data is part of options
-            poses[k][j + 1] = se3tfm[0:3, :]  # 3 x 4 transform
+            se3tfm = torch.mm(camera_data['modelView'], se3state[meshid])  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
+            poses[k][j+1] = se3tfm[0:3,:]  # 3 x 4 transform
 
         # Load controls and FWD flows (for the first "N" items)
         if k < seq_len:
@@ -262,7 +262,7 @@ class BaxterSeqDataTransformer(object):
         depths_v, labels_v, poses_v = to_var(depths), to_var(labels), to_var(poses)
 
         # Compute 3D points from the depths
-        points   = torch.zeros(depths.size(0), depths.size(1), 3, self.height, self.width)
+        points   = torch.zeros(depths.size(0), depths.size(1), 3, self.height, self.width).type_as(depths)
         points_v = self.DepthTo3DPoints(depths_v.view(-1,1,self.height,self.width)).view_as(points)
         points.copy_(points_v.data) # Copy data
 

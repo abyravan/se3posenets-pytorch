@@ -260,14 +260,14 @@ class SE3PoseModel(nn.Module):
     # Forward pass through the model
     def forward(self, x):
         # Get input vars
-        ptcloud_0, ptcloud_1, ctrl_0 = x
+        ptcloud_1, ptcloud_2, ctrl_1 = x
 
         # Get pose & mask predictions @ t0 & t1
-        pose_0, mask_0 = self.posemaskmodel(ptcloud_0)  # ptcloud @ t0
         pose_1, mask_1 = self.posemaskmodel(ptcloud_1)  # ptcloud @ t1
+        pose_2, mask_2 = self.posemaskmodel(ptcloud_2)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
-        deltapose_t_01, pose_t_1 = self.transitionmodel([pose_0, ctrl_0])  # Predicts [delta-pose, pose]
+        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
 
         # Return outputs
-        return [pose_0, mask_0], [pose_1, mask_1],  [deltapose_t_01, pose_t_1]
+        return [pose_1, mask_1], [pose_2, mask_2],  [deltapose_t_12, pose_t_2]

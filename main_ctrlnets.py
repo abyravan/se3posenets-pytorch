@@ -5,6 +5,7 @@ import shutil
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 
 # Torch imports
 import torch
@@ -64,7 +65,7 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--consis-wt', default=0.01, type=float,
                     metavar='WT', help='Weight for the pose consistency loss (default: 0.01)')
-parser.add_argument('--loss-scale', default=1000, type=float,
+parser.add_argument('--loss-scale', default=10000, type=float,
                     metavar='WT', help='Default scale factor for all the losses (default: 1000)')
 
 # Training options
@@ -98,7 +99,7 @@ parser.add_argument('--decay-epochs', default=30, type=int,
                     metavar='M', help='Decay learning rate every this many epochs (default: 10)')
 
 # Display/Save options
-parser.add_argument('--disp-freq', '-p', default=10, type=int,
+parser.add_argument('--disp-freq', '-p', default=20, type=int,
                     metavar='N', help='print/disp/save frequency (default: 10)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
@@ -444,8 +445,26 @@ def iterate(data_loader, model, tblogger, num_iters,
                 tblogger.histo_summary(tag, to_np(value.data), iterct)
                 tblogger.histo_summary(tag + '/grad', to_np(value.grad), iterct)
 
-            ### Display images
-            # TODO
+            # (3) Log the images
+            # TODO: Numpy or matplotlib
+            id = random.randint(0, args.batch_size-1)
+            gtfwdflows_n    = normalize_img(sample['fwdflows'][id,0], min=-0.01, max=0.01)
+            gtbwdflows_n    = normalize_img(sample['bwdflows'][id,0], min=-0.01, max=0.01)
+            predfwdflows_n  = normalize_img(predfwdflows[id], min=-0.01, max=0.01)
+            predbwdflows_n  = normalize_img(predbwdflows[id], min=-0.01, max=0.01)
+            info = {
+                'depths-1': to_np(sample['depths'][id,0].view(1, args.img_ht, args.img_wd)),
+                'depths-2': to_np(sample['depths'][id,1].view(1, args.img_ht, args.img_wd)),
+                'gtfwdflows': to_np(gtfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                'gtbwdflows': to_np(gtbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                'predfwdflows': to_np(predfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                'predbwdflows': to_np(predbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                'predmasks-1' : to_np(mask_1[id].view(args.num_se3, args.img_ht, args.img_wd)),
+                'predmasks-2' : to_np(mask_2[id].view(args.num_se3, args.img_ht, args.img_wd)),
+            }
+
+            for tag, images in info.items():
+                tblogger.image_summary(tag, images, iterct)
 
         # Measure viz time
         viz_time.update(time.time() - end)
@@ -472,12 +491,13 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
                 flowloss_sum_f, flowloss_avg_f,
                 flowloss_sum_b, flowloss_avg_b):
     # Print loss
-    print('Mode: {}, Epoch: {}, Iter: [{}/{}], Sample: [{}/{}], '
+    print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
           'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
           'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
           'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
           'Consis: {consis.val:.3f} ({consis.avg:.3f})'.format(
-        mode, epoch, curr, total, samplecurr, sampletotal, loss=loss, fwd=fwdloss,
+        mode, epoch, args.epochs, curr, total, samplecurr,
+        sampletotal, loss=loss, fwd=fwdloss,
         bwd=bwdloss, consis=consisloss))
 
     # Print flow loss per timestep
@@ -551,6 +571,10 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
                     nz[k][j]        += 1 # One more dataset
     # Return
     return loss_sum, loss_avg, num_pts, nz
+
+### Normalize image
+def normalize_img(img, min=-0.01, max=0.01):
+    return (img - min) / (max - min)
 
 ### Adjust learning rate
 def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):

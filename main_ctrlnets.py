@@ -64,7 +64,8 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--consis-wt', default=0.01, type=float,
                     metavar='WT', help='Weight for the pose consistency loss (default: 0.01)')
-
+parser.add_argument('--loss-scale', default=1000, type=float,
+                    metavar='WT', help='Default scale factor for all the losses (default: 1000)')
 
 # Training options
 parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -336,17 +337,18 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
         # Compute 3D point loss (3D losses @ t & t+1)
         # TODO: Switch based on soft mask vs wt sharpened mask
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
+        fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if True:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = args.fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = args.bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
         else:
             # Squared error between the predicted points and target points (Same as MSE loss)
-            ptloss_1 = args.fwd_wt * ctrlnets.BiMSELoss(predpts_1, tarpts_1)
-            ptloss_2 = args.bwd_wt * ctrlnets.BiMSELoss(predpts_2, tarpts_2)
+            ptloss_1 = fwd_wt * ctrlnets.BiMSELoss(predpts_1, tarpts_1)
+            ptloss_2 = bwd_wt * ctrlnets.BiMSELoss(predpts_2, tarpts_2)
 
         # Compute pose consistency loss
-        consisloss = args.consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+        consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
 
         # Compute total loss as sum of all losses
         loss = ptloss_1 + ptloss_2 + consisloss

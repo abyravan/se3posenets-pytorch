@@ -22,9 +22,9 @@ def get_nonlinearity(nonlinearity):
 def get_se3_dimension(se3_type, use_pivot):
     # Get dimension (6 for se3aa, se3euler, se3spquat)
     se3_dim = 6
-    if se3_dim == 'se3quat':
+    if se3_type == 'se3quat':
         se3_dim = 7
-    elif se3_dim == 'affine':
+    elif se3_type == 'affine':
         se3_dim = 12
     # Add pivot dimensions
     if use_pivot:
@@ -207,10 +207,10 @@ class TransitionModel(nn.Module):
             m.bias.data.uniform_(-0.01, 0.01)      # Initialize biases to near identity
             # Special initialization for specific SE3 types
             if se3_type == 'affine':
-                bs = m.bias.view(num_se3, -1)
+                bs = m.bias.data.view(num_se3, -1)
                 bs.narrow(1,3,9).copy_(torch.eye(3).view(1,3,3).expand(num_se3,3,3))
             elif se3_type == 'se3quat':
-                bs = m.bias.view(num_se3, -1)
+                bs = m.bias.data.view(num_se3, -1)
                 bs.narrow(1,6,1).fill_(1) # ~ [0,0,0,1]
 
         # Create pose decoder (convert to r/t)

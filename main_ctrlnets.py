@@ -140,7 +140,8 @@ def main():
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
-    print('Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(args.fwd_wt, args.bwd_wt, args.consis_wt))
+    print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
+        args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
 
     ### Create save directory and start tensorboard logger
     create_dir(args.save_dir) # Create directory
@@ -461,8 +462,8 @@ def print_stats(mode, epoch, curr, total, loss, fwdloss, bwdloss, consisloss,
     # Print flow loss per timestep
     bsz = args.batch_size
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
-              'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f})'.format(
+        print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.5f} ({:.5f}), '
+              'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.5f} ({:.5f})'.format(
             1 + k * args.step_len,
             flowloss_sum_f.val[k] / bsz, flowloss_sum_f.avg[k] / bsz,
             flowloss_avg_f.val[k] / bsz, flowloss_avg_f.avg[k] / bsz,

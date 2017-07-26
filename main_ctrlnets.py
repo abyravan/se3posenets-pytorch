@@ -70,10 +70,14 @@ parser.add_argument('--loss-scale', default=1000, type=float,
 # Training options
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training (default: False)')
-parser.add_argument('--epochs', default=50, type=int, metavar='N',
-                    help='number of total epochs to run (default: 50)')
+parser.add_argument('--epochs', default=100, type=int, metavar='N',
+                    help='number of total epochs to run (default: 100)')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts) (default: 0)')
+parser.add_argument('--train-ipe', default=2000, type=int, metavar='N',
+                    help='number of training iterations per epoch (default: 1000)')
+parser.add_argument('--val-ipe', default=500, type=int, metavar='N',
+                    help='number of validation iterations per epoch (default: 500)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                     help='evaluate model on test set (default: False)')
 parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -90,7 +94,7 @@ parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                     metavar='W', help='weight decay (default: 1e-4)')
 parser.add_argument('--lr-decay', default=0.1, type=float, metavar='M',
                     help='Decay learning rate by this value every decay-epochs (default: 0.1)')
-parser.add_argument('--decay-epochs', default=10, type=int,
+parser.add_argument('--decay-epochs', default=30, type=int,
                     metavar='M', help='Decay learning rate every this many epochs (default: 10)')
 
 # Display/Save options
@@ -167,14 +171,15 @@ def main():
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
-                                               shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda)
-    val_loader   = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size,
-                                               shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda)
+    train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size,
+                                        shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda))
+    val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size,
+                                        shuffle=True, num_workers=args.num_workers, pin_memory=args.cuda))
 
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset) # Run sequentially along the test dataset
-    test_loader  = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
-                                               shuffle=False, num_workers=args.num_workers, sampler = sampler, pin_memory=args.cuda)
+    test_loader  = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size,
+                                        shuffle=False, num_workers=args.num_workers, sampler = sampler,
+                                        pin_memory=args.cuda))
 
     ########################
     ############ Load models & optimization stuff
@@ -211,11 +216,10 @@ def main():
     ############ Test
     if args.evaluate:
         print('==== Evaluating pre-trained network on test data ===')
-        iterate(test_loader, model, tblogger, mode='test')
+        iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
     ########################
     ############ Train / Validate
-    trainctr, valctr = torch.IntTensor([0]), torch.IntTensor([0])
     best_val_loss, best_epoch = float("inf"), 0
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
@@ -224,22 +228,25 @@ def main():
         # Train for one epoch
         tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss,\
             tr_flowsum_f, tr_flowavg_f, \
-            tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, mode='train',
-                                                 optimizer=optimizer, iterctr=trainctr,
-                                                 epoch = epoch+1)
+            tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
+                                                 mode='train', optimizer=optimizer, epoch=epoch+1)
         # Evaluate on validation set
         val_loss, val_fwdloss, val_bwdloss, val_consisloss, \
             val_flowsum_f, val_flowavg_f, \
-            val_flowsum_b, val_flowavg_b = iterate(val_loader, model, tblogger, mode='val',
-                                                   iterctr=valctr, epoch=epoch+1)
+            val_flowsum_b, val_flowavg_b = iterate(val_loader, model, tblogger, args.val_ipe,
+                                                   mode='val', epoch=epoch+1)
 
         # Find best loss
         is_best       = (val_loss.avg < best_val_loss)
+        prev_best_loss = best_val_loss
         if is_best:
             best_val_loss = val_loss.avg
             best_epoch    = epoch+1
-            print('==== Epoch: {}, Improved on previous best loss. Current: {} ===='.format(
-                                    epoch+1, best_val_loss))
+            print('==== Epoch: {}, Improved on previous best loss ({}). Current: {} ===='.format(
+                                    epoch+1, prev_best_loss, val_loss.avg))
+        else:
+            print('==== Epoch: {}, Did not improve on best loss ({}). Current: {} ===='.format(
+                epoch + 1, prev_best_loss, val_loss.avg))
         # Save checkpoint
         save_checkpoint({
             'epoch': epoch+1,
@@ -248,27 +255,34 @@ def main():
             'train_stats': {'loss': tr_loss, 'fwdloss': tr_fwdloss,
                             'bwdloss': tr_bwdloss, 'consisloss': tr_consisloss,
                             'flowsum_f': tr_flowsum_f, 'flowavg_f': tr_flowavg_f,
-                            'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b},
+                            'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b,
+                            'niters': train_loader.niters, 'nruns': train_loader.nruns,
+                            'totaliters': train_loader.iteration_count()
+                            },
             'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss,
                             'bwdloss': val_bwdloss, 'consisloss': val_consisloss,
                             'flowsum_f': val_flowsum_f, 'flowavg_f': val_flowavg_f,
-                            'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b},
+                            'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b,
+                            'niters': val_loader.niters, 'nruns': val_loader.nruns,
+                            'totaliters': val_loader.iteration_count()
+                            },
             'state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
         }, is_best, savedir=args.save_dir)
+        print('\n')
 
     # Do final testing (if not asked to evaluate)
     if not args.evaluate:
         print('==== Evaluating trained network on test data ====')
-        iterate(test_loader, model, tblogger, mode='test', epoch=args.epochs)
+        iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
         print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                              best_epoch))
 
 ################# HELPER FUNCTIONS
 
 ### Main iterate function (train/test/val)
-def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
-            iterctr=torch.IntTensor([0]), epoch=0):
+def iterate(data_loader, model, tblogger, num_iters,
+            mode='test', optimizer=None, epoch=0):
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -291,9 +305,14 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
                                                   intrinsics=args.cam_intrinsics,
                                                   meshids=args.mesh_ids)
     # Run an epoch
+    print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
+        mode, epoch, num_iters))
     end = time.time()
-    for i, sample in enumerate(data_loader):
+    for i in xrange(num_iters):
         # ============ Load data ============#
+        # Get a sample
+        j, sample = data_loader.next()
+
         # Post-process sample
         if args.cuda:
             sample['points'], sample['masks'], sample['bwdflows'] \
@@ -392,7 +411,8 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
         # Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
-            print_stats(mode, epoch=epoch, curr=i, total=len(data_loader),
+            print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
+                        samplecurr=j+1, sampletotal=len(data_loader),
                         loss=lossm, fwdloss=ptlossm_f,
                         bwdloss=ptlossm_b, consisloss=consislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
@@ -407,6 +427,7 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
 
             ### TensorBoard logging
             # (1) Log the scalar values
+            iterct = data_loader.iteration_count() # Get total number of iterations so far
             info = {
                 mode+'-loss': loss.data[0],
                 mode+'-fwd3dloss': ptloss_1.data[0],
@@ -415,13 +436,13 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
             }
 
             for tag, value in info.items():
-                tblogger.scalar_summary(tag, value, iterctr[0])
+                tblogger.scalar_summary(tag, value, iterct)
 
             # (2) Log values and gradients of the parameters (histogram)
             for tag, value in model.named_parameters():
                 tag = tag.replace('.', '/')
-                tblogger.histo_summary(tag, to_np(value.data), iterctr[0])
-                tblogger.histo_summary(tag + '/grad', to_np(value.grad), iterctr[0])
+                tblogger.histo_summary(tag, to_np(value.data), iterct)
+                tblogger.histo_summary(tag + '/grad', to_np(value.grad), iterct)
 
             ### Display images
             # TODO
@@ -430,16 +451,15 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
         viz_time.update(time.time() - end)
         end = time.time()
 
-        # Increment counter
-        iterctr += 1
-
     ### Print stats at the end
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
-    print_stats(mode, epoch=epoch, curr=len(data_loader), total=len(data_loader),
+    print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
+                samplecurr=len(data_loader), sampletotal=len(data_loader),
                 loss=lossm, fwdloss=ptlossm_f,
                 bwdloss=ptlossm_b, consisloss=consislossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+    print('========================================================')
 
     # Return the loss & flow loss
     return lossm, ptlossm_f, ptlossm_b, consislossm, \
@@ -447,23 +467,24 @@ def iterate(data_loader, model, tblogger, mode='test', optimizer=None,
            flowlossm_sum_b, flowlossm_avg_b
 
 ### Print statistics
-def print_stats(mode, epoch, curr, total, loss, fwdloss, bwdloss, consisloss,
+def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
+                loss, fwdloss, bwdloss, consisloss,
                 flowloss_sum_f, flowloss_avg_f,
                 flowloss_sum_b, flowloss_avg_b):
     # Print loss
-    print('Mode: {}, Epoch: {}, Iter: [{}/{}], '
+    print('Mode: {}, Epoch: {}, Iter: [{}/{}], Sample: [{}/{}], '
           'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
           'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
           'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
           'Consis: {consis.val:.3f} ({consis.avg:.3f})'.format(
-        mode, epoch, curr, total, loss=loss, fwd=fwdloss,
+        mode, epoch, curr, total, samplecurr, sampletotal, loss=loss, fwd=fwdloss,
         bwd=bwdloss, consis=consisloss))
 
     # Print flow loss per timestep
     bsz = args.batch_size
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.5f} ({:.5f}), '
-              'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.5f} ({:.5f})'.format(
+        print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
+              'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f})'.format(
             1 + k * args.step_len,
             flowloss_sum_f.val[k] / bsz, flowloss_sum_f.avg[k] / bsz,
             flowloss_avg_f.val[k] / bsz, flowloss_avg_f.avg[k] / bsz,
@@ -579,6 +600,35 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+### Enumerate oer data
+class DataEnumerator(object):
+    """Allows iterating over a data loader easily"""
+    def __init__(self, data):
+        self.data   = data # Store the data
+        self.len    = len(self.data) # Number of samples in the entire data
+        self.niters = 0    # Num iterations in current run
+        self.nruns  = 0    # Num rounds over the entire data
+        self.enumerator = enumerate(self.data) # Keeps an iterator around
+
+    def next(self):
+        try:
+            sample = self.enumerator.next() # Get next sample
+        except StopIteration:
+            self.enumerator = enumerate(self.data) # Reset enumerator once it reaches the end
+            self.nruns += 1 # Done with one complete run of the data
+            self.niters = 0 # Num iters in current run
+            sample = self.enumerator.next() # Get next sample
+            #print('Completed a run over the data. Num total runs: {}, Num total iters: {}'.format(
+            #    self.nruns, self.niters+1))
+        self.niters += 1 # Increment iteration count
+        return sample # Return sample
+
+    def __len__(self):
+        return len(self.data)
+
+    def iteration_count(self):
+        return (self.nruns * self.len) + self.niters
 
 ################ RUN MAIN
 if __name__ == '__main__':

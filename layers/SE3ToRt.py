@@ -437,7 +437,7 @@ class SE3ToRtFunction(Function):
 					vec = torch.zeros(1,3).type_as(skewsym); vec[0][k] = 1 # Unit vector
 					idskewsym = self.create_skew_symmetric_matrix(vec);
 					for i in xrange(tot_se3):
-						if (angle2[i].squeeze() < self.eps):
+						if (angle2[i].squeeze()[0] < self.eps):
 							skewsym[i].copy_(idskewsym) # Use the new skew sym matrix (around identity)
 
 				# Compute the gradients now

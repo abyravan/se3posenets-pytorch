@@ -174,8 +174,18 @@ class PoseMaskEncoder(nn.Module):
         # Normalize to sum across 1 along the channels
         if self.use_wt_sharpening:
             noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
-            m = self.maskdecoder(m, add_noise=self.training,
-                                 noise_std=noise_std, pow=pow)
+
+            ## Get the mask decoder in explicitly
+            m = F.sigmoid(m)
+            if (self.training and noise_std > 0):
+                self.noise = Variable(m.data.new(m.size()).normal_(mean=0.0, std=noise_std))
+                print 'Noise', self.noise.max(), self.noise.min(), self.noise.mean()
+                m = m + self.noise
+            m = torch.clamp(m, min=0) ** pow  # Clamp to non-negative values & raise to a power
+            m = normalize(m, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
+
+            #m = self.maskdecoder(m, add_noise=self.training,
+            #                     noise_std=noise_std, pow=pow)
         else:
             m = self.maskdecoder(m)
         m.register_hook(variable_hook)

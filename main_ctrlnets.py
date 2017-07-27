@@ -147,7 +147,8 @@ def main():
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
-    print('Predicting {} SE3s of type: {}'.format(args.num_se3, args.se3_type))
+    args.se3_dim = ctrlnets.get_se3_dimension(args.se3_type, args.pred_pivot)
+    print('Predicting {} SE3s of type: {}. Dim: {}'.format(args.num_se3, args.se3_type, args.se3_dim))
 
     # Camera parameters
     args.cam_intrinsics = {'fx': 589.3664541825391/2,
@@ -334,6 +335,14 @@ def iterate(data_loader, model, tblogger, num_iters,
         assert (mode == 'test' or mode == 'val'), "Mode can be train/test/val. Input: {}"+mode
         model.eval()
 
+    # Create a closure to get the outputs of the delta-se3 prediction layers
+    predictions = {}
+    def get_output(name):
+        def hook(self, input, result):
+            predictions[name] = result
+        return hook
+    model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
+
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -477,26 +486,33 @@ def iterate(data_loader, model, tblogger, num_iters,
                 tblogger.histo_summary(tag, to_np(value.data), iterct)
                 tblogger.histo_summary(tag + '/grad', to_np(value.grad), iterct)
 
-            # (3) Log the images
+            # Log images & print predicted SE3s
             # TODO: Numpy or matplotlib
-            id = random.randint(0, sample['depths'].size(0)-1)
-            gtfwdflows_n    = normalize_img(fwdflows[id].cpu(), min=-0.01, max=0.01)
-            gtbwdflows_n    = normalize_img(bwdflows[id].cpu(), min=-0.01, max=0.01)
-            predfwdflows_n  = normalize_img(predfwdflows[id].cpu(), min=-0.01, max=0.01)
-            predbwdflows_n  = normalize_img(predbwdflows[id].cpu(), min=-0.01, max=0.01)
-            info = {
-                'depths-1': to_np(sample['depths'][id,0].view(1, args.img_ht, args.img_wd)),
-                'depths-2': to_np(sample['depths'][id,1].view(1, args.img_ht, args.img_wd)),
-                'gtfwdflows': to_np(gtfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                'gtbwdflows': to_np(gtbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                'predfwdflows': to_np(predfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                'predbwdflows': to_np(predbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                'predmasks-1' : to_np(mask_1.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
-                'predmasks-2' : to_np(mask_2.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
-            }
+            if i % (5*args.disp_freq) == 0:
 
-            for tag, images in info.items():
-                tblogger.image_summary(tag, images, iterct)
+                # (3) Log the images (at a lower rate for now)
+                id = random.randint(0, sample['depths'].size(0)-1)
+                gtfwdflows_n    = normalize_img(fwdflows[id].cpu(), min=-0.01, max=0.01)
+                gtbwdflows_n    = normalize_img(bwdflows[id].cpu(), min=-0.01, max=0.01)
+                predfwdflows_n  = normalize_img(predfwdflows[id].cpu(), min=-0.01, max=0.01)
+                predbwdflows_n  = normalize_img(predbwdflows[id].cpu(), min=-0.01, max=0.01)
+                info = {
+                    'depths-1': to_np(sample['depths'][id,0].view(1, args.img_ht, args.img_wd)),
+                    'depths-2': to_np(sample['depths'][id,1].view(1, args.img_ht, args.img_wd)),
+                    'gtfwdflows': to_np(gtfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                    'gtbwdflows': to_np(gtbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                    'predfwdflows': to_np(predfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                    'predbwdflows': to_np(predbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
+                    'predmasks-1' : to_np(mask_1.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
+                    'predmasks-2' : to_np(mask_2.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
+                }
+
+                for tag, images in info.items():
+                    tblogger.image_summary(tag, images, iterct)
+
+                # (4) Print the predicted delta-SE3s
+                print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
+                                                                                             args.se3_dim).cpu()
 
         # Measure viz time
         viz_time.update(time.time() - start)

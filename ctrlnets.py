@@ -180,7 +180,7 @@ class PoseMaskEncoder(nn.Module):
                 m = m + self.noise
                 m.register_hook(lambda x: variable_hook(x, 'Noise'))
 
-            m = torch.clamp(m, min=0) ** pow  # Clamp to non-negative values & raise to a power
+            m = (torch.clamp(m, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
             m.register_hook(lambda x: variable_hook(x, 'Clamp'))
             m = normalize(m, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
             m.register_hook(lambda x: variable_hook(x, 'Normalize'))

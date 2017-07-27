@@ -149,6 +149,7 @@ class PoseMaskEncoder(nn.Module):
 
     def forward(self, x, train_iter=0):
         # Run conv-encoder to generate embedding
+        print 'PoseMask-Input', x.max().data[0], x.min().data[0], x.mean().data[0]
         c1 = self.conv1(x)
         c2 = self.conv2(c1)
         c3 = self.conv3(c2)
@@ -162,6 +163,7 @@ class PoseMaskEncoder(nn.Module):
         m = self.deconv3([m, c2])
         m = self.deconv4([m, c1])
         m = self.deconv5(m)
+        print 'Deconv-Pred', m.max().data[0], m.min().data[0], m.mean().data[0]
 
         # Predict a mask (either wt-sharpening or soft-mask approach)
         # Normalize to sum across 1 along the channels
@@ -171,12 +173,15 @@ class PoseMaskEncoder(nn.Module):
                                  noise_std=noise_std, pow=pow)
         else:
             m = self.maskdecoder(m)
+        print 'Mask-pred', m.max().data[0], m.min().data[0], m.mean().data[0]
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
+
+        print 'Pose-pred', p.max().data[0], p.min().data[0], p.mean().data[0]
 
         # Return poses and masks
         return [p, m]

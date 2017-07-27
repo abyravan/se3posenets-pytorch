@@ -898,3 +898,17 @@ masks = Variable(torch.rand(2, 4, 24, 32), requires_grad=True)
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
 targetpts = Variable(torch.rand(2, 3, 24, 32), requires_grad=False)
 assert (gradcheck(w, [pts, masks, tfms, targetpts]))
+
+###############################################################
+# Normalize
+
+# Grad check
+import torch
+from layers.Normalize import Normalize
+from torch.autograd import gradcheck, Variable
+
+n = Normalize(p=1, dim=1, eps=1e-12)
+torch.set_default_tensor_type('torch.DoubleTensor')
+input = Variable(torch.rand(2,3,4,5), requires_grad=True)
+assert (gradcheck(n, [input]))
+

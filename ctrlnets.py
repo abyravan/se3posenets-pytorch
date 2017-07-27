@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from  torch.autograd import Variable
 import se3layers as se3nn
 
 ########## HELPER FUNCS
@@ -43,11 +45,44 @@ def BiMSELoss(input, target, size_average=True):
 
 ########## MODELS
 
+### Normalize function
+def normalize(input, p=2, dim=1, eps=1e-12):
+    r"""Performs :math:`L_p` normalization of inputs over specified dimension.
+    Does:
+    .. math::
+        v = \frac{v}{\max(\lVert v \rVert_p, \epsilon)}
+
+    for each subtensor v over dimension dim of input. Each subtensor is
+    flattened into a vector, i.e. :math:`\lVert v \rVert_p` is not a matrix
+    norm. With default arguments normalizes over the second dimension with Euclidean
+    norm.
+
+    Args:
+        input: input tensor of any shape
+        p (float): the exponent value in the norm formulation
+        dim (int): the dimension to reduce
+        eps (float): small value to avoid division by zero
+    """
+    return input / input.norm(p, dim).clamp(min=eps).expand_as(input)
+
+### Apply weight-sharpening to the masks across the channels of the input
+### output = Normalize( (sigmoid(input) + noise)^p + eps )
+### where the noise is sampled from a 0-mean, sig-std dev distribution (sig is increased over time),
+### the power "p" is also increased over time and the "Normalize" operation does a 1-norm normalization
+def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
+    input = F.sigmoid(input)
+    if (add_noise and noise_std > 0):
+        noise = Variable(input.data.new(input.size()).normal_(mean=0.0, std=noise_std))
+        input = input + noise
+    input = torch.clamp(input, min=0) ** pow # Clamp to non-negative values & raise to a power
+    return normalize(input, p=1, dim=1, eps=1e-12) # Normalize across channels to sum to 1
+
 ### Pose-Mask Encoder
 # Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
 class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False,
-                 input_channels=3, use_bn=True, nonlinearity='prelu'):
+                 input_channels=3, use_bn=True, nonlinearity='prelu',
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Encoder
@@ -77,8 +112,14 @@ class PoseMaskEncoder(nn.Module):
                                      skip_add=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
         self.deconv5 = nn.ConvTranspose2d(8, num_se3, kernel_size=8, stride=2, padding=3)      # 8x8, 120x160 -> 240x320
 
-        # Normalize to generate mask (soft-mask model)
-        self.maskdecoder = nn.Softmax2d()
+        # Normalize to generate mask (wt-sharpening vs soft-mask model)
+        self.use_wt_sharpening = use_wt_sharpening
+        if use_wt_sharpening:
+            self.sharpen_start_iter = sharpen_start_iter # Start iter for the sharpening
+            self.sharpen_rate = sharpen_rate # Rate for sharpening
+            self.maskdecoder = sharpen_masks # Use the weight-sharpener
+        else:
+            self.maskdecoder = nn.Softmax2d() # SoftMax normalization
 
         ###### Pose Decoder
         # Create SE3 decoder (take conv output, reshape, run FC layers to generate "num_se3" poses)
@@ -98,7 +139,15 @@ class PoseMaskEncoder(nn.Module):
         if use_kinchain:
             self.posedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False)) # Kinematic chain
 
-    def forward(self, x):
+    def compute_wt_sharpening_stats(self, train_iter=0):
+        citer = 1 + (train_iter - self.sharpen_start_iter)
+        noise_std, pow = 0, 1
+        if (citer > 0):
+            noise_std = min((citer/125000.0) * self.sharpen_rate, 0.1) # Should be 0.1 by ~12500 iters from start (if rate=1)
+            pow = min(1 + (citer/500.0) * self.sharpen_rate, 100) # Should be 26 by ~12500 iters from start (if rate=1)
+        return noise_std, pow
+
+    def forward(self, x, train_iter=0):
         # Run conv-encoder to generate embedding
         c1 = self.conv1(x)
         c2 = self.conv2(c1)
@@ -106,13 +155,22 @@ class PoseMaskEncoder(nn.Module):
         c4 = self.conv4(c3)
         c5 = self.conv5(c4)
 
-        # Run mask-decoder to predict masks
+        # Run mask-decoder to predict a smooth mask
         m = self.conv1x1(c5)
         m = self.deconv1([m, c4])
         m = self.deconv2([m, c3])
         m = self.deconv3([m, c2])
         m = self.deconv4([m, c1])
-        m = self.maskdecoder(self.deconv5(m)) # Predict final mask
+        m = self.deconv5(m)
+
+        # Predict a mask (either wt-sharpening or soft-mask approach)
+        # Normalize to sum across 1 along the channels
+        if self.use_wt_sharpening:
+            noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
+            m = self.maskdecoder(m, add_noise=self.training,
+                                 noise_std=noise_std, pow=pow)
+        else:
+            m = self.maskdecoder(m)
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)
@@ -142,7 +200,6 @@ class BasicConv2D(nn.Module):
         if self.bn:
             x = self.bn(x)
         return self.nonlin(x)
-
 
 # Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
 class BasicDeconv2D(nn.Module):
@@ -245,26 +302,28 @@ class TransitionModel(nn.Module):
 class SE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True,
-                 nonlinearity='prelu', init_transse3_iden = False):
+                 nonlinearity='prelu', init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
         self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
                                              use_kinchain=use_kinchain, input_channels=input_channels,
-                                             use_bn=use_bn, nonlinearity=nonlinearity)
+                                             use_bn=use_bn, nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                             sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
 
     # Forward pass through the model
-    def forward(self, x):
+    def forward(self, x, train_iter=0):
         # Get input vars
         ptcloud_1, ptcloud_2, ctrl_1 = x
 
         # Get pose & mask predictions @ t0 & t1
-        pose_1, mask_1 = self.posemaskmodel(ptcloud_1)  # ptcloud @ t1
-        pose_2, mask_2 = self.posemaskmodel(ptcloud_2)  # ptcloud @ t2
+        pose_1, mask_1 = self.posemaskmodel(ptcloud_1, train_iter=train_iter)  # ptcloud @ t1
+        pose_2, mask_2 = self.posemaskmodel(ptcloud_2, train_iter=train_iter)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
         deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]

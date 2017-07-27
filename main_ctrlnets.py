@@ -22,7 +22,7 @@ import ctrlnets
 from util.tblogger import TBLogger
 
 # Profiler
-from memory_profiler import profile
+#from memory_profiler import profile
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='SE3-Pose-Nets Training')
@@ -60,6 +60,14 @@ parser.add_argument('-n', '--num-se3', type=int, default=8,
                     help='Number of SE3s to predict (default: 8)')
 parser.add_argument('--init-transse3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
+
+# Mask options
+parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
+                    help='use weight sharpening for the mask prediction (instead of the soft-mask model) (default: False)')
+parser.add_argument('--sharpen-start-iter', default=0, type=int,
+                    metavar='N', help='Start the weight sharpening from this training iteration (default: 0)')
+parser.add_argument('--sharpen-rate', default=1.0, type=float,
+                    metavar='W', help='Slope of the weight sharpening (default: 1.0)')
 
 # Loss options
 parser.add_argument('--fwd-wt', default=1.0, type=float,
@@ -110,10 +118,10 @@ parser.add_argument('-s', '--save-dir', default='results', type=str,
                     metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
 
 ################ MAIN
-@profile
+#@profile
 def main():
     # Parse args
-    global args
+    global args, num_train_iter
     args = parser.parse_args()
     args.cuda       = not args.no_cuda and torch.cuda.is_available()
     args.batch_norm = not args.no_batch_norm
@@ -151,6 +159,13 @@ def main():
     # Loss parameters
     print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
+
+    # Weight sharpening stuff
+    if args.use_wt_sharpening:
+        print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
+            args.sharpen_start_iter, args.sharpen_rate))
+    else:
+        print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
     ### Create save directory and start tensorboard logger
     create_dir(args.save_dir) # Create directory
@@ -190,10 +205,13 @@ def main():
     ############ Load models & optimization stuff
 
     ### Load the model
+    num_train_iter = 0
     model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                   se3_type=args.se3_type, use_pivot=args.pred_pivot,
                                   use_kinchain=False, input_channels=3, use_bn=args.batch_norm,
-                                  nonlinearity=args.nonlin, init_transse3_iden=args.init_transse3_iden)
+                                  nonlinearity=args.nonlin, init_transse3_iden=args.init_transse3_iden,
+                                  use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                  sharpen_rate=args.sharpen_rate)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -257,6 +275,7 @@ def main():
         else:
             print('==== Epoch: {}, Did not improve on best loss ({}). Current: {} ===='.format(
                 epoch + 1, prev_best_loss, val_loss.avg))
+
         # Save checkpoint
         save_checkpoint({
             'epoch': epoch+1,
@@ -276,12 +295,12 @@ def main():
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
                             'totaliters': val_loader.iteration_count()
                             },
+            'train_iter' : num_train_iter,
             'state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
         }, is_best, savedir=args.save_dir)
         print('\n')
 
-    '''
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
@@ -292,13 +311,15 @@ def main():
     iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
-    '''
 
 ################# HELPER FUNCTIONS
 
 ### Main iterate function (train/test/val)
 def iterate(data_loader, model, tblogger, num_iters,
             mode='test', optimizer=None, epoch=0):
+    # Get global stuff?
+    global num_train_iter
+
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -342,7 +363,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         start = time.time()
 
         # Run the FWD pass through the network
-        [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
+        [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
+                                                                               train_iter=num_train_iter)
         deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
 
         # Compute predicted points based on the masks
@@ -354,14 +376,14 @@ def iterate(data_loader, model, tblogger, num_iters,
         # TODO: Switch based on soft mask vs wt sharpened mask
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
-        if True:
-            # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
-        else:
+        if args.use_wt_sharpening:
             # Squared error between the predicted points and target points (Same as MSE loss)
             ptloss_1 = fwd_wt * ctrlnets.BiMSELoss(predpts_1, tarpts_1)
             ptloss_2 = bwd_wt * ctrlnets.BiMSELoss(predpts_2, tarpts_2)
+        else:
+            # Use the weighted 3D transform loss, do not use explicitly predicted points
+            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
@@ -386,6 +408,9 @@ def iterate(data_loader, model, tblogger, num_iters,
             optimizer.zero_grad() # Zero gradients
             loss.backward()       # Compute gradients - BWD pass
             optimizer.step()      # Run update step
+
+            # Increment number of training iterations by 1
+            num_train_iter += 1
 
             # Measure BWD time
             bwd_time.update(time.time() - start)
@@ -421,6 +446,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                         bwdloss=ptlossm_b, consisloss=consislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+
+            ### Print stuff if we have weight sharpening enabled
+            if args.use_wt_sharpening:
+                noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
+                    num_train_iter, noise_std, pow))
 
             ### Print time taken
             print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '

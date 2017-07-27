@@ -311,10 +311,12 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
-    end = time.time()
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     for i in xrange(num_iters):
         # ============ Load data ============#
+        # Start timer
+        start = time.time()
+
         # Get a sample
         j, sample = data_loader.next()
 
@@ -327,10 +329,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpts_2 = to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
 
         # Measure data loading time
-        data_time.update(time.time() - end)
-        end = time.time()
+        data_time.update(time.time() - start)
 
         # ============ FWD pass + Compute loss ============#
+        # Start timer
+        start = time.time()
+
         # Run the FWD pass through the network
         [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
         deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
@@ -364,27 +368,33 @@ def iterate(data_loader, model, tblogger, num_iters,
         consislossm.update(consisloss.data[0]); lossm.update(loss.data[0])
 
         # Measure FWD time
-        fwd_time.update(time.time() - end)
-        end = time.time()
+        fwd_time.update(time.time() - start)
 
         # ============ Gradient backpass + Optimizer step ============#
         # Compute gradient and do optimizer update step (if in training mode)
         if (train):
+            # Start timer
+            start = time.time()
+
             # Backward pass & optimize
             optimizer.zero_grad() # Zero gradients
             loss.backward()       # Compute gradients - BWD pass
             optimizer.step()      # Run update step
 
             # Measure BWD time
-            bwd_time.update(time.time() - end)
+            bwd_time.update(time.time() - start)
             end = time.time()
 
         # ============ Visualization ============#
+        # Start timer
+        start = time.time()
+
         # Compute flow predictions and errors
-        fwdflows = sample['fwdflows'][:, 0].clone().cpu()
-        bwdflows = sample['bwdflows'][:, 0].clone().cpu()
-        predfwdflows = (predpts_1 - pts_1).data.cpu()
-        predbwdflows = (predpts_2 - pts_2).data.cpu()
+        # NOTE: I'm using CUDA here to speed up computation by ~4x
+        predfwdflows = (predpts_1.data - pts_1.data)
+        predbwdflows = (predpts_2.data - pts_2.data)
+        fwdflows = sample['fwdflows'][:, 0].clone().type_as(predfwdflows)
+        bwdflows = sample['bwdflows'][:, 0].clone().type_as(predbwdflows)
         flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.unsqueeze(1),
                                                                            fwdflows.unsqueeze(1))
         flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.unsqueeze(1),
@@ -435,10 +445,10 @@ def iterate(data_loader, model, tblogger, num_iters,
             # (3) Log the images
             # TODO: Numpy or matplotlib
             id = random.randint(0, sample['depths'].size(0)-1)
-            gtfwdflows_n    = normalize_img(fwdflows[id], min=-0.01, max=0.01)
-            gtbwdflows_n    = normalize_img(bwdflows[id], min=-0.01, max=0.01)
-            predfwdflows_n  = normalize_img(predfwdflows[id], min=-0.01, max=0.01)
-            predbwdflows_n  = normalize_img(predbwdflows[id], min=-0.01, max=0.01)
+            gtfwdflows_n    = normalize_img(fwdflows[id].cpu(), min=-0.01, max=0.01)
+            gtbwdflows_n    = normalize_img(bwdflows[id].cpu(), min=-0.01, max=0.01)
+            predfwdflows_n  = normalize_img(predfwdflows[id].cpu(), min=-0.01, max=0.01)
+            predbwdflows_n  = normalize_img(predbwdflows[id].cpu(), min=-0.01, max=0.01)
             info = {
                 'depths-1': to_np(sample['depths'][id,0].view(1, args.img_ht, args.img_wd)),
                 'depths-2': to_np(sample['depths'][id,1].view(1, args.img_ht, args.img_wd)),
@@ -454,8 +464,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 tblogger.image_summary(tag, images, iterct)
 
         # Measure viz time
-        viz_time.update(time.time() - end)
-        end = time.time()
+        viz_time.update(time.time() - start)
 
     ### Print stats at the end
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))

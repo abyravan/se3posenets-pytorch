@@ -72,11 +72,12 @@ def normalize(input, p=2, dim=1, eps=1e-12):
 def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
     input = F.sigmoid(input)
     if (add_noise and noise_std > 0):
-        noise = Variable(input.data.new(input.size()).normal_(mean=0.0, std=noise_std))
+        noise = Variable(input.data.new(input.size()).normal_(mean=0.0, std=noise_std)) # Sample gaussian noise
         input = input + noise
-    input = torch.clamp(input, min=0) ** pow # Clamp to non-negative values & raise to a power
-    return normalize(input, p=1, dim=1, eps=1e-12) # Normalize across channels to sum to 1
+    input = (torch.clamp(input, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
+    return normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
 
+### Hook for backprops of variables, just prints min, max, mean of grads along with num of "NaNs"
 def variable_hook(grad, txt):
     print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
 
@@ -165,31 +166,14 @@ class PoseMaskEncoder(nn.Module):
         m = self.deconv3([m, c2])
         m = self.deconv4([m, c1])
         m = self.deconv5(m)
-        m.register_hook(lambda x: variable_hook(x, 'Deconv'))
 
         # Predict a mask (either wt-sharpening or soft-mask approach)
         # Normalize to sum across 1 along the channels
         if self.use_wt_sharpening:
             noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
-
-            ## Get the mask decoder in explicitly
-            m = F.sigmoid(m)
-            m.register_hook(lambda x: variable_hook(x, 'Sigmoid'))
-            if (self.training and noise_std > 0):
-                self.noise = Variable(m.data.new(m.size()).normal_(mean=0.0, std=noise_std))
-                m = m + self.noise
-                m.register_hook(lambda x: variable_hook(x, 'Noise'))
-
-            m = (torch.clamp(m, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
-            m.register_hook(lambda x: variable_hook(x, 'Clamp'))
-            m = normalize(m, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
-            m.register_hook(lambda x: variable_hook(x, 'Normalize'))
-
-            #m = self.maskdecoder(m, add_noise=self.training,
-            #                     noise_std=noise_std, pow=pow)
+            m = self.maskdecoder(m, add_noise=self.training, noise_std=noise_std, pow=pow)
         else:
             m = self.maskdecoder(m)
-        m.register_hook(lambda x: variable_hook(x, 'Mask'))
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)

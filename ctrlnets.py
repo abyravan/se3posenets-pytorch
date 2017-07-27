@@ -77,6 +77,12 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
     input = torch.clamp(input, min=0) ** pow # Clamp to non-negative values & raise to a power
     return normalize(input, p=1, dim=1, eps=1e-12) # Normalize across channels to sum to 1
 
+def variable_hook(grad):
+    print 'Mask', grad.max().data[0], grad.min().data[0], grad.mean().data[0]
+
+def variable_hook1(grad):
+    print 'Deconv', grad.max().data[0], grad.min().data[0], grad.mean().data[0]
+
 ### Pose-Mask Encoder
 # Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
 class PoseMaskEncoder(nn.Module):
@@ -149,31 +155,20 @@ class PoseMaskEncoder(nn.Module):
 
     def forward(self, x, train_iter=0):
         # Run conv-encoder to generate embedding
-        print 'PoseMask-Input', x.max().data[0], x.min().data[0], x.mean().data[0]
         c1 = self.conv1(x)
-        print 'PoseMask-C1', c1.max().data[0], c1.min().data[0], c1.mean().data[0]
         c2 = self.conv2(c1)
-        print 'PoseMask-C2', c2.max().data[0], c2.min().data[0], c2.mean().data[0]
         c3 = self.conv3(c2)
-        print 'PoseMask-C3', c3.max().data[0], c3.min().data[0], c3.mean().data[0]
         c4 = self.conv4(c3)
-        print 'PoseMask-C4', c4.max().data[0], c4.min().data[0], c4.mean().data[0]
         c5 = self.conv5(c4)
-        print 'PoseMask-C5', c5.max().data[0], c5.min().data[0], c5.mean().data[0]
 
         # Run mask-decoder to predict a smooth mask
         m = self.conv1x1(c5)
-        print 'PoseMask-D1', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv1([m, c4])
-        print 'PoseMask-D2', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv2([m, c3])
-        print 'PoseMask-D3', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv3([m, c2])
-        print 'PoseMask-D4', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv4([m, c1])
-        print 'PoseMask-D5', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv5(m)
-        print 'Deconv-Pred', m.max().data[0], m.min().data[0], m.mean().data[0]
+        m.register_hook(variable_hook1)
 
         # Predict a mask (either wt-sharpening or soft-mask approach)
         # Normalize to sum across 1 along the channels
@@ -183,15 +178,13 @@ class PoseMaskEncoder(nn.Module):
                                  noise_std=noise_std, pow=pow)
         else:
             m = self.maskdecoder(m)
-        print 'Mask-pred', m.max().data[0], m.min().data[0], m.mean().data[0]
+        m.register_hook(variable_hook)
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
-
-        print 'Pose-pred', p.max().data[0], p.min().data[0], p.mean().data[0]
 
         # Return poses and masks
         return [p, m]

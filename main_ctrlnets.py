@@ -173,7 +173,6 @@ def main():
     tblogger = TBLogger(args.save_dir + '/logs/' + now) # Start tensorboard logger
 
     # TODO: Add option for using encoder pose for tfm t2
-    # TODO: Add options for mask sharpening approach
     # TODO: Add option for pre-conv BN + Nonlin
 
     ########################
@@ -371,11 +370,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         # TODO: Add option for using encoder pose for tfm t2
         predpts_1 = se3nn.NTfm3D()(pts_1, mask_1, deltapose_t_12)
         predpts_2 = se3nn.NTfm3D()(pts_2, mask_2, deltapose_t_21)
-        print 'PredPts-1', predpts_1.max().data[0], predpts_1.min().data[0], predpts_1.mean().data[0]
-        print 'PredPts-2', predpts_2.max().data[0], predpts_2.min().data[0], predpts_2.mean().data[0]
 
         # Compute 3D point loss (3D losses @ t & t+1)
-        # TODO: Switch based on soft mask vs wt sharpened mask
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if args.use_wt_sharpening:
@@ -392,8 +388,6 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute total loss as sum of all losses
         loss = ptloss_1 + ptloss_2 + consisloss
-
-        print 'Loss: ', loss.data[0], ptloss_1.data[0], ptloss_2.data[0], consisloss.data[0]
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])

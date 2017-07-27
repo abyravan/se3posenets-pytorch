@@ -360,7 +360,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         # ============ FWD pass + Compute loss ============#
         # Start timer
         start = time.time()
-        print('==============================================')
 
         # Run the FWD pass through the network
         [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],

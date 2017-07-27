@@ -151,17 +151,27 @@ class PoseMaskEncoder(nn.Module):
         # Run conv-encoder to generate embedding
         print 'PoseMask-Input', x.max().data[0], x.min().data[0], x.mean().data[0]
         c1 = self.conv1(x)
+        print 'PoseMask-C1', c1.max().data[0], c1.min().data[0], c1.mean().data[0]
         c2 = self.conv2(c1)
+        print 'PoseMask-C2', c2.max().data[0], c2.min().data[0], c2.mean().data[0]
         c3 = self.conv3(c2)
+        print 'PoseMask-C3', c3.max().data[0], c3.min().data[0], c3.mean().data[0]
         c4 = self.conv4(c3)
+        print 'PoseMask-C4', c4.max().data[0], c4.min().data[0], c4.mean().data[0]
         c5 = self.conv5(c4)
+        print 'PoseMask-C5', c5.max().data[0], c5.min().data[0], c5.mean().data[0]
 
         # Run mask-decoder to predict a smooth mask
         m = self.conv1x1(c5)
+        print 'PoseMask-D1', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv1([m, c4])
+        print 'PoseMask-D2', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv2([m, c3])
+        print 'PoseMask-D3', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv3([m, c2])
+        print 'PoseMask-D4', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv4([m, c1])
+        print 'PoseMask-D5', m.max().data[0], m.min().data[0], m.mean().data[0]
         m = self.deconv5(m)
         print 'Deconv-Pred', m.max().data[0], m.min().data[0], m.mean().data[0]
 

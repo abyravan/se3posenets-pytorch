@@ -21,6 +21,9 @@ import data
 import ctrlnets
 from util.tblogger import TBLogger
 
+# Profiler
+from memory_profiler import profile
+
 # Parse arguments
 parser = argparse.ArgumentParser(description='SE3-Pose-Nets Training')
 
@@ -107,6 +110,7 @@ parser.add_argument('-s', '--save-dir', default='results', type=str,
                     metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
 
 ################ MAIN
+@profile
 def main():
     # Parse args
     global args
@@ -277,6 +281,7 @@ def main():
         }, is_best, savedir=args.save_dir)
         print('\n')
 
+    '''
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
@@ -287,6 +292,7 @@ def main():
     iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
+    '''
 
 ################# HELPER FUNCTIONS
 

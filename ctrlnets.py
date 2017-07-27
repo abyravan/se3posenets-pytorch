@@ -179,7 +179,7 @@ class PoseMaskEncoder(nn.Module):
             m = F.sigmoid(m)
             if (self.training and noise_std > 0):
                 self.noise = Variable(m.data.new(m.size()).normal_(mean=0.0, std=noise_std))
-                print 'Noise', self.noise.max(), self.noise.min(), self.noise.mean()
+                print 'Noise', self.noise.max().data[0], self.noise.min().data[0], self.noise.mean().data[0]
                 m = m + self.noise
             m = torch.clamp(m, min=0) ** pow  # Clamp to non-negative values & raise to a power
             m = normalize(m, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1

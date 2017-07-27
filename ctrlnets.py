@@ -77,11 +77,8 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
     input = torch.clamp(input, min=0) ** pow # Clamp to non-negative values & raise to a power
     return normalize(input, p=1, dim=1, eps=1e-12) # Normalize across channels to sum to 1
 
-def variable_hook(grad):
-    print 'Mask', grad.max().data[0], grad.min().data[0], grad.mean().data[0]
-
-def variable_hook1(grad):
-    print 'Deconv', grad.max().data[0], grad.min().data[0], grad.mean().data[0]
+def variable_hook(grad, txt):
+    print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
 
 ### Pose-Mask Encoder
 # Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
@@ -168,7 +165,7 @@ class PoseMaskEncoder(nn.Module):
         m = self.deconv3([m, c2])
         m = self.deconv4([m, c1])
         m = self.deconv5(m)
-        m.register_hook(variable_hook1)
+        m.register_hook(lambda x: variable_hook(x, 'Deconv'))
 
         # Predict a mask (either wt-sharpening or soft-mask approach)
         # Normalize to sum across 1 along the channels
@@ -177,18 +174,22 @@ class PoseMaskEncoder(nn.Module):
 
             ## Get the mask decoder in explicitly
             m = F.sigmoid(m)
+            m.register_hook(lambda x: variable_hook(x, 'Sigmoid'))
             if (self.training and noise_std > 0):
                 self.noise = Variable(m.data.new(m.size()).normal_(mean=0.0, std=noise_std))
-                print 'Noise', self.noise.max().data[0], self.noise.min().data[0], self.noise.mean().data[0]
                 m = m + self.noise
+                m.register_hook(lambda x: variable_hook(x, 'Noise'))
+
             m = torch.clamp(m, min=0) ** pow  # Clamp to non-negative values & raise to a power
+            m.register_hook(lambda x: variable_hook(x, 'Clamp'))
             m = normalize(m, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
+            m.register_hook(lambda x: variable_hook(x, 'Normalize'))
 
             #m = self.maskdecoder(m, add_noise=self.training,
             #                     noise_std=noise_std, pow=pow)
         else:
             m = self.maskdecoder(m)
-        m.register_hook(variable_hook)
+        m.register_hook(lambda x: variable_hook(x, 'Mask'))
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)

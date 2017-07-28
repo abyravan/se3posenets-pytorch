@@ -239,6 +239,7 @@ def main():
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
         print('==== Evaluating pre-trained network on test data ===')
+        args.imglog_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
         test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                         num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
@@ -249,6 +250,7 @@ def main():
     ########################
     ############ Train / Validate
     best_val_loss, best_epoch = float("inf"), 0
+    args.imglog_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
@@ -258,6 +260,14 @@ def main():
             tr_flowsum_f, tr_flowavg_f, \
             tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
                                                  mode='train', optimizer=optimizer, epoch=epoch+1)
+
+        # Log values and gradients of the parameters (histogram)
+        # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
+        for tag, value in model.named_parameters():
+            tag = tag.replace('.', '/')
+            tblogger.histo_summary(tag, to_np(value.data), epoch + 1)
+            tblogger.histo_summary(tag + '/grad', to_np(value.grad), epoch + 1)
+
         # Evaluate on validation set
         val_loss, val_fwdloss, val_bwdloss, val_consisloss, \
             val_flowsum_f, val_flowavg_f, \
@@ -304,6 +314,7 @@ def main():
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
+    args.imglog_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
@@ -476,41 +487,35 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-bwd3dloss': ptloss_2.data[0],
                 mode+'-consisloss': consisloss.data[0]
             }
-
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
 
-            # (2) Log values and gradients of the parameters (histogram)
-            for tag, value in model.named_parameters():
-                tag = tag.replace('.', '/')
-                tblogger.histo_summary(tag, to_np(value.data), iterct)
-                tblogger.histo_summary(tag + '/grad', to_np(value.grad), iterct)
-
-            # Log images & print predicted SE3s
+            # (2) Log images & print predicted SE3s
             # TODO: Numpy or matplotlib
-            if i % (5*args.disp_freq) == 0:
+            if i % args.imglog_freq == 0:
 
-                # (3) Log the images (at a lower rate for now)
+                ## Log the images (at a lower rate for now)
                 id = random.randint(0, sample['depths'].size(0)-1)
-                gtfwdflows_n    = normalize_img(fwdflows[id].cpu(), min=-0.01, max=0.01)
-                gtbwdflows_n    = normalize_img(bwdflows[id].cpu(), min=-0.01, max=0.01)
-                predfwdflows_n  = normalize_img(predfwdflows[id].cpu(), min=-0.01, max=0.01)
-                predbwdflows_n  = normalize_img(predbwdflows[id].cpu(), min=-0.01, max=0.01)
-                info = {
-                    'depths-1': to_np(sample['depths'][id,0].view(1, args.img_ht, args.img_wd)),
-                    'depths-2': to_np(sample['depths'][id,1].view(1, args.img_ht, args.img_wd)),
-                    'gtfwdflows': to_np(gtfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                    'gtbwdflows': to_np(gtbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                    'predfwdflows': to_np(predfwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                    'predbwdflows': to_np(predbwdflows_n.view(1, 3, args.img_ht, args.img_wd)),
-                    'predmasks-1' : to_np(mask_1.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
-                    'predmasks-2' : to_np(mask_2.data[id].view(args.num_se3, args.img_ht, args.img_wd)),
-                }
 
+                # Concat the flows, depths and masks into one tensor
+                flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.narrow(0,id,1),
+                                                                   bwdflows.narrow(0,id,1),
+                                                                   predfwdflows.narrow(0,id,1),
+                                                                   predbwdflows.narrow(0,id,1)], 0).cpu(),
+                                                        nrow=2, normalize=True, range=(-0.01, 0.01))
+                depthdisp = torchvision.utils.make_grid(sample['depths'][id], normalize=True, range=(0.0,3.0))
+                maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),
+                                                                   mask_2.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                                        nrow=args.num_se3, normalize=True, range=(0,1))
+                # Show as an image summary
+                info = { mode+'-depths': to_np(depthdisp.narrow(0,0,1)),
+                         mode+'-flows' : to_np(flowdisp.unsqueeze(0)),
+                         mode+'-masks' : to_np(maskdisp.narrow(0,0,1))
+                }
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 
-                # (4) Print the predicted delta-SE3s
+                ## Print the predicted delta-SE3s
                 print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
                                                                                              args.se3_dim).cpu()
 

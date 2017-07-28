@@ -30,7 +30,7 @@ class TBLogger(object):
                 s = StringIO()
             except:
                 s = BytesIO()
-            scipy.misc.toimage(img).save(s, format="png")
+            scipy.misc.toimage(img).save(s, format="jpeg")
 
             # Create an Image object
             img_sum = tf.Summary.Image(encoded_image_string=s.getvalue(),

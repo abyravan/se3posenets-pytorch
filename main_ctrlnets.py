@@ -356,6 +356,11 @@ def iterate(data_loader, model, tblogger, num_iters,
         return hook
     model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
+
+    post_processor = data.BaxterSeqDatasetPostProcessor(height=args.img_ht, width=args.img_wd,
+                                                        intrinsics=args.cam_intrinsics, meshids=args.mesh_ids,
+                                                        cuda=args.cuda)
+
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -367,6 +372,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
+        post_processor.postprocess_batch(sample)
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension

@@ -239,7 +239,7 @@ def main():
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
         print('==== Evaluating pre-trained network on test data ===')
-        args.imglog_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
+        args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
         test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                         num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
@@ -250,7 +250,7 @@ def main():
     ########################
     ############ Train / Validate
     best_val_loss, best_epoch = float("inf"), 0
-    args.imglog_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
+    args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
@@ -314,7 +314,7 @@ def main():
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
-    args.imglog_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
+    args.imgdisp_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
@@ -492,7 +492,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # (2) Log images & print predicted SE3s
             # TODO: Numpy or matplotlib
-            if i % args.imglog_freq == 0:
+            if i % args.imgdisp_freq == 0:
 
                 ## Log the images (at a lower rate for now)
                 id = random.randint(0, sample['depths'].size(0)-1)

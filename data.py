@@ -245,7 +245,6 @@ class BaxterSeqDatasetCollater(object):
     '''
     Post-process data sample to generate masks, flows etc
     '''
-    '''
     def __init__(self, height, width, intrinsics, meshids, cuda=False):
         self.meshids = meshids
         self.height = height
@@ -294,7 +293,6 @@ class BaxterSeqDatasetCollater(object):
         batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
                                                              masks.type_as(batch['depths']), \
                                                              bwdflows.type_as(batch['depths'])
-    '''
 
     ### Collate the batch together
     def collate_batch(self, batch):
@@ -310,73 +308,10 @@ class BaxterSeqDatasetCollater(object):
         collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
 
         # Post-process the collated batch
-        #self.postprocess_collated_batch(collated_batch)
+        self.postprocess_collated_batch(collated_batch)
 
         # Return post-processed batch
         return collated_batch
-
-
-
-
-
-### Collate samples from the Baxter Sequential Dataset & collate them into a batch
-class BaxterSeqDatasetPostProcessor(object):
-    '''
-    Post-process data sample to generate masks, flows etc
-    '''
-
-    def __init__(self, height, width, intrinsics, meshids, cuda=False):
-        self.meshids = meshids
-        self.height = height
-        self.width = width
-        self.DepthTo3DPoints = se3nn.DepthImageToDense3DPoints(height=height,
-                                                               width=width,
-                                                               fx=intrinsics['fx'],
-                                                               fy=intrinsics['fy'],
-                                                               cx=intrinsics['cx'],
-                                                               cy=intrinsics['cy'])
-        assert (not cuda), "Cannot support post-processing using CUDA currently"
-        self.proctype = 'torch.cuda.FloatTensor' if cuda else 'torch.FloatTensor'
-
-    # Post process a training sample
-    def postprocess_batch(self, batch):
-        # Get tensors and convert to vars
-        depths, labels, poses = batch['depths'].type(self.proctype), \
-                                batch['labels'].type(self.proctype), \
-                                batch['poses'].type(self.proctype)
-        depths_v, labels_v, poses_v = to_var(depths), to_var(labels), to_var(poses)
-
-        # Compute 3D points from the depths
-        points = torch.zeros(depths.size(0), depths.size(1), 3, self.height, self.width).type_as(depths)
-        points_v = self.DepthTo3DPoints(depths_v.view(-1, 1, self.height, self.width)).view_as(points)
-        points.copy_(points_v.data)  # Copy data
-
-        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
-        nmeshes = self.meshids.nelement()  # Num meshes
-        masks = torch.zeros(depths.size(0), depths.size(1), nmeshes + 1, self.height, self.width).type_as(depths)
-        for k in xrange(nmeshes):
-            masks[:, :, k + 1] = labels.eq(self.meshids[k])  # Mask out that mesh ID
-            if (k == nmeshes - 1):
-                masks[:, :, k + 1] = labels.ge(self.meshids[k])  # Everything in the end-effector
-        masks[:, :, 0] = masks.narrow(2, 1, nmeshes).sum(2).eq(0)  # All other masks are BG
-
-        # Compute BWD flows (use pts @ time t+1, and delta-transforms + masks to compute the flows in the opposite dirn)
-        bwdflows = torch.zeros(depths.size(0), depths.size(1) - 1, 3, self.height, self.width).type_as(depths)
-        for k in xrange(bwdflows.size(1)):
-            pts_2, masks_2 = points_v[:, k + 1].clone(), to_var(masks[:, k + 1])  # Pts @ t+1
-            pose_1, pose_2 = poses_v[:, k].clone(), poses_v[:, k + 1].clone()  # Poses @ t & t+1
-            poses_2_to_1 = se3nn.ComposeRtPair()(pose_1, se3nn.RtInverse()(pose_2))  # P_1 * P_2^-1
-            predpts_1 = se3nn.NTfm3D()(pts_2, masks_2, poses_2_to_1)  # Predict pts @ t
-            bwdflows[:, k] = (predpts_1 - pts_2).data  # Flows that take pts @ t+1 to pts @ t
-
-        # Convert to proper type and add to batch
-        batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
-                                                             masks.type_as(batch['depths']), \
-                                                             bwdflows.type_as(batch['depths'])
-
-
-
-
 
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):

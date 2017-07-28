@@ -82,6 +82,8 @@ parser.add_argument('--loss-scale', default=10000, type=float,
 # Training options
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training (default: False)')
+parser.add_argument('--use-pin-memory', action='store_true', default=False,
+                    help='Use pin memory - note that this uses additional CPU RAM (default: False)')
 parser.add_argument('--epochs', default=100, type=int, metavar='N',
                     help='number of total epochs to run (default: 100)')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
@@ -197,9 +199,9 @@ def main():
 
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
     train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.cuda, collate_fn=data_collater.collate_batch))
+                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
     val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.cuda, collate_fn=data_collater.collate_batch))
+                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
 
     ########################
     ############ Load models & optimization stuff
@@ -242,7 +244,7 @@ def main():
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
         test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                        num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
+                                        num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                         collate_fn=data_collater.collate_batch))
         iterate(test_loader, model, tblogger, len(test_loader), mode='test')
         return # Finish
@@ -317,7 +319,7 @@ def main():
     args.imgdisp_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                    num_workers=args.num_workers, sampler=sampler, pin_memory=args.cuda,
+                                    num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                     collate_fn=data_collater.collate_batch))
     iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,

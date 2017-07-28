@@ -123,7 +123,7 @@ parser.add_argument('-s', '--save-dir', default='results', type=str,
 #@profile
 def main():
     # Parse args
-    global args, num_train_iter
+    global args, num_train_iter, post_processor
     args = parser.parse_args()
     args.cuda       = not args.no_cuda and torch.cuda.is_available()
     args.batch_norm = not args.no_batch_norm
@@ -194,14 +194,18 @@ def main():
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
     # TODO: Batch along dim 1 instead of dim 0
-    data_collater = data.BaxterSeqDatasetCollater(height=args.img_ht, width=args.img_wd, intrinsics=args.cam_intrinsics,
-                                                  meshids=args.mesh_ids)
+    data_collater = data.BaxterSeqDatasetCollater() #height=args.img_ht, width=args.img_wd, intrinsics=args.cam_intrinsics,
+                                                  #meshids=args.mesh_ids)
 
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
     train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                         num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
     val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
                                         num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
+
+    post_processor = data.BaxterSeqDatasetPostProcessor(height=args.img_ht, width=args.img_wd,
+                                                        intrinsics=args.cam_intrinsics, meshids=args.mesh_ids,
+                                                        cuda=args.cuda)
 
     ########################
     ############ Load models & optimization stuff
@@ -331,7 +335,7 @@ def main():
 def iterate(data_loader, model, tblogger, num_iters,
             mode='test', optimizer=None, epoch=0):
     # Get global stuff?
-    global num_train_iter
+    global num_train_iter, post_processor
 
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -357,9 +361,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
 
-    post_processor = data.BaxterSeqDatasetPostProcessor(height=args.img_ht, width=args.img_wd,
-                                                        intrinsics=args.cam_intrinsics, meshids=args.mesh_ids,
-                                                        cuda=args.cuda)
+    
 
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(

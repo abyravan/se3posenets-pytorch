@@ -245,6 +245,7 @@ class BaxterSeqDatasetCollater(object):
     '''
     Post-process data sample to generate masks, flows etc
     '''
+    '''
     def __init__(self, height, width, intrinsics, meshids, cuda=False):
         self.meshids = meshids
         self.height = height
@@ -293,6 +294,7 @@ class BaxterSeqDatasetCollater(object):
         batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
                                                              masks.type_as(batch['depths']), \
                                                              bwdflows.type_as(batch['depths'])
+    '''
 
     ### Collate the batch together
     def collate_batch(self, batch):

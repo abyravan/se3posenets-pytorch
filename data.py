@@ -240,8 +240,9 @@ def to_var(x, to_cuda=False, requires_grad=False):
     return Variable(x, requires_grad=requires_grad)
 
 ############
-### Collate samples from the Baxter Sequential Dataset & collate them into a batch
-class BaxterSeqDatasetCollater(object):
+### Post-process a batch from the Baxter Sequential Dataset
+### This is separate from the collate function to reduce memory per process
+class PostProcessBaxterSeqData(object):
     '''
     Post-process data sample to generate masks, flows etc
     '''
@@ -255,7 +256,6 @@ class BaxterSeqDatasetCollater(object):
                                                                fy=intrinsics['fy'],
                                                                cx=intrinsics['cx'],
                                                                cy=intrinsics['cy'])
-        assert (not cuda), "Cannot support post-processing using CUDA currently"
         self.proctype = 'torch.cuda.FloatTensor' if cuda else 'torch.FloatTensor'
 
     # Post process a training sample
@@ -293,25 +293,6 @@ class BaxterSeqDatasetCollater(object):
         batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
                                                              masks.type_as(batch['depths']), \
                                                              bwdflows.type_as(batch['depths'])
-
-    ### Collate the batch together
-    def collate_batch(self, batch):
-        # Check if there are any nans in the sampled poses. If there are, then discard the sample
-        filtered_batch = []
-        for sample in batch:
-            if sample['poses'].eq(sample['poses']).all(): # test for nans
-                filtered_batch.append(sample)
-            #else:
-            #    print('Found a dataset with NaNs in the poses. Discarding it')
-
-        # Collate the other samples together using the default collate function
-        collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
-
-        # Post-process the collated batch
-        self.postprocess_collated_batch(collated_batch)
-
-        # Return post-processed batch
-        return collated_batch
 
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):
@@ -361,3 +342,19 @@ class BaxterSeqDataset(Dataset):
 
         # Return
         return sample
+
+    ### Collate the batch together
+    def collate_batch(self, batch):
+        # Check if there are any nans in the sampled poses. If there are, then discard the sample
+        filtered_batch = []
+        for sample in batch:
+            if sample['poses'].eq(sample['poses']).all():  # test for nans
+                filtered_batch.append(sample)
+                # else:
+                #    print('Found a dataset with NaNs in the poses. Discarding it')
+
+        # Collate the other samples together using the default collate function
+        collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
+
+        # Return post-processed batch
+        return collated_batch

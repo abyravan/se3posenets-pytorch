@@ -1,6 +1,7 @@
 # Global imports
 import argparse
 import os
+import sys
 import shutil
 import time
 import numpy as np
@@ -129,6 +130,18 @@ def main():
     args.batch_norm = not args.no_batch_norm
     assert (args.seq_len == 1), "Recurrent network training not enabled currently"
 
+    ### Create save directory and start tensorboard logger
+    create_dir(args.save_dir)  # Create directory
+    now = time.strftime("%c")
+    tblogger = TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
+
+    '''
+    # Create logfile to save prints
+    logfile = open(args.save_dir + '/logs/' + now + '/logfile.txt', 'w')
+    backup = sys.stdout
+    sys.stdout = Tee(sys.stdout, logfile)
+    '''
+    
     ########################
     ############ Parse options
     # Set seed
@@ -170,11 +183,6 @@ def main():
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
-    ### Create save directory and start tensorboard logger
-    create_dir(args.save_dir) # Create directory
-    now = time.strftime("%c")
-    tblogger = TBLogger(args.save_dir + '/logs/' + now) # Start tensorboard logger
-
     # TODO: Add option for using encoder pose for tfm t2
     # TODO: Add option for pre-conv BN + Nonlin
 
@@ -194,14 +202,14 @@ def main():
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
     # TODO: Batch along dim 1 instead of dim 0
-    data_collater = data.BaxterSeqDatasetCollater(height=args.img_ht, width=args.img_wd, intrinsics=args.cam_intrinsics,
-                                                  meshids=args.mesh_ids)
 
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
     train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
+                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                        collate_fn=train_dataset.collate_batch))
     val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory, collate_fn=data_collater.collate_batch))
+                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                        collate_fn=val_dataset.collate_batch))
 
     ########################
     ############ Load models & optimization stuff
@@ -245,7 +253,7 @@ def main():
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
         test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                         num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
-                                        collate_fn=data_collater.collate_batch))
+                                        collate_fn=test_dataset.collate_batch))
         iterate(test_loader, model, tblogger, len(test_loader), mode='test')
         return # Finish
 
@@ -278,15 +286,16 @@ def main():
 
         # Find best loss
         is_best       = (val_loss.avg < best_val_loss)
-        prev_best_loss = best_val_loss
+        prev_best_loss  = best_val_loss
+        prev_best_epoch = best_epoch
         if is_best:
             best_val_loss = val_loss.avg
             best_epoch    = epoch+1
-            print('==== Epoch: {}, Improved on previous best loss ({}). Current: {} ===='.format(
-                                    epoch+1, prev_best_loss, val_loss.avg))
+            print('==== Epoch: {}, Improved on previous best loss ({}) from epoch {}. Current: {} ===='.format(
+                                    epoch+1, prev_best_loss, prev_best_epoch, val_loss.avg))
         else:
-            print('==== Epoch: {}, Did not improve on best loss ({}). Current: {} ===='.format(
-                epoch + 1, prev_best_loss, val_loss.avg))
+            print('==== Epoch: {}, Did not improve on best loss ({}) from epoch {}. Current: {} ===='.format(
+                epoch + 1, prev_best_loss, prev_best_epoch, val_loss.avg))
 
         # Save checkpoint
         save_checkpoint({
@@ -320,10 +329,13 @@ def main():
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
-                                    collate_fn=data_collater.collate_batch))
+                                    collate_fn=test_dataset.collate_batch))
     iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
+
+    # Close log file
+    logfile.close()
 
 ################# HELPER FUNCTIONS
 
@@ -356,6 +368,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         return hook
     model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
+    # Post process data (made the post-processing coe separate from the collater
+    # to reduce memory used per data loader worker which spikes significantly otherwise)
+    data_process = data.PostProcessBaxterSeqData(height=args.img_ht, width=args.img_wd,
+                                                 intrinsics=args.cam_intrinsics,
+                                                 meshids=args.mesh_ids, cuda=True)
+
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -367,6 +385,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
+
+        # Post process the sample to compute pts, masks & bwd flows
+        data_process.postprocess_collated_batch(sample)
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -707,6 +728,15 @@ class DataEnumerator(object):
 
     def iteration_count(self):
         return (self.nruns * self.len) + self.niters
+
+### Write to stdout and log file
+class Tee(object):
+    def __init__(self, *files):
+        self.files = files
+
+    def write(self, obj):
+        for f in self.files:
+            f.write(obj)
 
 ################ RUN MAIN
 if __name__ == '__main__':

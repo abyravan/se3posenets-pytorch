@@ -7,6 +7,9 @@ from torch.utils.data import Dataset
 import se3layers as se3nn
 from torch.autograd import Variable
 
+# NOTE: This is slightly ugly, use this only for the NTfm3D implementation (for use in dataloader)
+from layers._ext import se3layers
+
 ############
 ### Helper functions for reading baxter data
 
@@ -101,6 +104,83 @@ def read_flow_image_xyz(filename, ht=240, wd=320, scale=1e-4):
         imgscale = imgf
     return torch.Tensor(imgscale.transpose((2, 0, 1)))  # NOTE: OpenCV reads BGR so it's already xyz when it is read
 
+#############
+### Helper functions for perspective projection stuff
+### Computes the pixel x&y grid based on the camera intrinsics assuming perspective projection
+def compute_camera_xygrid_from_intrinsics(height, width, intrinsics):
+    assert (height > 1 and width > 1)
+    assert (intrinsics['fx'] > 0  and intrinsics['fy'] > 0     and
+            intrinsics['cx'] >= 0 and intrinsics['cx'] < width and
+            intrinsics['cy'] >= 0 and intrinsics['cy'] < height)
+    xygrid = torch.ones(1, 2, height, width) # (x,y,1)
+    for j in xrange(0, width):  # +x is increasing columns
+        xygrid[0, 0, :, j].fill_((j - intrinsics['cx']) / intrinsics['fx'])
+    for i in xrange(0, height):  # +y is increasing rows
+        xygrid[0, 1, i, :].fill_((i - intrinsics['cy']) / intrinsics['fy'])
+    return xygrid
+
+#############
+### Helper functions - R/t functions for operating on tensors, not vars
+
+###
+### Invert a 3x4 transform (R/t)
+def RtInverse(input):
+    # Check dimensions
+    _, _, nrows, ncols = input.size()
+    assert (nrows == 3 and ncols == 4)
+
+    # Init for FWD pass
+    input_v = input.view(-1, 3, 4)
+    r, t = input_v.narrow(2, 0, 3), input_v.narrow(2, 3, 1)
+
+    # Compute output: [R^T -R^T * t]
+    r_o = r.transpose(1, 2)
+    t_o = torch.bmm(r_o, t).mul_(-1)
+    return torch.cat([r_o, t_o], 2).view_as(input).contiguous()
+
+###
+### Compose two tranforms: [R1 t1] * [R2 t2]
+def ComposeRtPair(A, B):
+    # Check dimensions
+    _, _, num_rows, num_cols = A.size()
+    assert (num_rows == 3 and num_cols == 4)
+    assert (A.is_same_size(B))
+
+    # Init for FWD pass
+    Av = A.view(-1, 3, 4)
+    Bv = B.view(-1, 3, 4)
+    rA, rB = Av.narrow(2, 0, 3), Bv.narrow(2, 0, 3)
+    tA, tB = Av.narrow(2, 3, 1), Bv.narrow(2, 3, 1)
+
+    # Compute output
+    r = torch.bmm(rA, rB)
+    t = torch.baddbmm(tA, rA, tB)
+    return torch.cat([r, t], 2).view_as(A).contiguous()
+
+###
+### Non-Rigid Transform of 3D points given masks & corrseponding [R t] transforms
+def NTfm3D(points, masks, transforms, output=None):
+    # Check dimensions
+    batch_size, num_channels, data_height, data_width = points.size()
+    num_se3 = masks.size()[1]
+    assert (num_channels == 3);
+    assert (masks.size() == torch.Size([batch_size, num_se3, data_height, data_width]));
+    assert (transforms.size() == torch.Size([batch_size, num_se3, 3, 4]));  # Transforms [R|t]
+    if output is not None:
+        assert(output.is_same_size(points))
+    else:
+        output = points.clone().zero_()
+
+    # Call the appropriate function to compute the output
+    if points.is_cuda:
+        se3layers.NTfm3D_forward_cuda(points, masks, transforms, output)
+    elif points.type() == 'torch.DoubleTensor':
+        se3layers.NTfm3D_forward_double(points, masks, transforms, output)
+    else:
+        se3layers.NTfm3D_forward_float(points, masks, transforms, output)
+
+    # Return
+    return output
 
 ############
 ###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
@@ -168,20 +248,26 @@ def generate_baxter_sequence(dataset, id):
 
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                   ctrl_type='actdiffvel', mesh_ids=torch.Tensor(), camera_data={}):
+                                   ctrl_type='actdiffvel', mesh_ids=torch.Tensor(),
+                                   camera_extrinsics={}, camera_intrinsics={}):
     # Setup vars
     num_ctrl = 14 if ctrl_type.find('both') else 7      # Num ctrl dimensions
+    num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
 
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
-    depths      = torch.FloatTensor(seq_len + 1, 1, img_ht, img_wd)
-    labels      = torch.ByteTensor( seq_len + 1, 1, img_ht, img_wd)
+    points      = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
     fwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
+    bwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
+    masks       = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
     actconfigs  = torch.FloatTensor(seq_len + 1, 7)
     comconfigs  = torch.FloatTensor(seq_len + 1, 7)
     controls    = torch.FloatTensor(seq_len, num_ctrl)
     poses       = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
+
+    # Setup temp vars
+    depths, labels = points.narrow(1,2,1), masks.narrow(1,0,1) # Last channel in points is the depth, intially save labels in channel 0 of masks
 
     # Load sequence
     dt = step_len * (1.0 / 30.0)
@@ -190,8 +276,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         s = sequence[k]
 
         # Load depth & label
-        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale)
-        labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1))
+        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale) # Third channel is depth (x,y,z)
+        labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
 
         # Load configs
         state = read_baxter_state_file(s['state1'])
@@ -201,9 +287,9 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Load SE3 state
         se3state = read_baxter_se3state_file(s['se3state1'])
         poses[k,0,:,0:3] = torch.eye(3).float()  # Identity transform for BG
-        for j in xrange(mesh_ids.nelement()):
+        for j in xrange(num_meshes):
             meshid = mesh_ids[j]
-            se3tfm = torch.mm(camera_data['modelView'], se3state[meshid])  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
+            se3tfm = torch.mm(camera_extrinsics['modelView'], se3state[meshid])  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
             poses[k][j+1] = se3tfm[0:3,:]  # 3 x 4 transform
 
         # Load controls and FWD flows (for the first "N" items)
@@ -228,9 +314,30 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     elif ctrl_type == 'comdiffvel':
         controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt
 
+    # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
+    # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
+    for j in xrange(num_meshes):
+        masks[:, j+1] = labels.eq(mesh_ids[j])  # Mask out that mesh ID
+        if (j == num_meshes - 1):
+            masks[:, j+1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
+    masks[:,0] = masks.narrow(1,1,num_meshes).sum(1).eq(0)  # All other masks are BG
+
+    # Compute x & y values for the 3D points (= xygrid * depths)
+    xy = points[:,0:2]
+    xy.copy_(camera_intrinsics['xygrid'].expand_as(xy)) # = xygrid
+    xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd)) # = xygrid * depths
+
+    # Compute BWD flows (from t+1 -> t)
+    for k in xrange(seq_len):
+        points_2, masks_2 = points.narrow(0, k+1, 1), masks.narrow(0, k+1, 1).float() # Pts & Masks @ t+1
+        pose_1, pose_2    = poses.narrow(0, k, 1), poses.narrow(0, k+1, 1)     # Poses @ t & t+1
+        poses_2_to_1      = ComposeRtPair(pose_1, RtInverse(pose_2))           # Pose_t * Pose_t+1^-1
+        NTfm3D(points_2, masks_2, poses_2_to_1, output=bwdflows.narrow(0,k,1)) # Predict pts @ t (save in BWD flows)
+        bwdflows.narrow(0,k,1).add_(-1.0, points_2)                            # Flows that take pts @ t+1 to pts @ t
+
     # Return loaded data
-    data = {'depths': depths, 'labels': labels, 'fwdflows': fwdflows, 'controls': controls,
-            'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
+    data = {'points': points, 'masks': masks, 'fwdflows': fwdflows, 'bwdflows': bwdflows,
+            'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
     return data
 
 ### Convert torch tensor to autograd.variable
@@ -238,61 +345,6 @@ def to_var(x, to_cuda=False, requires_grad=False):
     if torch.cuda.is_available() and to_cuda:
         x = x.cuda()
     return Variable(x, requires_grad=requires_grad)
-
-############
-### Post-process a batch from the Baxter Sequential Dataset
-### This is separate from the collate function to reduce memory per process
-class PostProcessBaxterSeqData(object):
-    '''
-    Post-process data sample to generate masks, flows etc
-    '''
-    def __init__(self, height, width, intrinsics, meshids, cuda=False):
-        self.meshids = meshids
-        self.height = height
-        self.width = width
-        self.DepthTo3DPoints = se3nn.DepthImageToDense3DPoints(height=height,
-                                                               width=width,
-                                                               fx=intrinsics['fx'],
-                                                               fy=intrinsics['fy'],
-                                                               cx=intrinsics['cx'],
-                                                               cy=intrinsics['cy'])
-        self.proctype = 'torch.cuda.FloatTensor' if cuda else 'torch.FloatTensor'
-
-    # Post process a training sample
-    def postprocess_collated_batch(self, batch):
-        # Get tensors and convert to vars
-        depths, labels, poses = batch['depths'].type(self.proctype), \
-                                batch['labels'].type(self.proctype), \
-                                batch['poses'].type(self.proctype)
-        depths_v, labels_v, poses_v = to_var(depths), to_var(labels), to_var(poses)
-
-        # Compute 3D points from the depths
-        points   = torch.zeros(depths.size(0), depths.size(1), 3, self.height, self.width).type_as(depths)
-        points_v = self.DepthTo3DPoints(depths_v.view(-1,1,self.height,self.width)).view_as(points)
-        points.copy_(points_v.data) # Copy data
-
-        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
-        nmeshes  = self.meshids.nelement() # Num meshes
-        masks = torch.zeros(depths.size(0), depths.size(1), nmeshes+1, self.height, self.width).type_as(depths)
-        for k in xrange(nmeshes):
-            masks[:,:,k+1] = labels.eq(self.meshids[k]) # Mask out that mesh ID
-            if (k == nmeshes-1):
-                masks[:,:,k+1] = labels.ge(self.meshids[k]) # Everything in the end-effector
-        masks[:,:,0] = masks.narrow(2,1,nmeshes).sum(2).eq(0) # All other masks are BG
-
-        # Compute BWD flows (use pts @ time t+1, and delta-transforms + masks to compute the flows in the opposite dirn)
-        bwdflows = torch.zeros(depths.size(0), depths.size(1)-1, 3, self.height, self.width).type_as(depths)
-        for k in xrange(bwdflows.size(1)):
-            pts_2, masks_2 = points_v[:,k+1].clone(), to_var(masks[:,k+1]) # Pts @ t+1
-            pose_1, pose_2 = poses_v[:,k].clone(), poses_v[:,k+1].clone() # Poses @ t & t+1
-            poses_2_to_1   = se3nn.ComposeRtPair()(pose_1, se3nn.RtInverse()(pose_2)) # P_1 * P_2^-1
-            predpts_1      = se3nn.NTfm3D()(pts_2, masks_2, poses_2_to_1) # Predict pts @ t
-            bwdflows[:,k]  = (predpts_1 - pts_2).data # Flows that take pts @ t+1 to pts @ t
-
-        # Convert to proper type and add to batch
-        batch['points'], batch['masks'], batch['bwdflows'] = points.type_as(batch['depths']), \
-                                                             masks.type_as(batch['depths']), \
-                                                             bwdflows.type_as(batch['depths'])
 
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):

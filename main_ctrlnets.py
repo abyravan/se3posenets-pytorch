@@ -22,8 +22,6 @@ import data
 import ctrlnets
 from util.tblogger import TBLogger
 
-# Profiler
-#from memory_profiler import profile
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='SE3-Pose-Nets Training')
@@ -135,6 +133,7 @@ def main():
     now = time.strftime("%c")
     tblogger = TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
 
+    # TODO: Fix logfile to save prints - create new one if it is evaluated / resumed
     '''
     # Create logfile to save prints
     logfile = open(args.save_dir + '/logs/' + now + '/logfile.txt', 'w')
@@ -158,7 +157,7 @@ def main():
     load_dir = args.data.split(',,')[0]
     args.baxter_labels = data.read_baxter_labels_file(load_dir + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
-    args.camera_data   = data.read_cameradata_file(load_dir + '/cameradata.txt')
+    args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
@@ -170,6 +169,10 @@ def main():
                            'fy': 589.3664541825391/2,
                            'cx': 320.5/2,
                            'cy': 240.5/2}
+    args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
+                                                                               args.cam_intrinsics)
+
+    # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
@@ -194,7 +197,9 @@ def main():
                                                          train_per = args.train_per, val_per = args.val_per)
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
                                                                        img_scale = args.img_scale, ctrl_type = 'actdiffvel',
-                                                                       mesh_ids = args.mesh_ids, camera_data = args.camera_data)
+                                                                       mesh_ids = args.mesh_ids,
+                                                                       camera_extrinsics = args.cam_extrinsics,
+                                                                       camera_intrinsics = args.cam_intrinsics)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -231,12 +236,19 @@ def main():
 
     # optionally resume from a checkpoint
     if args.resume:
+        # TODO: Save path to TB log dir, save new log there again
+        # TODO: Reuse options in args (see what all to use and what not)
+        # TODO: Use same num train iters as the saved checkpoint
+        # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint       = torch.load(args.resume)
             loadargs         = checkpoint['args']
             args.start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['model_state_dict'])
+            try:
+                model.load_state_dict(checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
+            except:
+                model.load_state_dict(checkpoint['model_state_dict'])
             assert (loadargs.optimization == args.optimization), "Optimizer in saved checkpoint ({}) does not match current argument ({})".format(
                     loadargs.optimization, args.optimization)
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -317,7 +329,7 @@ def main():
                             'totaliters': val_loader.iteration_count()
                             },
             'train_iter' : num_train_iter,
-            'state_dict' : model.state_dict(),
+            'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
         }, is_best, savedir=args.save_dir)
         print('\n')
@@ -335,7 +347,7 @@ def main():
                                                                          best_epoch))
 
     # Close log file
-    logfile.close()
+    #logfile.close()
 
 ################# HELPER FUNCTIONS
 
@@ -368,12 +380,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         return hook
     model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
-    # Post process data (made the post-processing coe separate from the collater
-    # to reduce memory used per data loader worker which spikes significantly otherwise)
-    data_process = data.PostProcessBaxterSeqData(height=args.img_ht, width=args.img_wd,
-                                                 intrinsics=args.cam_intrinsics,
-                                                 meshids=args.mesh_ids, cuda=True)
-
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -385,9 +391,6 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
-
-        # Post process the sample to compute pts, masks & bwd flows
-        data_process.postprocess_collated_batch(sample)
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -518,7 +521,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             if i % args.imgdisp_freq == 0:
 
                 ## Log the images (at a lower rate for now)
-                id = random.randint(0, sample['depths'].size(0)-1)
+                id = random.randint(0, sample['points'].size(0)-1)
 
                 # Concat the flows, depths and masks into one tensor
                 flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.narrow(0,id,1),
@@ -526,7 +529,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                    predfwdflows.narrow(0,id,1),
                                                                    predbwdflows.narrow(0,id,1)], 0).cpu(),
                                                         nrow=2, normalize=True, range=(-0.01, 0.01))
-                depthdisp = torchvision.utils.make_grid(sample['depths'][id], normalize=True, range=(0.0,3.0))
+                depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),
                                                                    mask_2.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))

@@ -20,8 +20,7 @@ import torchvision
 import se3layers as se3nn
 import data
 import ctrlnets
-from util.tblogger import TBLogger
-
+import util
 
 # Parse arguments
 parser = argparse.ArgumentParser(description='SE3-Pose-Nets Training')
@@ -131,7 +130,7 @@ def main():
     ### Create save directory and start tensorboard logger
     create_dir(args.save_dir)  # Create directory
     now = time.strftime("%c")
-    tblogger = TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
+    tblogger = util.TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
 
     # TODO: Fix logfile to save prints - create new one if it is evaluated / resumed
     '''
@@ -209,10 +208,10 @@ def main():
     # TODO: Batch along dim 1 instead of dim 0
 
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_loader = DataEnumerator(torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+    train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                         num_workers=args.num_workers, pin_memory=args.use_pin_memory,
                                         collate_fn=train_dataset.collate_batch))
-    val_loader   = DataEnumerator(torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
+    val_loader   = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
                                         num_workers=args.num_workers, pin_memory=args.use_pin_memory,
                                         collate_fn=val_dataset.collate_batch))
 

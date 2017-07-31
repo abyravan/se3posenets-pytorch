@@ -46,6 +46,8 @@ parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
                     metavar='STR', help='Control type: actvel | actacc | comvel | comacc | comboth | [actdiffvel] | comdiffvel')
 
 # Model options
+parser.add_argument('--arch', default='depth', type=str,
+                    metavar='STR', help='Model architecture: [depth] | depthjt')
 parser.add_argument('--no-batch-norm', action='store_true', default=False,
                     help='disables batch normalization (default: False)')
 parser.add_argument('--nonlin', default='prelu', type=str,
@@ -74,6 +76,8 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--consis-wt', default=0.01, type=float,
                     metavar='WT', help='Weight for the pose consistency loss (default: 0.01)')
+parser.add_argument('--jtconsis-wt', default=0.01, type=float,
+                    metavar='WT', help='Weight for the joint angle consistency loss (default: 0.01)')
 parser.add_argument('--loss-scale', default=10000, type=float,
                     metavar='WT', help='Default scale factor for all the losses (default: 1000)')
 
@@ -178,6 +182,13 @@ def main():
     print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
 
+    # Joint angle use in model / consistency
+    args.jt_angle_model = False
+    if args.arch == 'depthjt':
+        args.jt_angle_model = True
+        print('Using joint angles as additional input to the model & adding a jt angle consistency loss @ t+1')
+        print('Joint angle consistency loss weight: {}'.format(args.jtconsis_wt))
+
     # Weight sharpening stuff
     if args.use_wt_sharpening:
         print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
@@ -224,6 +235,7 @@ def main():
                                   se3_type=args.se3_type, use_pivot=args.pred_pivot,
                                   use_kinchain=False, input_channels=3, use_bn=args.batch_norm,
                                   nonlinearity=args.nonlin, init_transse3_iden=args.init_transse3_iden,
+                                  arch=args.arch, num_jt_angles=7,
                                   use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                                   sharpen_rate=args.sharpen_rate)
     if args.cuda:
@@ -259,6 +271,10 @@ def main():
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
+        # Delete train and val loaders
+        del train_loader, val_loader
+
+        # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
@@ -277,7 +293,7 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
 
         # Train for one epoch
-        tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss,\
+        tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss, tr_jtconsisloss,\
             tr_flowsum_f, tr_flowavg_f, \
             tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
                                                  mode='train', optimizer=optimizer, epoch=epoch+1)
@@ -290,7 +306,7 @@ def main():
             tblogger.histo_summary(tag + '/grad', to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
-        val_loss, val_fwdloss, val_bwdloss, val_consisloss, \
+        val_loss, val_fwdloss, val_bwdloss, val_consisloss, val_jtconsisloss, \
             val_flowsum_f, val_flowavg_f, \
             val_flowsum_b, val_flowavg_b = iterate(val_loader, model, tblogger, args.val_ipe,
                                                    mode='val', epoch=epoch+1)
@@ -314,14 +330,14 @@ def main():
             'args' : args,
             'best_loss'  : best_val_loss,
             'train_stats': {'loss': tr_loss, 'fwdloss': tr_fwdloss,
-                            'bwdloss': tr_bwdloss, 'consisloss': tr_consisloss,
+                            'bwdloss': tr_bwdloss, 'consisloss': tr_consisloss, 'jtconsisloss': tr_jtconsisloss,
                             'flowsum_f': tr_flowsum_f, 'flowavg_f': tr_flowavg_f,
                             'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
                             'totaliters': train_loader.iteration_count()
                             },
             'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss,
-                            'bwdloss': val_bwdloss, 'consisloss': val_consisloss,
+                            'bwdloss': val_bwdloss, 'consisloss': val_consisloss, 'jtconsisloss': val_jtconsisloss,
                             'flowsum_f': val_flowsum_f, 'flowavg_f': val_flowavg_f,
                             'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b,
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
@@ -361,7 +377,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    lossm, ptlossm_f, ptlossm_b, \
+    consislossm, jtconsislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
 
@@ -402,6 +419,15 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpts_1 = to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
         tarpts_2 = to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
 
+        # Add actual joint angles for inputs & targets (based on model architecture)
+        if args.arch == 'depthjt':
+            jtangles_1 = to_var(sample['actconfigs'][:, 0].clone().type(deftype), requires_grad=True)
+            jtangles_2 = to_var(sample['actconfigs'][:, 1].clone().type(deftype), requires_grad=True)
+            tarjtangles_2 = to_var(sample['actconfigs'][:, 1].clone().type(deftype), requires_grad=False)
+            inputs_1, inputs_2 = [pts_1, jtangles_1], [pts_2, jtangles_2] # depths, jtangles
+        else:
+            inputs_1, inputs_2 = pts_1, pts_2 # Use depths as input
+
         # Measure data loading time
         data_time.update(time.time() - start)
 
@@ -410,8 +436,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         start = time.time()
 
         # Run the FWD pass through the network
-        [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
-                                                                               train_iter=num_train_iter)
+        [pose_1, mask_1], [pose_2, mask_2], \
+        [deltapose_t_12, pose_t_2], jtangles_t_2 = model([inputs_1, inputs_2, ctrls_1],
+                                                         train_iter=num_train_iter)
         deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
 
         # Compute predicted points based on the masks
@@ -434,8 +461,15 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
 
+        # Compute jt angle consistency loss (based on the model)
+        # Enforce consistency between jtangles @ t2 predicted by decoder & actual jtangles @ t2
+        jtconsisloss = 0.0
+        if args.arch == 'depthjt':
+            jtconsisloss = args.jtconsis_wt * args.loss_scale * ctrlnets.BiMSELoss(jtangles_t_2, tarjtangles_2)
+            jtconsislossm.update(jtconsisloss.data[0])
+
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss
+        loss = ptloss_1 + ptloss_2 + consisloss + jtconsisloss
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
@@ -489,7 +523,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         loss=lossm, fwdloss=ptlossm_f,
-                        bwdloss=ptlossm_b, consisloss=consislossm,
+                        bwdloss=ptlossm_b, consisloss=consislossm, jtconsisloss=jtconsislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
 
@@ -513,7 +547,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-loss': loss.data[0],
                 mode+'-fwd3dloss': ptloss_1.data[0],
                 mode+'-bwd3dloss': ptloss_2.data[0],
-                mode+'-consisloss': consisloss.data[0]
+                mode+'-consisloss': consisloss.data[0],
+                mode+'-jtconsisloss': jtconsislossm.val
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -555,19 +590,19 @@ def iterate(data_loader, model, tblogger, num_iters,
     print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
                 samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
                 loss=lossm, fwdloss=ptlossm_f,
-                bwdloss=ptlossm_b, consisloss=consislossm,
+                bwdloss=ptlossm_b, consisloss=consislossm, jtconsisloss=jtconsislossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
     print('========================================================')
 
     # Return the loss & flow loss
-    return lossm, ptlossm_f, ptlossm_b, consislossm, \
+    return lossm, ptlossm_f, ptlossm_b, consislossm, jtconsislossm, \
            flowlossm_sum_f, flowlossm_avg_f, \
            flowlossm_sum_b, flowlossm_avg_b
 
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
-                loss, fwdloss, bwdloss, consisloss,
+                loss, fwdloss, bwdloss, consisloss, jtconsisloss,
                 flowloss_sum_f, flowloss_avg_f,
                 flowloss_sum_b, flowloss_avg_b):
     # Print loss
@@ -575,10 +610,11 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
           'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
           'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
           'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
-          'Consis: {consis.val:.3f} ({consis.avg:.3f})'.format(
+          'Consis: {consis.val:.3f} ({consis.avg:.3f}), '
+          'Jtconsis: {jtconsis.val:.3f} ({jtconsis.avg:.3f})'.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
         sampletotal, loss=loss, fwd=fwdloss,
-        bwd=bwdloss, consis=consisloss))
+        bwd=bwdloss, consis=consisloss, jtconsis=jtconsisloss))
 
     # Print flow loss per timestep
     bsz = args.batch_size

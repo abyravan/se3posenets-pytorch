@@ -48,6 +48,8 @@ parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
 # Model options
 parser.add_argument('--no-batch-norm', action='store_true', default=False,
                     help='disables batch normalization (default: False)')
+parser.add_argument('--pre-conv', action='store_true', default=False,
+                    help='puts batch normalization and non-linearity before the convolution / de-convolution (default: False)')
 parser.add_argument('--nonlin', default='prelu', type=str,
                     metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu')
 parser.add_argument('--se3-type', default='se3aa', type=str,
@@ -192,7 +194,6 @@ def main():
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
     # TODO: Add option for using encoder pose for tfm t2
-    # TODO: Add option for pre-conv BN + Nonlin
 
     ########################
     ############ Load datasets
@@ -231,7 +232,7 @@ def main():
                                   input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                   init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                                   use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                  sharpen_rate=args.sharpen_rate)
+                                  sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

@@ -81,11 +81,23 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
 def variable_hook(grad, txt):
     print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
 
+### Initialize the SE3 prediction layer to identity
+def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
+    layer.weight.data.uniform_(-0.001, 0.001)  # Initialize weights to near identity
+    layer.bias.data.uniform_(-0.01, 0.01)  # Initialize biases to near identity
+    # Special initialization for specific SE3 types
+    if se3_type == 'affine':
+        bs = layer.bias.data.view(num_se3, -1)
+        bs.narrow(1, 3, 9).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
+    elif se3_type == 'se3quat':
+        bs = layer.bias.data.view(num_se3, -1)
+        bs.narrow(1, 6, 1).fill_(1)  # ~ [0,0,0,1]
+
 ### Pose-Mask Encoder
 # Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
 class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False,
-                 input_channels=3, use_bn=True, nonlinearity='prelu',
+                 input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(PoseMaskEncoder, self).__init__()
 
@@ -134,6 +146,12 @@ class PoseMaskEncoder(nn.Module):
                                 get_nonlinearity(nonlinearity),
                                 nn.Linear(128, self.num_se3 * self.se3_dim) # Predict the SE3s from the conv-output
                            )
+
+        # Initialize the SE3 decoder to predict identity SE3
+        if init_se3_iden:
+            print("Initializing SE3 prediction layer of the pose-mask model to predict identity transform")
+            layer = self.se3decoder[2]  # Get final SE3 prediction module
+            init_se3layer_identity(layer, num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.posedecoder = nn.Sequential()
@@ -262,16 +280,8 @@ class TransitionModel(nn.Module):
         # Initialize the SE3 decoder to predict identity SE3
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
-            m = self.deltase3decoder[4] # Get final SE3 prediction module
-            m.weight.data.uniform_(-0.001, 0.001) # Initialize weights to near identity
-            m.bias.data.uniform_(-0.01, 0.01)      # Initialize biases to near identity
-            # Special initialization for specific SE3 types
-            if se3_type == 'affine':
-                bs = m.bias.data.view(num_se3, -1)
-                bs.narrow(1,3,9).copy_(torch.eye(3).view(1,3,3).expand(num_se3,3,3))
-            elif se3_type == 'se3quat':
-                bs = m.bias.data.view(num_se3, -1)
-                bs.narrow(1,6,1).fill_(1) # ~ [0,0,0,1]
+            layer = self.deltase3decoder[4]  # Get final SE3 prediction module
+            init_se3layer_identity(layer, num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.deltaposedecoder = nn.Sequential()
@@ -305,14 +315,15 @@ class TransitionModel(nn.Module):
 class SE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True,
-                 nonlinearity='prelu', init_transse3_iden = False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
         self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
                                              use_kinchain=use_kinchain, input_channels=input_channels,
-                                             use_bn=use_bn, nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                             init_se3_iden=init_posese3_iden, use_bn=use_bn,
+                                             nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                              sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,

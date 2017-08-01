@@ -349,9 +349,6 @@ def main():
         }, is_best, savedir=args.save_dir)
         print('\n')
 
-    # Delete train and val data loaders
-    del train_loader, val_loader
-
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')

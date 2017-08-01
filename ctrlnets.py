@@ -82,10 +82,11 @@ def variable_hook(grad, txt):
     print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
 
 ### Pose-Mask Encoder
-# Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
+# Model that takes in "depth/point cloud" (and optionally, joint angles) to generate "k"-channel masks and "k" poses represented as [R|t]
 class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu',
+                 arch='depth', num_jt_angles=7,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(PoseMaskEncoder, self).__init__()
 
@@ -125,12 +126,24 @@ class PoseMaskEncoder(nn.Module):
         else:
             self.maskdecoder = nn.Softmax2d() # SoftMax normalization
 
+        ###### Joint angle encoder
+        self.jtencoder = None
+        se3decoder_input_dim = 128 * 7 * 10
+        if (arch == 'depthjt'):
+            self.jtencoder  = nn.Sequential(
+                                    nn.Linear(num_jt_angles, 64),
+                                    get_nonlinearity(nonlinearity),
+                                    nn.Linear(64, 128),
+                                    get_nonlinearity(nonlinearity),
+                              )
+            se3decoder_input_dim += 128
+
         ###### Pose Decoder
         # Create SE3 decoder (take conv output, reshape, run FC layers to generate "num_se3" poses)
         self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
         self.num_se3 = num_se3
         self.se3decoder  = nn.Sequential(
-                                nn.Linear(128*7*10, 128),
+                                nn.Linear(se3decoder_input_dim, 128),
                                 get_nonlinearity(nonlinearity),
                                 nn.Linear(128, self.num_se3 * self.se3_dim) # Predict the SE3s from the conv-output
                            )
@@ -151,7 +164,13 @@ class PoseMaskEncoder(nn.Module):
             pow = min(1 + (citer/500.0) * self.sharpen_rate, 100) # Should be 26 by ~12500 iters from start (if rate=1)
         return noise_std, pow
 
-    def forward(self, x, train_iter=0):
+    def forward(self, z, train_iter=0):
+        # If we have the joint encoder, input = [depth, jtangles] else input = depth
+        if self.jtencoder is not None:
+            x,y = z # x = depth, y = jt angles
+        else:
+            x = z # x = depth
+
         # Run conv-encoder to generate embedding
         c1 = self.conv1(x)
         c2 = self.conv2(c1)
@@ -177,6 +196,9 @@ class PoseMaskEncoder(nn.Module):
 
         # Run pose-decoder to predict poses
         p = c5.view(-1, 128*7*10)
+        if self.jtencoder is not None: # In case we have the encoder, use it
+            y = self.jtencoder(y)      # Run forward pass through jt encoder
+            p = torch.cat([p, y], 1)   # Concat the outputs along the 2nd dim
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
@@ -306,30 +328,53 @@ class SE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True,
                  nonlinearity='prelu', init_transse3_iden = False,
+                 arch='depth', num_jt_angles=7,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
         self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
                                              use_kinchain=use_kinchain, input_channels=input_channels,
-                                             use_bn=use_bn, nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                             use_bn=use_bn, nonlinearity=nonlinearity,
+                                             arch=arch, num_jt_angles=num_jt_angles,
+                                             use_wt_sharpening=use_wt_sharpening,
                                              sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
 
+        # Initialize a decoder that predicts next set of jt angles from the next poses
+        self.jtangledecodermodel = None
+        if (arch == 'depthjt'):
+            self.num_se3 = num_se3
+            self.jtangledecodermodel = nn.Sequential(
+                                            nn.Linear(num_se3*12, 64),
+                                            get_nonlinearity(nonlinearity),
+                                            nn.Linear(64, 32),
+                                            get_nonlinearity(nonlinearity),
+                                            nn.Linear(32, num_jt_angles)
+                                       )
+
     # Forward pass through the model
     def forward(self, x, train_iter=0):
         # Get input vars
-        ptcloud_1, ptcloud_2, ctrl_1 = x
+        input_1, input_2, ctrl_1 = x
 
         # Get pose & mask predictions @ t0 & t1
-        pose_1, mask_1 = self.posemaskmodel(ptcloud_1, train_iter=train_iter)  # ptcloud @ t1
-        pose_2, mask_2 = self.posemaskmodel(ptcloud_2, train_iter=train_iter)  # ptcloud @ t2
+        # Input_1 can be either depths or [depths, jtangles]
+        pose_1, mask_1 = self.posemaskmodel(input_1, train_iter=train_iter)  # ptcloud @ t1
+        pose_2, mask_2 = self.posemaskmodel(input_2, train_iter=train_iter)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
         deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
 
+        # Get prediction of next joint angles based on predicted next
+        # pose from transition model
+        jtangles_t_2 = None
+        if self.jtangledecodermodel is not None:
+            jtangles_t_2 = self.jtangledecodermodel(pose_t_2.view(-1, self.num_se3 * 12))
+
         # Return outputs
-        return [pose_1, mask_1], [pose_2, mask_2],  [deltapose_t_12, pose_t_2]
+        return [pose_1, mask_1], [pose_2, mask_2],  \
+               [deltapose_t_12, pose_t_2], jtangles_t_2

@@ -259,6 +259,9 @@ def main():
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
+        # Delete train and val data loaders
+        del train_loader, val_loader
+
         print('==== Evaluating pre-trained network on test data ===')
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset

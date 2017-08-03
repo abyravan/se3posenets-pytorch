@@ -340,12 +340,6 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
             'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
     return data
 
-### Convert torch tensor to autograd.variable
-def to_var(x, to_cuda=False, requires_grad=False):
-    if torch.cuda.is_available() and to_cuda:
-        x = x.cuda()
-    return Variable(x, requires_grad=requires_grad)
-
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):
     ''' Datasets for training SE3-Nets based on Baxter Sequential data '''

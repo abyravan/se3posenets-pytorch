@@ -149,7 +149,7 @@ def main():
         except:
             num_train_iter = checkpoint['epoch'] * args.train_ipe
         print("=> loaded checkpoint (epoch: {}, num train iter: {})"
-              .format(pargs.checkpoint, checkpoint['epoch'], num_train_iter))
+              .format(checkpoint['epoch'], num_train_iter))
     else:
         print("=> no checkpoint found at '{}'".format(pargs.checkpoint))
         raise RuntimeError

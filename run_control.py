@@ -271,13 +271,8 @@ def main():
     goal_poses_v = util.to_var(goal_poses, requires_grad=False)
 
     # Plots for errors and loss
-    '''
-    plt.ion()
-    fig = plt.figure()
-    ax0 = fig.add_subplot(211)
-    ax1 = fig.add_subplot(212)
+    fig, axes = plt.subplots(2, 1)
     fig.show()
-    '''
 
     # Run the controller
     gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -349,18 +344,17 @@ def main():
         print('Joint angle errors in degrees: ',
               torch.cat([deg_errors[iter+1].unsqueeze(1), full_deg_error.unsqueeze(1)], 1))
 
-        '''
         # Plot the errors & loss
-        ax0.set_title("Iter: {}, Jt angle errors".format(iter + 1))
-        ax0.plot(deg_errors.numpy()[:iter+1])
-        ax1.set_title("Iter: {}, Loss".format(iter + 1))
-        ax1.plot(losses.numpy()[:iter+1])
-        fig.canvas.draw()  # Render
-        plt.show()
-        if (iter % 2) == 0: # Clear now and then
-            ax0.cla()
-            ax1.cla()
-        '''
+        if (iter % 4) == 0:
+            axes[0].set_title("Iter: {}, Jt angle errors".format(iter + 1))
+            axes[0].plot(deg_errors.numpy()[:iter+1])
+            axes[1].set_title("Iter: {}, Loss".format(iter + 1))
+            axes[1].plot(losses.numpy()[:iter+1])
+            fig.canvas.draw()  # Render
+            plt.pause(0.01)
+        if (iter % args.disp_freq) == 0: # Clear now and then
+            for ax in axes:
+                ax.cla()
 
         # Finish
         rest_time.update(time.time() - start)

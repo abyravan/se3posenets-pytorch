@@ -576,6 +576,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                 print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
                                                                                              args.se3_dim).cpu()
 
+                ## Print the predicted mask values
+                print('\tPredicted mask stats:')
+                for k in xrange(args.num_se3):
+                    print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
+                        mask_1.data[id,k].max(), mask_1.data[id,k].min(), mask_1.data[id,k].mean(),
+                        mask_1.data[id,k].std(), mask_1.data[id,k].view(-1).cpu().float().median()[0][0],
+                        (mask_1.data[id,k] - 1).abs().le(1e-5).sum()))
+                print('')
+
         # Measure viz time
         viz_time.update(time.time() - start)
 

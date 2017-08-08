@@ -141,6 +141,10 @@ def main():
     # Default tensor type
     deftype = 'torch.cuda.FloatTensor' if pargs.cuda else 'torch.FloatTensor' # Default tensor type
 
+    # Invert a matrix to initialize the torch inverse code
+    temp = torch.rand(7,7).type(deftype)
+    tempinv = torch.inverse(temp)
+
     ########################
     ############ Load pre-trained network
 
@@ -176,7 +180,7 @@ def main():
     except:
         model.load_state_dict(checkpoint['model_state_dict'])
 
-    # Set model to evaluate mode (TODO: This would not work for Jac-Transpose)
+    # Set model to evaluate mode
     model.eval()
 
     # Sanity check some parameters (TODO: remove it later)
@@ -225,11 +229,12 @@ def main():
 
     ########################
     ############ Get start & goal point clouds, predict poses & masks
-    pt_out = pangolin.initialize_problem(get_ptr(start_angles, 'float *'), get_ptr(goal_angles, 'float *'))
-    start_pts_c, goal_pts_c = pt_out[0], pt_out[1]
-    start_pts, goal_pts = torch.FloatTensor(1, 3, args.img_ht, args.img_wd), torch.FloatTensor(1, 3, args.img_ht, args.img_wd)
-    ffi.memmove(get_ptr(start_pts, 'float *'), start_pts_c, start_pts.nelement() * 4)
-    ffi.memmove(get_ptr( goal_pts, 'float *'),  goal_pts_c,  goal_pts.nelement() * 4)
+    # Initialize problem
+    pangolin.initialize_problem(get_ptr(start_angles, 'float *'), get_ptr(goal_angles, 'float *'))
+
+    # Get start and goal point clouds
+    start_pts = generate_ptcloud(start_angles)
+    goal_pts  = generate_ptcloud(goal_angles)
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
@@ -440,15 +445,16 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
 
         '''
         ### Option 1: Compute GN-gradient using torch stuff by adding eps * I
-        # This is slow at times
+        # This is incredibly slow at the first iteration
         Jinv = torch.inverse(torch.mm(Jt, Jt.t()) + pargs.gn_lambda * I) # (J^t * J + \lambda I)^-1
         ctrl_grad = torch.mm(Jinv, torch.mm(Jt, pred_poses.grad.data.view(-1,1))) # (J^t*J + \lambda I)^-1 * (Jt * g)
         '''
 
         ### Option 2: Compute GN-gradient using numpy PINV (instead of adding eps * I)
-        # Fastest
+        # Fastest, but doesn't do well on overall planning if we allow controlling all joints
+        # If only controlling the top 4 jts this works just as well as the one above.
         Jtn = util.to_np(Jt)
-        ctrl_gradn = np.dot(np.linalg.pinv(Jtn).transpose(), util.to_np(pred_poses.grad.data.view(-1,1)))
+        ctrl_gradn = np.dot(np.linalg.pinv(Jtn, rcond=pargs.gn_lambda).transpose(), util.to_np(pred_poses.grad.data.view(-1,1)))
         ctrl_grad  = torch.from_numpy(ctrl_gradn)
 
         '''

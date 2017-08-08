@@ -63,6 +63,8 @@ parser.add_argument('--init-transse3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
 parser.add_argument('--init-posese3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the pose-mask model to predict identity')
+parser.add_argument('--decomp-model', action='store_true', default=False,
+                    help='Use a separate encoder for predicting the pose and masks')
 
 # Mask options
 parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
@@ -194,6 +196,10 @@ def main():
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
+    # Decomp model
+    if args.decomp_model:
+        assert args.seq_len > 1, "Decomposed pose/mask encoders can be used only with multi-step models"
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -228,12 +234,22 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                  input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                  init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
-                                  use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                  sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv)
+    if args.seq_len > 1:
+        print('Using multi-step SE3-Pose-Model')
+        model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                               se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                               input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                               init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
+                                               use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                               sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model)
+    else:
+        print('Using single-step SE3-Pose-Model')
+        model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                      se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                      input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                      init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
+                                      use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                      sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

@@ -336,7 +336,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         bwdflows.narrow(0,k,1).add_(-1.0, points_2)                            # Flows that take pts @ t+1 to pts @ t
 
     # Return loaded data
-    data = {'points': points, 'masks': masks, 'fwdflows': fwdflows, 'bwdflows': bwdflows,
+    # NOTE: Removed returning masks
+    data = {'points': points, 'fwdflows': fwdflows, 'bwdflows': bwdflows,
             'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
     return data
 

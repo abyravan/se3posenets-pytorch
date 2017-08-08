@@ -4,7 +4,10 @@ import torch.nn.functional as F
 from  torch.autograd import Variable
 import se3layers as se3nn
 
-########## HELPER FUNCS
+################################################################################
+'''
+    Helper functions
+'''
 # Choose non-linearities
 def get_nonlinearity(nonlinearity):
     if nonlinearity == 'prelu':
@@ -33,6 +36,27 @@ def get_se3_dimension(se3_type, use_pivot):
         se3_dim += 3
     return se3_dim
 
+### Hook for backprops of variables, just prints min, max, mean of grads along with num of "NaNs"
+def variable_hook(grad, txt):
+    print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
+
+### Initialize the SE3 prediction layer to identity
+def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
+    layer.weight.data.uniform_(-0.001, 0.001)  # Initialize weights to near identity
+    layer.bias.data.uniform_(-0.01, 0.01)  # Initialize biases to near identity
+    # Special initialization for specific SE3 types
+    if se3_type == 'affine':
+        bs = layer.bias.data.view(num_se3, -1)
+        bs.narrow(1, 3, 9).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
+    elif se3_type == 'se3quat':
+        bs = layer.bias.data.view(num_se3, -1)
+        bs.narrow(1, 6, 1).fill_(1)  # ~ [0,0,0,1]
+
+################################################################################
+'''
+    NN Modules / Loss functions
+'''
+
 # MSE Loss that gives gradients w.r.t both input & target
 # NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
 def BiMSELoss(input, target, size_average=True):
@@ -43,7 +67,79 @@ def BiMSELoss(input, target, size_average=True):
     else:
         return loss
 
-########## MODELS
+### Basic Conv + Pool + BN + Non-linearity structure
+class BasicConv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
+        super(BasicConv2D, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
+        self.nonlin = get_nonlinearity(nonlinearity)
+
+    # Convolution -> Pool -> BN -> Non-linearity
+    def forward(self, x):
+        x = self.conv(x)
+        if self.pool:
+            x = self.pool(x)
+        if self.bn:
+            x = self.bn(x)
+        return self.nonlin(x)
+
+### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
+class BasicDeconv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
+        super(BasicDeconv2D, self).__init__()
+        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
+        self.nonlin = get_nonlinearity(nonlinearity)
+
+    # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
+    def forward(self, x, y=None):
+        if y is not None:
+            x = self.deconv(x) + y  # Skip-Add the extra input
+        else:
+            x = self.deconv(x)
+        if self.bn:
+            x = self.bn(x)
+        return self.nonlin(x)
+
+###  BN + Non-linearity + Basic Conv + Pool structure
+class PreConv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
+        super(PreConv2D, self).__init__()
+        self.bn = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
+        self.nonlin = get_nonlinearity(nonlinearity)
+        self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
+
+    # BN -> Non-linearity -> Convolution -> Pool
+    def forward(self, x):
+        if self.bn:
+            x = self.bn(x)
+        x = self.nonlin(x)
+        x = self.conv(x)
+        if self.pool:
+            x = self.pool(x)
+        return x
+
+### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
+class PreDeconv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
+        super(PreDeconv2D, self).__init__()
+        self.bn = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
+        self.nonlin = get_nonlinearity(nonlinearity)
+        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+
+    # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
+    def forward(self, x, y=None):
+        if self.bn:
+            x = self.bn(x)
+        x = self.nonlin(x)
+        if y is not None:
+            x = self.deconv(x) + y  # Skip-Add the extra input
+        else:
+            x = self.deconv(x)
+        return x
 
 ### Normalize function
 def normalize(input, p=2, dim=1, eps=1e-12):
@@ -77,21 +173,10 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
     input = (torch.clamp(input, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
     return normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
 
-### Hook for backprops of variables, just prints min, max, mean of grads along with num of "NaNs"
-def variable_hook(grad, txt):
-    print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
-
-### Initialize the SE3 prediction layer to identity
-def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
-    layer.weight.data.uniform_(-0.001, 0.001)  # Initialize weights to near identity
-    layer.bias.data.uniform_(-0.01, 0.01)  # Initialize biases to near identity
-    # Special initialization for specific SE3 types
-    if se3_type == 'affine':
-        bs = layer.bias.data.view(num_se3, -1)
-        bs.narrow(1, 3, 9).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
-    elif se3_type == 'se3quat':
-        bs = layer.bias.data.view(num_se3, -1)
-        bs.narrow(1, 6, 1).fill_(1)  # ~ [0,0,0,1]
+################################################################################
+'''
+    Single step / Recurrent models
+'''
 
 ### Pose-Mask Encoder
 # Model that takes in "depth/point cloud" to generate "k"-channel masks and "k" poses represented as [R|t]
@@ -212,80 +297,6 @@ class PoseMaskEncoder(nn.Module):
 
         # Return poses and masks
         return [p, m]
-
-### Basic Conv + Pool + BN + Non-linearity structure
-class BasicConv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
-        super(BasicConv2D, self).__init__()
-        self.conv   = nn.Conv2d(in_channels, out_channels, **kwargs)
-        self.pool   = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
-        self.bn     = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
-        self.nonlin = get_nonlinearity(nonlinearity)
-
-    # Convolution -> Pool -> BN -> Non-linearity
-    def forward(self, x):
-        x = self.conv(x)
-        if self.pool:
-            x = self.pool(x)
-        if self.bn:
-            x = self.bn(x)
-        return self.nonlin(x)
-
-### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
-class BasicDeconv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
-        super(BasicDeconv2D, self).__init__()
-        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
-        self.bn     = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
-        self.nonlin = get_nonlinearity(nonlinearity)
-
-    # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
-    def forward(self, x, y=None):
-        if y is not None:
-            x = self.deconv(x) + y # Skip-Add the extra input
-        else:
-            x = self.deconv(x)
-        if self.bn:
-            x = self.bn(x)
-        return self.nonlin(x)
-
-###  BN + Non-linearity + Basic Conv + Pool structure
-class PreConv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
-        super(PreConv2D, self).__init__()
-        self.bn     = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
-        self.nonlin = get_nonlinearity(nonlinearity)
-        self.conv   = nn.Conv2d(in_channels, out_channels, **kwargs)
-        self.pool   = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
-
-    # BN -> Non-linearity -> Convolution -> Pool
-    def forward(self, x):
-        if self.bn:
-            x = self.bn(x)
-        x = self.nonlin(x)
-        x = self.conv(x)
-        if self.pool:
-            x = self.pool(x)
-        return x
-
-### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
-class PreDeconv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
-        super(PreDeconv2D, self).__init__()
-        self.bn = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
-        self.nonlin = get_nonlinearity(nonlinearity)
-        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
-
-    # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
-    def forward(self, x, y=None):
-        if self.bn:
-            x = self.bn(x)
-        x = self.nonlin(x)
-        if y is not None:
-            x = self.deconv(x) + y  # Skip-Add the extra input
-        else:
-            x = self.deconv(x)
-        return x
 
 ### Transition model
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1

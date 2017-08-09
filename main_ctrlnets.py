@@ -420,7 +420,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Run a FWD pass through the network (multi-step)
         # Predict the poses and masks
         poses, initmask = [], None
-        for k in xrange(pts.size(0)):
+        for k in xrange(pts.size(1)):
             # Predict the pose and mask at time t = 0
             # For all subsequent timesteps, predict only the poses
             if(k == 0):

@@ -454,7 +454,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # We use point loss in the FWD dirn and Consistency loss between poses
         # For the point loss, we use the initial point cloud and mask &
         # predict in a sequence based on the predicted changes in poses
-        predpts, ptloss, consisloss, loss = [], [], [], 0
+        predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
         for k in xrange(args.seq_len):
             # Get current point cloud
             if (k == 0):
@@ -480,8 +480,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # Append to total loss
             loss += currptloss + currconsisloss
-            ptloss.append(currptloss.data[0])
-            consisloss.append(currconsisloss.data[0])
+            ptloss[k]     = currptloss.data[0]
+            consisloss[k] = currconsisloss.data[0]
 
         # Update stats
         ptlossm.update(ptloss)
@@ -547,8 +547,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             iterct = data_loader.iteration_count() # Get total number of iterations so far
             info = {
                 mode+'-loss': loss.data[0],
-                mode+'-pt3dloss': sum(ptloss),
-                mode+'-consisloss': sum(consisloss),
+                mode+'-pt3dloss': ptloss.sum(),
+                mode+'-consisloss': consisloss.sum(),
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)

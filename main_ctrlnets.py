@@ -514,7 +514,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
-        predflows = torch.cat([(x.data - sample['points'][:,0]).unsqueeze(1) for x in predpts], 1)
+        predflows = torch.cat([(x.data.cpu() - sample['points'][:,0]).unsqueeze(1) for x in predpts], 1)
         flows = sample['fwdflows'].clone().type_as(predflows)
         flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
 
@@ -562,7 +562,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Concat the flows, depths and masks into one tensor
                 flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
-                                                                   predflows.narrow(0,id,1)], 0).cpu(),
+                                                                   predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
                                                         nrow=2, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),

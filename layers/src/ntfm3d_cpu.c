@@ -15,7 +15,12 @@ int NTfm3D_forward_float(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
-	 assert(ndim == 3);
+	assert(ndim == 3);
+
+	// New memory in case the inputs are not contiguous
+    points = THFloatTensor_newContiguous(points);
+    masks  = THFloatTensor_newContiguous(masks);
+    tfms   = THFloatTensor_newContiguous(tfms);
 
     // Resize output and set defaults
     THFloatTensor_resizeAs(tfmpoints, points);
@@ -68,7 +73,13 @@ int NTfm3D_forward_float(
         }
     }
 
-	 return 1;
+    // Free created memory
+    THFloatTensor_free(points);
+    THFloatTensor_free(masks);
+    THFloatTensor_free(tfms);
+
+    // Return
+	return 1;
 }
 
 int NTfm3D_backward_float(
@@ -87,7 +98,12 @@ int NTfm3D_backward_float(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
-	 assert(ndim == 3);
+	assert(ndim == 3);
+
+    // New memory in case the inputs are not contiguous
+    points = THFloatTensor_newContiguous(points);
+    masks  = THFloatTensor_newContiguous(masks);
+    tfms   = THFloatTensor_newContiguous(tfms);
 
     // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THFloatTensor_fill(gradPoints, 0);
@@ -174,7 +190,13 @@ int NTfm3D_backward_float(
         }
     }
 
-	 return 1;
+    // Free created memory
+    THFloatTensor_free(points);
+    THFloatTensor_free(masks);
+    THFloatTensor_free(tfms);
+
+    // Return
+	return 1;
 }
 
 // ===== DOUBLE DATA
@@ -191,7 +213,12 @@ int NTfm3D_forward_double(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
-	 assert(ndim == 3);
+	assert(ndim == 3);
+
+	// New memory in case the inputs are not contiguous
+    points = THDoubleTensor_newContiguous(points);
+    masks  = THDoubleTensor_newContiguous(masks);
+    tfms   = THDoubleTensor_newContiguous(tfms);
 
     // Resize output and set defaults
     THDoubleTensor_resizeAs(tfmpoints, points);
@@ -244,7 +271,13 @@ int NTfm3D_forward_double(
         }
     }
 
-	 return 1;
+    // Free created memory
+    THDoubleTensor_free(points);
+    THDoubleTensor_free(masks);
+    THDoubleTensor_free(tfms);
+
+    // Return
+	return 1;
 }
 
 int NTfm3D_backward_double(
@@ -263,7 +296,12 @@ int NTfm3D_backward_double(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
-	 assert(ndim == 3);
+	assert(ndim == 3);
+
+	// New memory in case the inputs are not contiguous
+    points = THDoubleTensor_newContiguous(points);
+    masks  = THDoubleTensor_newContiguous(masks);
+    tfms   = THDoubleTensor_newContiguous(tfms);
 
     // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THDoubleTensor_fill(gradPoints, 0);
@@ -350,5 +388,11 @@ int NTfm3D_backward_double(
         }
     }
 
-	 return 1;
+    // Free created memory
+    THDoubleTensor_free(points);
+    THDoubleTensor_free(masks);
+    THDoubleTensor_free(tfms);
+
+    // Return
+	return 1;
 }

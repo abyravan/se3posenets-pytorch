@@ -29,6 +29,11 @@ int NTfm3D_forward_cuda(
         assert(false); // Exit
     }
 
+    // New memory in case the inputs are not contiguous
+    points = THCudaTensor_newContiguous(state, points);
+    masks  = THCudaTensor_newContiguous(state, masks);
+    tfms   = THCudaTensor_newContiguous(state, tfms);
+
     // Resize output
     THCudaTensor_resizeAs(state, tfmpoints, points);
 
@@ -43,16 +48,22 @@ int NTfm3D_forward_cuda(
     float *tfms_data      = THCudaTensor_data(state, tfms);
     float *tfmpoints_data = THCudaTensor_data(state, tfmpoints);
 
-	 // Get current cuda stream
-	 cudaStream_t stream = THCState_getCurrentStream(state);
+	// Get current cuda stream
+	cudaStream_t stream = THCState_getCurrentStream(state);
 
-	 // Run the kernel
+	// Run the kernel
     NTfm3D_ForwardLauncher(
 		  points_data, masks_data, tfms_data, tfmpoints_data,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  ps, ms, ts,
 		  stream);
 
+    // Free memory
+    THCudaTensor_free(state, points);
+    THCudaTensor_free(state, masks);
+    THCudaTensor_free(state, tfms);
+
+    // Return
     return 1;
 }
 
@@ -84,7 +95,12 @@ int NTfm3D_backward_cuda(
         assert(false); // Exit
     }
 
-	 // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
+    // New memory in case the inputs are not contiguous
+    points = THCudaTensor_newContiguous(state, points);
+    masks  = THCudaTensor_newContiguous(state, masks);
+    tfms   = THCudaTensor_newContiguous(state, tfms);
+
+	// Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THCudaTensor_fill(state, gradPoints, 0);
     THCudaTensor_fill(state, gradTfms, 0);
 
@@ -98,15 +114,15 @@ int NTfm3D_backward_cuda(
     float *gradTfms_data      = THCudaTensor_data(state, gradTfms);
     float *gradTfmpoints_data = THCudaTensor_data(state, gradTfmpoints);
 
-	 // Get strides
+	// Get strides
     long *ps = points->stride;
     long *ms = masks->stride;
     long *ts = tfms->stride;
 
-	 // Get current cuda stream
-	 cudaStream_t stream = THCState_getCurrentStream(state);
+	// Get current cuda stream
+	cudaStream_t stream = THCState_getCurrentStream(state);
 
-	 // Run the kernel
+	// Run the kernel
     NTfm3D_BackwardLauncher(
 		  points_data, masks_data, tfms_data, tfmpoints_data,
 		  gradPoints_data, gradMasks_data, gradTfms_data, gradTfmpoints_data,
@@ -114,5 +130,11 @@ int NTfm3D_backward_cuda(
 		  ps, ms, ts,
 		  stream);
 
+    // Free memory
+    THCudaTensor_free(state, points);
+    THCudaTensor_free(state, masks);
+    THCudaTensor_free(state, tfms);
+
+    // Return
     return 1;
 }

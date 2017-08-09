@@ -205,7 +205,8 @@ def main():
                                                                        img_scale = args.img_scale, ctrl_type = 'actdiffvel',
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,
-                                                                       camera_intrinsics = args.cam_intrinsics)
+                                                                       camera_intrinsics = args.cam_intrinsics,
+                                                                       compute_bwdflows=False) # No need for BWD flows
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

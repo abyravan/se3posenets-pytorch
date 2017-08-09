@@ -249,7 +249,8 @@ def generate_baxter_sequence(dataset, id):
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
                                    ctrl_type='actdiffvel', mesh_ids=torch.Tensor(),
-                                   camera_extrinsics={}, camera_intrinsics={}):
+                                   camera_extrinsics={}, camera_intrinsics={},
+                                   compute_bwdflows=True):
     # Setup vars
     num_ctrl = 14 if ctrl_type.find('both') else 7      # Num ctrl dimensions
     num_meshes = mesh_ids.nelement()  # Num meshes
@@ -259,15 +260,19 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     points      = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
     fwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
-    bwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
-    masks       = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
     actconfigs  = torch.FloatTensor(seq_len + 1, 7)
     comconfigs  = torch.FloatTensor(seq_len + 1, 7)
     controls    = torch.FloatTensor(seq_len, num_ctrl)
     poses       = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 
-    # Setup temp vars
-    depths, labels = points.narrow(1,2,1), masks.narrow(1,0,1) # Last channel in points is the depth, intially save labels in channel 0 of masks
+    # Setup temp var for depth
+    depths = points.narrow(1,2,1)  # Last channel in points is the depth
+
+    # Setup vars for BWD flow computation
+    if compute_bwdflows:
+        bwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
+        masks       = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
+        labels      = masks.narrow(1,0,1) # intially save labels in channel 0 of masks
 
     # Load sequence
     dt = step_len * (1.0 / 30.0)
@@ -275,9 +280,12 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Get data table
         s = sequence[k]
 
-        # Load depth & label
+        # Load depth
         depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale) # Third channel is depth (x,y,z)
-        labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
+
+        # Load label
+        if compute_bwdflows:
+            labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
 
         # Load configs
         state = read_baxter_state_file(s['state1'])
@@ -314,31 +322,36 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     elif ctrl_type == 'comdiffvel':
         controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt
 
-    # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
-    # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
-    for j in xrange(num_meshes):
-        masks[:, j+1] = labels.eq(mesh_ids[j])  # Mask out that mesh ID
-        if (j == num_meshes - 1):
-            masks[:, j+1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
-    masks[:,0] = masks.narrow(1,1,num_meshes).sum(1).eq(0)  # All other masks are BG
-
     # Compute x & y values for the 3D points (= xygrid * depths)
     xy = points[:,0:2]
     xy.copy_(camera_intrinsics['xygrid'].expand_as(xy)) # = xygrid
     xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd)) # = xygrid * depths
 
-    # Compute BWD flows (from t+1 -> t)
-    for k in xrange(seq_len):
-        points_2, masks_2 = points.narrow(0, k+1, 1), masks.narrow(0, k+1, 1).float() # Pts & Masks @ t+1
-        pose_1, pose_2    = poses.narrow(0, k, 1), poses.narrow(0, k+1, 1)     # Poses @ t & t+1
-        poses_2_to_1      = ComposeRtPair(pose_1, RtInverse(pose_2))           # Pose_t * Pose_t+1^-1
-        NTfm3D(points_2, masks_2, poses_2_to_1, output=bwdflows.narrow(0,k,1)) # Predict pts @ t (save in BWD flows)
-        bwdflows.narrow(0,k,1).add_(-1.0, points_2)                            # Flows that take pts @ t+1 to pts @ t
+    if compute_bwdflows:
+        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
+        # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
+        for j in xrange(num_meshes):
+            masks[:, j+1] = labels.eq(mesh_ids[j])  # Mask out that mesh ID
+            if (j == num_meshes - 1):
+                masks[:, j+1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
+        masks[:,0] = masks.narrow(1,1,num_meshes).sum(1).eq(0)  # All other masks are BG
+
+        # Compute BWD flows (from t+1 -> t)
+        for k in xrange(seq_len):
+            points_2, masks_2 = points.narrow(0, k+1, 1), masks.narrow(0, k+1, 1).float() # Pts & Masks @ t+1
+            pose_1, pose_2    = poses.narrow(0, k, 1), poses.narrow(0, k+1, 1)     # Poses @ t & t+1
+            poses_2_to_1      = ComposeRtPair(pose_1, RtInverse(pose_2))           # Pose_t * Pose_t+1^-1
+            NTfm3D(points_2, masks_2, poses_2_to_1, output=bwdflows.narrow(0,k,1)) # Predict pts @ t (save in BWD flows)
+            bwdflows.narrow(0,k,1).add_(-1.0, points_2)                            # Flows that take pts @ t+1 to pts @ t
 
     # Return loaded data
     # NOTE: Removed returning masks
-    data = {'points': points, 'fwdflows': fwdflows, 'bwdflows': bwdflows,
+    data = {'points': points, 'fwdflows': fwdflows,
             'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
+    if compute_bwdflows:
+        data['masks']    = masks
+        data['bwdflows'] = bwdflows
+
     return data
 
 ### Dataset for Baxter Sequences

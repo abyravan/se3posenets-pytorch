@@ -563,7 +563,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Concat the flows, depths and masks into one tensor
                 flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
                                                                    predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                                                        nrow=2, normalize=True, range=(-0.01, 0.01))
+                                                        nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))

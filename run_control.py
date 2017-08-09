@@ -238,13 +238,11 @@ def main():
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
-    preds = model.posemaskmodel(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
-    start_poses, start_masks = preds[0].data.clone(), preds[1].data.clone() # Clone as it will be over-written otherwise
-    preds = model.posemaskmodel(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
-    goal_poses, goal_masks   = preds[0].data.clone(), preds[1].data.clone() # Clone as it will be over-written otherwise
+    start_poses, start_masks = model.posemaskmodel(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
+    goal_poses, goal_masks   = model.posemaskmodel(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
 
     # Display the masks as an image summary
-    maskdisp = torchvision.utils.make_grid(torch.cat([start_masks, goal_masks],
+    maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
                                                      0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                            nrow=args.num_se3, normalize=True, range=(0, 1))
     info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
@@ -253,7 +251,7 @@ def main():
 
     # Render the poses
     # NOTE: Data that is passed via cffi needs to be be assigned to specific vars, not just created on the fly
-    start_poses_f, goal_poses_f = start_poses.cpu().float(), goal_poses.cpu().float()
+    start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
     pangolin.initialize_poses(get_ptr(start_poses_f, 'float *'),
                               get_ptr( goal_poses_f, 'float *'))
 
@@ -273,7 +271,7 @@ def main():
 
     # Init vars for all items
     init_ctrl_v  = util.to_var(torch.zeros(1,args.num_ctrl).type(deftype), requires_grad=True) # Need grad w.r.t this
-    goal_poses_v = util.to_var(goal_poses, requires_grad=False)
+    goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
 
     # Plots for errors and loss
     fig, axes = plt.subplots(2, 1)

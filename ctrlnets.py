@@ -623,6 +623,10 @@ class MultiStepSE3PoseModel(nn.Module):
         else:
             return self.posemaskmodel(x, train_iter=train_iter, predict_masks=True) # Predict both
 
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl):
+        return self.transitionmodel([pose, ctrl])
+
     # Forward pass through the model
     def forward(self, x):
         print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')

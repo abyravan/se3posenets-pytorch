@@ -425,6 +425,56 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
+        pts    = util.to_var(sample['points'].type(deftype), requires_grad=True)
+        ctrls  = util.to_var(sample['controls'].type(deftype), requires_grad=True)
+        tarpts = util.to_var((sample['points'][:,:-1] + sample['fwdflows']).type(deftype), requires_grad=False)
+
+        # Measure data loading time
+        data_time.update(time.time() - start)
+
+        # ============ FWD pass + Compute loss ============#
+        # Start timer
+        start = time.time()
+
+        ### Run a FWD pass through the network (multi-step)
+        # Predict the poses and masks
+        poses, masks = [], []
+        for k in xrange(pts.size(0)):
+            # Predict the pose and mask at time t = 0
+            # For all subsequent timesteps, predict only the poses
+            if(k == 0):
+                p, m = model.forward_pose_mask(pts[:,k], train_iter=num_train_iter)
+                masks.append(m)
+            else:
+                p = model.forward_only_pose(pts[:,k])
+            poses.append(p)
+
+        # Make next-pose predictions & corresponding 3D point predictions using the transition model
+        # We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
+        deltaposes, transposes = [], []
+        for k in xrange(args.seq_len):
+            # Get current pose
+            if (k == 0):
+                pose = poses[0] # Use initial pose
+            else:
+                pose = transposes[k-1] # Use previous predicted pose
+
+            # Predict next pose based on curr pose, control
+            delta, trans = model.forward_next_pose(pose, ctrls[k])
+            deltaposes.append(delta)
+            transposes.append(trans)
+
+        # Now compute the losses across the sequence
+        # We use point loss in the FWD dirn and Consistency loss between poses
+        # For the point loss, we use the initial point cloud and mask &
+        # predict in a sequence based on the predicted changes in poses
+        predpts, ptloss, consisloss = [], [], []
+        for k in xrange(args.seq_len):
+
+
+        '''
+        # Get inputs and targets (as variables)
+        # Currently batchsize is the outer dimension
         pts_1    = util.to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=True)
         pts_2    = util.to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=True)
         ctrls_1  = util.to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=True)
@@ -487,6 +537,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
+        '''
 
         # ============ Gradient backpass + Optimizer step ============#
         # Compute gradient and do optimizer update step (if in training mode)

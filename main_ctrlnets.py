@@ -440,7 +440,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 pose = transposes[k-1] # Use previous predicted pose
 
             # Predict next pose based on curr pose, control
-            delta, trans = model.forward_next_pose(pose, ctrls[k])
+            delta, trans = model.forward_next_pose(pose, ctrls[:,k])
             deltaposes.append(delta)
             transposes.append(trans)
 

@@ -63,6 +63,8 @@ parser.add_argument('--init-transse3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
 parser.add_argument('--init-posese3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the pose-mask model to predict identity')
+parser.add_argument('--decomp-model', action='store_true', default=False,
+                    help='Use a separate encoder for predicting the pose and masks')
 
 # Mask options
 parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
@@ -73,14 +75,10 @@ parser.add_argument('--sharpen-rate', default=1.0, type=float,
                     metavar='W', help='Slope of the weight sharpening (default: 1.0)')
 
 # Loss options
-parser.add_argument('--fwd-wt', default=1.0, type=float,
-                    metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
-parser.add_argument('--bwd-wt', default=1.0, type=float,
-                    metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
+parser.add_argument('--pt-wt', default=0.01, type=float,
+                    metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 0.01)')
 parser.add_argument('--consis-wt', default=0.01, type=float,
                     metavar='WT', help='Weight for the pose consistency loss (default: 0.01)')
-parser.add_argument('--poswtavg-wt', default=0, type=float,
-                    metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
 parser.add_argument('--loss-scale', default=10000, type=float,
                     metavar='WT', help='Default scale factor for all the losses (default: 1000)')
 
@@ -132,7 +130,6 @@ def main():
     args = parser.parse_args()
     args.cuda       = not args.no_cuda and torch.cuda.is_available()
     args.batch_norm = not args.no_batch_norm
-    assert (args.seq_len == 1), "Recurrent network training not enabled currently"
 
     ### Create save directory and start tensorboard logger
     util.create_dir(args.save_dir)  # Create directory
@@ -182,10 +179,8 @@ def main():
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
-    print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
-        args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
-    if args.poswtavg_wt > 0:
-        print('Loss weight for position error w.r.t mask wt. avg positions: {}'.format(args.poswtavg_wt))
+    print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
+        args.loss_scale, args.pt_wt, args.consis_wt))
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
@@ -193,6 +188,10 @@ def main():
             args.sharpen_start_iter, args.sharpen_rate))
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
+
+    # Decomp model
+    if args.decomp_model:
+        assert args.seq_len > 1, "Decomposed pose/mask encoders can be used only with multi-step models"
 
     # TODO: Add option for using encoder pose for tfm t2
 
@@ -207,7 +206,7 @@ def main():
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=True)
+                                                                       compute_bwdflows=False) # No need for BWD flows
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -228,13 +227,14 @@ def main():
     ############ Load models & optimization stuff
 
     ### Load the model
+    print('Using multi-step SE3-Pose-Model')
     num_train_iter = 0
-    model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                  input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                  init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
-                                  use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                  sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv)
+    model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                           se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                           init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
+                                           use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                           sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -290,10 +290,9 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
 
         # Train for one epoch
-        tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss, tr_poswtavgloss, \
-            tr_flowsum_f, tr_flowavg_f, \
-            tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
-                                                 mode='train', optimizer=optimizer, epoch=epoch+1)
+        tr_loss, tr_ptloss, tr_consisloss, \
+            tr_flowsum, tr_flowavg = iterate(train_loader, model, tblogger, args.train_ipe,
+                                             mode='train', optimizer=optimizer, epoch=epoch+1)
 
         # Log values and gradients of the parameters (histogram)
         # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
@@ -303,9 +302,8 @@ def main():
             tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
-        val_loss, val_fwdloss, val_bwdloss, val_consisloss, val_poswtavgloss, \
-            val_flowsum_f, val_flowavg_f, \
-            val_flowsum_b, val_flowavg_b = iterate(val_loader, model, tblogger, args.val_ipe,
+        val_loss, val_ptloss, val_consisloss, \
+            val_flowsum, val_flowavg = iterate(val_loader, model, tblogger, args.val_ipe,
                                                    mode='val', epoch=epoch+1)
 
         # Find best loss
@@ -326,17 +324,15 @@ def main():
             'epoch': epoch+1,
             'args' : args,
             'best_loss'  : best_val_loss,
-            'train_stats': {'loss': tr_loss, 'fwdloss': tr_fwdloss, 'bwdloss': tr_bwdloss,
-                            'consisloss': tr_consisloss, 'poswtavgloss': tr_poswtavgloss,
-                            'flowsum_f': tr_flowsum_f, 'flowavg_f': tr_flowavg_f,
-                            'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b,
+            'train_stats': {'loss': tr_loss, 'ptloss': tr_ptloss,
+                            'consisloss': tr_consisloss,
+                            'flowsum': tr_flowsum, 'flowavg': tr_flowavg,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
                             'totaliters': train_loader.iteration_count()
                             },
-            'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss, 'bwdloss': val_bwdloss,
-                            'consisloss': val_consisloss, 'poswtavgloss': val_poswtavgloss,
-                            'flowsum_f': val_flowsum_f, 'flowavg_f': val_flowavg_f,
-                            'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b,
+            'val_stats'  : {'loss': val_loss, 'ptloss': val_ptloss,
+                            'consisloss': val_consisloss,
+                            'flowsum': val_flowsum, 'flowavg': val_flowavg,
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
                             'totaliters': val_loader.iteration_count()
                             },
@@ -374,10 +370,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    poswtavglossm  = AverageMeter()
-    flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
-    flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
+    lossm, ptlossm, consislossm = AverageMeter(), AverageMeter(), AverageMeter()
+    flowlossm_sum, flowlossm_avg = AverageMeter(), AverageMeter()
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -400,6 +394,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -410,11 +405,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts_1    = util.to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=True)
-        pts_2    = util.to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=True)
-        ctrls_1  = util.to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=True)
-        tarpts_1 = util.to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
-        tarpts_2 = util.to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
+        pts    = util.to_var(sample['points'].type(deftype), requires_grad=True)
+        ctrls  = util.to_var(sample['controls'].type(deftype), requires_grad=True)
+        tarpts = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
+        tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -423,52 +417,76 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Start timer
         start = time.time()
 
-        # Run the FWD pass through the network
-        [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
-                                                                               train_iter=num_train_iter)
-        deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
+        ### Run a FWD pass through the network (multi-step)
+        # Predict the poses and masks
+        poses, initmask = [], None
+        for k in xrange(pts.size(1)):
+            # Predict the pose and mask at time t = 0
+            # For all subsequent timesteps, predict only the poses
+            if(k == 0):
+                p, initmask = model.forward_pose_mask(pts[:,k], train_iter=num_train_iter)
+            else:
+                p = model.forward_only_pose(pts[:,k])
+            poses.append(p)
 
-        # Compute predicted points based on the masks
-        # TODO: Add option for using encoder pose for tfm t2
-        predpts_1 = se3nn.NTfm3D()(pts_1, mask_1, deltapose_t_12)
-        predpts_2 = se3nn.NTfm3D()(pts_2, mask_2, deltapose_t_21)
+        # Make next-pose predictions & corresponding 3D point predictions using the transition model
+        # We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
+        deltaposes, compdeltaposes, transposes = [], [], []
+        for k in xrange(args.seq_len):
+            # Get current pose
+            if (k == 0):
+                pose = poses[0] # Use initial pose
+            else:
+                pose = transposes[k-1] # Use previous predicted pose
 
-        # Compute 3D point loss (3D losses @ t & t+1)
-        # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
-        fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
-        if args.use_wt_sharpening:
-            # Squared error between the predicted points and target points (Same as MSE loss)
-            ptloss_1 = fwd_wt * ctrlnets.BiMSELoss(predpts_1, tarpts_1)
-            ptloss_2 = bwd_wt * ctrlnets.BiMSELoss(predpts_2, tarpts_2)
-        else:
-            # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            # Predict next pose based on curr pose, control
+            delta, trans = model.forward_next_pose(pose, ctrls[:,k])
+            deltaposes.append(delta)
+            transposes.append(trans)
 
-        # Compute pose consistency loss
-        consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+            # Compose the deltas over time (T4 = T4 * T3^-1 * T3 * T2^-1 * T2 * T1^-1 * T1 = delta_4 * delta_3 * delta_2 * T1
+            if (k == 0):
+                compdeltaposes.append(delta)
+            else:
+                compdeltaposes.append(se3nn.ComposeRtPair()(delta, compdeltaposes[k-1])) # delta_full = delta_curr * delta_prev
 
-        # Compute loss between the predicted positions and the weighted avg of the masks & point clouds
-        poswtavgloss = 0
-        if args.poswtavg_wt > 0:
-            # Compute the weighted average position @ t & t+1 based on the predicted masks & the point clouds
-            wtavgpos_1 = se3nn.WeightedAveragePoints()(pts_1, mask_1)
-            wtavgpos_2 = se3nn.WeightedAveragePoints()(pts_2, mask_2)
+        # Now compute the losses across the sequence
+        # We use point loss in the FWD dirn and Consistency loss between poses
+        # For the point loss, we use the initial point cloud and mask &
+        # predict in a sequence based on the predicted changes in poses
+        predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
+        for k in xrange(args.seq_len):
+            # Get current point cloud
+            if (k == 0):
+                currpts = pts[:,0]  # Use initial point cloud
+            else:
+                currpts = predpts[k-1]  # Use previous predicted point cloud
 
-            # Compute the loss as a sum of the position error @ t & t+1
-            # Compute error between the predicted position & the weighted average position based on the masks & pt clouds
-            # Pred poses are: B x nSE3 x 3 x 4, Wt avg poses are: B x nSE3 x 3 x 1
-            poswtavgloss_1 = ctrlnets.BiMSELoss(pose_1.narrow(3, 3, 1), wtavgpos_1)
-            poswtavgloss_2 = ctrlnets.BiMSELoss(pose_2.narrow(3, 3, 1), wtavgpos_2)
-            poswtavgloss = 0.5 * args.poswtavg_wt * args.loss_scale * (poswtavgloss_1 + poswtavgloss_2) # Sum up losses
-            poswtavglossm.update(poswtavgloss.data[0]) # Update avg. meter
+            # Predict transformed point cloud based on the total delta-transform so far
+            nextpts = se3nn.NTfm3D()(currpts, initmask, compdeltaposes[k])
+            predpts.append(nextpts)
 
-        # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss
+            # Compute 3D point loss
+            # For soft mask model, compute losses without predicting points (using composed transforms). Otherwise use predicted pts
+            if args.use_wt_sharpening:
+                # Squared error between the predicted points and target points (Same as MSE loss)
+                currptloss = pt_wt * ctrlnets.BiMSELoss(nextpts, tarpts[:,k])
+            else:
+                # Use the weighted 3D transform loss, do not use explicitly predicted points
+                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], tarpts[:,k])  # Weighted point loss!
+
+            # Compute pose consistency loss
+            currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
+
+            # Append to total loss
+            loss += currptloss + currconsisloss
+            ptloss[k]     = currptloss.data[0]
+            consisloss[k] = currconsisloss.data[0]
 
         # Update stats
-        ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
-        consislossm.update(consisloss.data[0]); lossm.update(loss.data[0])
+        ptlossm.update(ptloss)
+        consislossm.update(consisloss)
+        lossm.update(loss.data[0])
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -496,30 +514,20 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
-        predfwdflows = (predpts_1.data - pts_1.data)
-        predbwdflows = (predpts_2.data - pts_2.data)
-        fwdflows = sample['fwdflows'][:, 0].clone().type_as(predfwdflows)
-        bwdflows = sample['bwdflows'][:, 0].clone().type_as(predbwdflows)
-        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.unsqueeze(1),
-                                                                           fwdflows.unsqueeze(1))
-        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.unsqueeze(1),
-                                                                           bwdflows.unsqueeze(1))
+        predflows = torch.cat([(x.data.cpu() - sample['points'][:,0]).unsqueeze(1) for x in predpts], 1)
+        flows = sample['fwdflows'].clone().type_as(predflows)
+        flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
 
         # Update stats
-        flowlossm_sum_f.update(flowloss_sum_fwd); flowlossm_sum_b.update(flowloss_sum_bwd)
-        flowlossm_avg_f.update(flowloss_avg_fwd); flowlossm_avg_b.update(flowloss_avg_bwd)
-        #numptsm_f.update(numpts_fwd); numptsm_b.update(numpts_bwd)
-        #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
+        flowlossm_sum.update(flowloss_sum); flowlossm_avg.update(flowloss_avg)
 
         # Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
-                        loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b,
-                        consisloss=consislossm, poswtavgloss=poswtavglossm,
-                        flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
-                        flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+                        loss=lossm, ptloss=ptlossm, consisloss=consislossm,
+                        flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg)
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening:
@@ -539,10 +547,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             iterct = data_loader.iteration_count() # Get total number of iterations so far
             info = {
                 mode+'-loss': loss.data[0],
-                mode+'-fwd3dloss': ptloss_1.data[0],
-                mode+'-bwd3dloss': ptloss_2.data[0],
-                mode+'-consisloss': consisloss.data[0],
-                mode+'-poswtavgloss': poswtavglossm.val
+                mode+'-pt3dloss': ptloss.sum(),
+                mode+'-consisloss': consisloss.sum(),
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -555,14 +561,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 id = random.randint(0, sample['points'].size(0)-1)
 
                 # Concat the flows, depths and masks into one tensor
-                flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.narrow(0,id,1),
-                                                                   bwdflows.narrow(0,id,1),
-                                                                   predfwdflows.narrow(0,id,1),
-                                                                   predbwdflows.narrow(0,id,1)], 0).cpu(),
-                                                        nrow=2, normalize=True, range=(-0.01, 0.01))
+                flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
+                                                                   predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
+                                                        nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
-                maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),
-                                                                   mask_2.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.narrow(0,0,1)),
@@ -580,9 +583,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 print('\tPredicted mask stats:')
                 for k in xrange(args.num_se3):
                     print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
-                        mask_1.data[id,k].max(), mask_1.data[id,k].min(), mask_1.data[id,k].mean(),
-                        mask_1.data[id,k].std(), mask_1.data[id,k].view(-1).cpu().float().median(),
-                        (mask_1.data[id,k] - 1).abs().le(1e-5).sum()))
+                        initmask.data[id,k].max(), initmask.data[id,k].min(), initmask.data[id,k].mean(),
+                        initmask.data[id,k].std(), initmask.data[id,k].view(-1).cpu().float().median(),
+                        (initmask.data[id,k] - 1).abs().le(1e-5).sum()))
                 print('')
 
         # Measure viz time
@@ -592,43 +595,33 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
     print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
                 samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
-                loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b,
-                consisloss=consislossm, poswtavgloss=poswtavglossm,
-                flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
-                flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+                loss=lossm, ptloss=ptlossm, consisloss=consislossm,
+                flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg)
     print('========================================================')
 
     # Return the loss & flow loss
-    return lossm, ptlossm_f, ptlossm_b, consislossm, poswtavglossm, \
-           flowlossm_sum_f, flowlossm_avg_f, \
-           flowlossm_sum_b, flowlossm_avg_b
+    return lossm, ptlossm, consislossm, \
+           flowlossm_sum, flowlossm_avg
 
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
-                loss, fwdloss, bwdloss, consisloss, poswtavgloss,
-                flowloss_sum_f, flowloss_avg_f,
-                flowloss_sum_b, flowloss_avg_b):
+                loss, ptloss, consisloss,
+                flowloss_sum, flowloss_avg):
     # Print loss
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
-          'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
-          'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
-          'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
-          'Consis: {consis.val:.3f} ({consis.avg:.3f}), '
-          'PosWtAvg: {poswtavg.val:.3f} ({poswtavg.avg:.3f})'.format(
+          'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
-        sampletotal, loss=loss, fwd=fwdloss, bwd=bwdloss,
-        consis=consisloss, poswtavg=poswtavgloss))
+        sampletotal, loss=loss))
 
     # Print flow loss per timestep
     bsz = args.batch_size
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
-              'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f})'.format(
+        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f} ({:.3f}), '
+              'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '.format(
             1 + k * args.step_len,
-            flowloss_sum_f.val[k] / bsz, flowloss_sum_f.avg[k] / bsz,
-            flowloss_avg_f.val[k] / bsz, flowloss_avg_f.avg[k] / bsz,
-            flowloss_sum_b.val[k] / bsz, flowloss_sum_b.avg[k] / bsz,
-            flowloss_avg_b.val[k] / bsz, flowloss_avg_b.avg[k] / bsz))
+            ptloss.val[k], ptloss.avg[k], consisloss.val[k], consisloss.avg[k],
+            flowloss_sum.val[k] / bsz, flowloss_sum.avg[k] / bsz,
+            flowloss_avg.val[k] / bsz, flowloss_avg.avg[k] / bsz))
 
 ### Load optimizer
 def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1e-4):

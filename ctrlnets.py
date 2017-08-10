@@ -46,8 +46,8 @@ def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
     layer.bias.data.uniform_(-0.01, 0.01)  # Initialize biases to near identity
     # Special initialization for specific SE3 types
     if se3_type == 'affine':
-        bs = layer.bias.data.view(num_se3, -1)
-        bs.narrow(1, 3, 9).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
+        bs = layer.bias.data.view(num_se3, 3, 4)
+        bs.narrow(2, 0, 3).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
     elif se3_type == 'se3quat':
         bs = layer.bias.data.view(num_se3, -1)
         bs.narrow(1, 6, 1).fill_(1)  # ~ [0,0,0,1]
@@ -60,7 +60,7 @@ def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
 # MSE Loss that gives gradients w.r.t both input & target
 # NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
 def BiMSELoss(input, target, size_average=True):
-    diff = input - target
+    diff = (input - target).view(-1)
     loss = 0.5 * diff.dot(diff)
     if size_average:
         return loss / input.nelement()
@@ -141,26 +141,6 @@ class PreDeconv2D(nn.Module):
             x = self.deconv(x)
         return x
 
-### Normalize function
-def normalize(input, p=2, dim=1, eps=1e-12):
-    r"""Performs :math:`L_p` normalization of inputs over specified dimension.
-    Does:
-    .. math::
-        v = \frac{v}{\max(\lVert v \rVert_p, \epsilon)}
-
-    for each subtensor v over dimension dim of input. Each subtensor is
-    flattened into a vector, i.e. :math:`\lVert v \rVert_p` is not a matrix
-    norm. With default arguments normalizes over the second dimension with Euclidean
-    norm.
-
-    Args:
-        input: input tensor of any shape
-        p (float): the exponent value in the norm formulation
-        dim (int): the dimension to reduce
-        eps (float): small value to avoid division by zero
-    """
-    return input / input.norm(p, dim).clamp(min=eps).expand_as(input)
-
 ### Apply weight-sharpening to the masks across the channels of the input
 ### output = Normalize( (sigmoid(input) + noise)^p + eps )
 ### where the noise is sampled from a 0-mean, sig-std dev distribution (sig is increased over time),
@@ -171,7 +151,7 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
         noise = Variable(input.data.new(input.size()).normal_(mean=0.0, std=noise_std)) # Sample gaussian noise
         input = input + noise
     input = (torch.clamp(input, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
-    return normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
+    return F.normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
 
 ################################################################################
 '''

@@ -584,7 +584,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 for k in xrange(args.num_se3):
                     print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
                         initmask.data[id,k].max(), initmask.data[id,k].min(), initmask.data[id,k].mean(),
-                        initmask.data[id,k].std(), initmask.data[id,k].view(-1).cpu().float().median()[0][0],
+                        initmask.data[id,k].std(), initmask.data[id,k].view(-1).cpu().float().median(),
                         (initmask.data[id,k] - 1).abs().le(1e-5).sum()))
                 print('')
 
@@ -655,8 +655,8 @@ def compute_flow_errors(predflows, gtflows):
         num_pts[k]  = num_pts_d.sum()               # Num pts that have non-zero flow
         loss_sum[k] = loss_sum_d.sum()              # Sum of total flow loss across the batch
         for j in xrange(batch):
-            if (num_pts_d[j][0] > 0):
-                loss_avg[k] += (loss_sum_d[j][0] / num_pts_d[j][0]) # Sum of per-point loss across the batch
+            if (num_pts_d[j] > 0):
+                loss_avg[k] += (loss_sum_d[j] / num_pts_d[j]) # Sum of per-point loss across the batch
                 nz[k]       += 1 # We have one more dataset with non-zero num pts that move
     # Return
     return loss_sum, loss_avg, num_pts, nz
@@ -678,8 +678,8 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
             num_pts[k][j]   = num_pts_d.sum()   # Num pts that have non-zero flow
             loss_sum[k][j]  = loss_sum_d.sum()  # Sum of total flow loss across batch
             for i in xrange(batch):
-                if (num_pts_d[i][0] > 0):
-                    loss_avg[k][j]  += (loss_sum_d[i][0] / num_pts_d[i][0]) # Sum of per-point flow across batch
+                if (num_pts_d[i] > 0):
+                    loss_avg[k][j]  += (loss_sum_d[i] / num_pts_d[i]) # Sum of per-point flow across batch
                     nz[k][j]        += 1 # One more dataset
     # Return
     return loss_sum, loss_avg, num_pts, nz

@@ -31,11 +31,6 @@ int Weighted3DTransformLoss_forward_cuda(
         assert(false); // Exit
     }
 
-    // Get strides
-    long *ps = points->stride;
-    long *ms = masks->stride;
-    long *ts = tfms->stride;
-
     // New memory in case the inputs are not contiguous
     points = THCudaTensor_newContiguous(state, points);
     masks  = THCudaTensor_newContiguous(state, masks);
@@ -47,6 +42,11 @@ int Weighted3DTransformLoss_forward_cuda(
     float *masks_data 	  = THCudaTensor_data(state, masks);
     float *tfms_data      = THCudaTensor_data(state, tfms);
     float *targetpts_data = THCudaTensor_data(state, targetpoints);
+
+    // Get strides
+    long *ps = points->stride;
+    long *ms = masks->stride;
+    long *ts = tfms->stride;
 
 	// Get current cuda stream
 	cudaStream_t stream = THCState_getCurrentStream(state);

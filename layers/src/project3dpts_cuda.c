@@ -29,10 +29,6 @@ int Project3DPointsToSubPixelDepth_forward_cuda(
     THCudaTensor_narrow(state, temp, output, 1, 2, 1); // Choose "z" value
     THCudaTensor_fill(state, temp, HUGE_VALF); // Set z = HUGE_VALF by default
 
-    // Get strides
-    long *is    = input->stride;
-    long *iMs   = indexMap->stride;
-
     // New memory in case the inputs are not contiguous
     input = THCudaTensor_newContiguous(state, input);
 
@@ -40,6 +36,10 @@ int Project3DPointsToSubPixelDepth_forward_cuda(
     float *input_data 		= THCudaTensor_data(state, input);
     float *indexMap_data 	= THCudaTensor_data(state, indexMap);
     float *output_data 		= THCudaTensor_data(state, output);
+
+    // Get strides
+    long *is    = input->stride;
+    long *iMs   = indexMap->stride;
 
     // Get current cuda stream
     cudaStream_t stream = THCState_getCurrentStream(state);

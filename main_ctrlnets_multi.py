@@ -515,8 +515,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
-        predflows = torch.cat([(x.data.cpu() - sample['points'][:,0]).unsqueeze(1) for x in predpts], 1)
-        flows = sample['fwdflows'].clone().type_as(predflows)
+        predflows = torch.cat([(x.data - pts.data[:,0]).unsqueeze(1) for x in predpts], 1)
+        flows = sample['fwdflows'].type(deftype)
         flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
 
         # Update stats
@@ -532,10 +532,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening:
-		try:
+                try:
                     noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
-		except:
-		    noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                except:
+                    noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
                     num_train_iter, noise_std, pow))
 

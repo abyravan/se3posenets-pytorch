@@ -33,6 +33,9 @@ int Project3DPointsToSubPixelDepth_forward_cuda(
     long *is    = input->stride;
     long *iMs   = indexMap->stride;
 
+    // New memory in case the inputs are not contiguous
+    input = THCudaTensor_newContiguous(state, input);
+
     // Get data pointers
     float *input_data 		= THCudaTensor_data(state, input);
     float *indexMap_data 	= THCudaTensor_data(state, indexMap);
@@ -48,6 +51,9 @@ int Project3DPointsToSubPixelDepth_forward_cuda(
 		  fx, fy, cx, cy,
 		  is, iMs,
 		  stream);
+
+    // Free memory
+    THCudaTensor_free(state, input);
 
     return 1;
 }
@@ -71,6 +77,9 @@ int Project3DPointsToSubPixelDepth_backward_cuda(
     // Fill with defaults
     THCudaTensor_fill(state, gradInput, 0);
 
+    // New memory in case the inputs are not contiguous
+    input = THCudaTensor_newContiguous(state, input);
+
     // Get data pointers
     float *input_data 		= THCudaTensor_data(state, input);
     float *gradOutput_data 	= THCudaTensor_data(state, gradOutput);
@@ -91,6 +100,9 @@ int Project3DPointsToSubPixelDepth_backward_cuda(
 		  fx, fy, cx, cy,
 		  is, iMs,
 		  stream);
+
+    // Free memory
+    THCudaTensor_free(state, input);
 
     return 1;
 }

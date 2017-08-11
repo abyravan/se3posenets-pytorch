@@ -36,6 +36,12 @@ int Weighted3DTransformLoss_forward_cuda(
     long *ms = masks->stride;
     long *ts = tfms->stride;
 
+    // New memory in case the inputs are not contiguous
+    points = THCudaTensor_newContiguous(state, points);
+    masks  = THCudaTensor_newContiguous(state, masks);
+    tfms   = THCudaTensor_newContiguous(state, tfms);
+    targetpoints = THCudaTensor_newContiguous(state, targetpoints);
+
     // Get data pointers
     float *points_data    = THCudaTensor_data(state, points);
     float *masks_data 	  = THCudaTensor_data(state, masks);
@@ -59,6 +65,12 @@ int Weighted3DTransformLoss_forward_cuda(
         long nElements = THCudaTensor_nElement(state, points);
         loss /= ((float)nElements);
     }
+
+    // Free memory
+    THCudaTensor_free(state, points);
+    THCudaTensor_free(state, masks);
+    THCudaTensor_free(state, tfms);
+    THCudaTensor_free(state, targetpoints);
 
     return loss;
 }
@@ -94,6 +106,12 @@ void Weighted3DTransformLoss_backward_cuda(
 	 // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THCudaTensor_fill(state, gradPoints, 0);
     THCudaTensor_fill(state, gradTfms, 0);
+
+    // New memory in case the inputs are not contiguous
+    points = THCudaTensor_newContiguous(state, points);
+    masks  = THCudaTensor_newContiguous(state, masks);
+    tfms   = THCudaTensor_newContiguous(state, tfms);
+    targetpoints = THCudaTensor_newContiguous(state, targetpoints);
 
     // Get data pointers
     float *points_data        = THCudaTensor_data(state, points);
@@ -132,4 +150,10 @@ void Weighted3DTransformLoss_backward_cuda(
         THCudaTensor_mul(state, gradMasks, gradMasks, norm);
         THCudaTensor_mul(state, gradTfms, gradTfms, norm);
     }
+
+    // Free memory
+    THCudaTensor_free(state, points);
+    THCudaTensor_free(state, masks);
+    THCudaTensor_free(state, tfms);
+    THCudaTensor_free(state, targetpoints);
 }

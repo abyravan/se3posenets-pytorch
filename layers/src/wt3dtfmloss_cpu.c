@@ -18,6 +18,12 @@ float Weighted3DTransformLoss_forward_float(
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
 
+    // New memory in case the inputs are not contiguous
+    points = THFloatTensor_newContiguous(points);
+    masks  = THFloatTensor_newContiguous(masks);
+    tfms   = THFloatTensor_newContiguous(tfms);
+    targetpoints = THFloatTensor_newContiguous(targetpoints);
+
     // Get data pointers
     float *points_data    = THFloatTensor_data(points);
     float *masks_data 	  = THFloatTensor_data(masks);
@@ -78,6 +84,12 @@ float Weighted3DTransformLoss_forward_float(
         loss /= ((double)nElements);
     }
 
+    // Free memory
+    THFloatTensor_free(points);
+    THFloatTensor_free(masks);
+    THFloatTensor_free(tfms);
+    THFloatTensor_free(targetpoints);
+
     return (float)loss;
 }
 
@@ -101,6 +113,12 @@ void Weighted3DTransformLoss_backward_float(
     // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THFloatTensor_fill(gradPoints, 0);
     THFloatTensor_fill(gradTfms, 0);
+
+    // New memory in case the inputs are not contiguous
+    points = THFloatTensor_newContiguous(points);
+    masks  = THFloatTensor_newContiguous(masks);
+    tfms   = THFloatTensor_newContiguous(tfms);
+    targetpoints = THFloatTensor_newContiguous(targetpoints);
 
     // Get data pointers
     float *points_data        = THFloatTensor_data(points);
@@ -203,6 +221,12 @@ void Weighted3DTransformLoss_backward_float(
         THFloatTensor_mul(gradMasks, gradMasks, norm);
         THFloatTensor_mul(gradTfms, gradTfms, norm);
     }
+
+    // Free memory
+    THFloatTensor_free(points);
+    THFloatTensor_free(masks);
+    THFloatTensor_free(tfms);
+    THFloatTensor_free(targetpoints);
 }
 
 // ===== DOUBLE DATA
@@ -220,6 +244,12 @@ double Weighted3DTransformLoss_forward_double(
     long nrows     = points->size[2];
     long ncols     = points->size[3];
     long nSE3      = masks->size[1];
+
+    // New memory in case the inputs are not contiguous
+    points = THDoubleTensor_newContiguous(points);
+    masks  = THDoubleTensor_newContiguous(masks);
+    tfms   = THDoubleTensor_newContiguous(tfms);
+    targetpoints = THDoubleTensor_newContiguous(targetpoints);
 
     // Get data pointers
     double *points_data    = THDoubleTensor_data(points);
@@ -281,6 +311,12 @@ double Weighted3DTransformLoss_forward_double(
         loss /= ((double)nElements);
     }
 
+    // Free memory
+    THDoubleTensor_free(points);
+    THDoubleTensor_free(masks);
+    THDoubleTensor_free(tfms);
+    THDoubleTensor_free(targetpoints);
+
     return loss;
 }
 
@@ -304,6 +340,12 @@ void Weighted3DTransformLoss_backward_double(
     // Set gradients w.r.t pts & tfms to zero (as we add to these in a loop later)
     THDoubleTensor_fill(gradPoints, 0);
     THDoubleTensor_fill(gradTfms, 0);
+
+    // New memory in case the inputs are not contiguous
+    points = THDoubleTensor_newContiguous(points);
+    masks  = THDoubleTensor_newContiguous(masks);
+    tfms   = THDoubleTensor_newContiguous(tfms);
+    targetpoints = THDoubleTensor_newContiguous(targetpoints);
 
     // Get data pointers
     double *points_data        = THDoubleTensor_data(points);
@@ -406,4 +448,10 @@ void Weighted3DTransformLoss_backward_double(
         THDoubleTensor_mul(gradMasks, gradMasks, norm);
         THDoubleTensor_mul(gradTfms, gradTfms, norm);
     }
+
+    // Free memory
+    THDoubleTensor_free(points);
+    THDoubleTensor_free(masks);
+    THDoubleTensor_free(tfms);
+    THDoubleTensor_free(targetpoints);
 }

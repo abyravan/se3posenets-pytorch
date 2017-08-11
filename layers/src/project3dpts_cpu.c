@@ -36,6 +36,9 @@ int Project3DPointsToSubPixelDepth_forward_float(
     THFloatTensor_fill(output, 0);
     THFloatTensor_fill(indexMap, -1); // -1 means invalid
 
+    // New memory in case the inputs are not contiguous
+    input = THFloatTensor_newContiguous(input);
+
     // Get data pointers
     float *input_data 		= THFloatTensor_data(input);
     float *output_data 		= THFloatTensor_data(output);
@@ -91,6 +94,9 @@ int Project3DPointsToSubPixelDepth_forward_float(
         }
     }
 
+    // Free memory
+    THFloatTensor_free(input);
+
     // Return value
     return 1;
 }
@@ -110,6 +116,9 @@ int Project3DPointsToSubPixelDepth_backward_float(
 
     // Fill with defaults
     THFloatTensor_fill(gradInput, 0);
+
+    // New memory in case the inputs are not contiguous
+    input = THFloatTensor_newContiguous(input);
 
     // Get data pointers
     float *input_data 		= THFloatTensor_data(input);
@@ -156,6 +165,9 @@ int Project3DPointsToSubPixelDepth_backward_float(
         }
     }
 
+    // Free memory
+    THFloatTensor_free(input);
+
     return 1;
 }
 
@@ -192,6 +204,9 @@ int Project3DPointsToSubPixelDepth_forward_double(
     // Fill with defaults
     THDoubleTensor_fill(output, 0);
     THDoubleTensor_fill(indexMap, -1); // -1 means invalid
+
+    // New memory in case the inputs are not contiguous
+    input = THDoubleTensor_newContiguous(input);
 
     // Get data pointers
     double *input_data 		= THDoubleTensor_data(input);
@@ -248,6 +263,9 @@ int Project3DPointsToSubPixelDepth_forward_double(
         }
     }
 
+    // Free memory
+    THDoubleTensor_free(input);
+
     // Return value
     return 1;
 }
@@ -267,6 +285,9 @@ int Project3DPointsToSubPixelDepth_backward_double(
 
     // Fill with defaults
     THDoubleTensor_fill(gradInput, 0);
+
+    // New memory in case the inputs are not contiguous
+    input = THDoubleTensor_newContiguous(input);
 
     // Get data pointers
     double *input_data 		= THDoubleTensor_data(input);
@@ -312,6 +333,9 @@ int Project3DPointsToSubPixelDepth_backward_double(
             }
         }
     }
+    
+    // Free memory
+    THDoubleTensor_free(input);
 
     return 1;
 }

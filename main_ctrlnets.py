@@ -246,13 +246,13 @@ def main():
     if args.resume:
         # TODO: Save path to TB log dir, save new log there again
         # TODO: Reuse options in args (see what all to use and what not)
-        # TODO: Use same num train iters as the saved checkpoint
         # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint       = torch.load(args.resume)
             loadargs         = checkpoint['args']
             args.start_epoch = checkpoint['epoch']
+            num_train_iter   = checkpoint['train_iter']
             try:
                 model.load_state_dict(checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
             except:
@@ -260,8 +260,8 @@ def main():
             assert (loadargs.optimization == args.optimization), "Optimizer in saved checkpoint ({}) does not match current argument ({})".format(
                     loadargs.optimization, args.optimization)
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.resume, checkpoint['epoch']))
+            print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
+                  .format(args.resume, checkpoint['epoch'], num_train_iter))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 

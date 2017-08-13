@@ -380,10 +380,11 @@ class PoseMaskEncoder(nn.Module):
         # Create SE3 decoder (take conv output, reshape, run FC layers to generate "num_se3" poses)
         self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
         self.num_se3 = num_se3
+        sdim = 64 #128
         self.se3decoder  = nn.Sequential(
-                                nn.Linear(128*7*10, 128),
+                                nn.Linear(128 * 7 * 10, sdim),
                                 get_nonlinearity(nonlinearity),
-                                nn.Linear(128, self.num_se3 * self.se3_dim) # Predict the SE3s from the conv-output
+                                nn.Linear(sdim, self.num_se3 * self.se3_dim)  # Predict the SE3s from the conv-output
                            )
 
         # Initialize the SE3 decoder to predict identity SE3
@@ -457,24 +458,26 @@ class TransitionModel(nn.Module):
         self.num_se3 = num_se3
 
         # Pose encoder
+        pdim = [128, 256]
         self.poseencoder = nn.Sequential(
-                                nn.Linear(self.num_se3 * 12, 128),
+                                nn.Linear(self.num_se3 * 12, pdim[0]),
                                 get_nonlinearity(nonlinearity),
-                                nn.Linear(128, 256),
+                                nn.Linear(pdim[0], pdim[1]),
                                 get_nonlinearity(nonlinearity)
                             )
 
         # Control encoder
+        cdim = [128, 256] #[64, 128]
         self.ctrlencoder = nn.Sequential(
-                                nn.Linear(num_ctrl, 64),
+                                nn.Linear(num_ctrl, cdim[0]),
                                 get_nonlinearity(nonlinearity),
-                                nn.Linear(64, 128),
+                                nn.Linear(cdim[0], cdim[1]),
                                 get_nonlinearity(nonlinearity)
                             )
 
         # SE3 decoder
         self.deltase3decoder = nn.Sequential(
-            nn.Linear(256+128, 256),
+            nn.Linear(pdim[1]+cdim[1], 256),
             get_nonlinearity(nonlinearity),
             nn.Linear(256, 128),
             get_nonlinearity(nonlinearity),

@@ -1,4 +1,5 @@
 # Global imports
+import _init_paths
 import argparse
 import os
 import sys
@@ -7,33 +8,6 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-
-##########
-# Load the pangolin visualizer library using cffi
-from cffi import FFI
-ffi = FFI()
-pangolin = ffi.dlopen('/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/torchviz/build/libtorchviz_gd_baxter.so')
-ffi.cdef('''
-    void initialize_viz(int seqLength, int imgHeight, int imgWidth, float imgScale, int nSE3,
-                        float fx, float fy, float cx, float cy, float dt, int oldgrippermodel,
-                        const char *savedir);
-    void terminate_viz();
-    float** initialize_problem(const float *input_jts, const float *target_jts);
-    void update_viz(const float *inputpts, const float *outputpts_gt, 
-                    const float *outputpts_pred, const float *jtangles_gt, 
-                    const float *jtangles_pred);
-    float ** render_arm(const float *config);
-    void update_da(const float *input_da, const float *target_da, const float *target_da_ids, 
-                   const float *warpedtarget_da, const float *target_da);
-    float ** compute_gt_da(const float *input_jts, const float *target_jts, const int winsize, 
-                           const float thresh, const float *final_pts);
-    float ** update_pred_pts(const float *net_preds, const float *net_grads);
-    float ** update_pred_pts_unwarped(const float *net_preds, const float *net_grads);
-    void initialize_poses(const float *init_poses, const float *tar_poses);
-    void update_masklabels_and_poses(const float *curr_masks, const float *curr_poses);
-    void start_saving_frames(const char *framesavedir);
-    void stop_saving_frames();
-''')
 
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
 img_ht, img_wd, img_scale = 240, 320, 1e-4
@@ -47,11 +21,12 @@ cam_intrinsics = {'fx': 589.3664541825391 / 2,
                   'cy': 240.5 / 2}
 savedir = 'temp' # TODO: Fix this!
 
-# Create the pangolin window
-pangolin.initialize_viz(seq_len, img_ht, img_wd, img_scale, num_se3,
-                        cam_intrinsics['fx'], cam_intrinsics['fy'],
-                        cam_intrinsics['cx'], cam_intrinsics['cy'],
-                        dt, oldgrippermodel, savedir)
+# Load pangolin visualizer library
+from torchviz import pangoviz
+pangolin = pangoviz.PyPangolinViz(seq_len, img_ht, img_wd, img_scale, num_se3,
+                                  cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                  cam_intrinsics['cx'], cam_intrinsics['cy'],
+                                  dt, oldgrippermodel, savedir)
 
 ##########
 # NOTE: When importing torch before initializing the pangolin window, I get the error:
@@ -59,6 +34,7 @@ pangolin.initialize_viz(seq_len, img_ht, img_wd, img_scale, num_se3,
 # Long story short, initializing torch before pangolin messes things up big time.
 # Also, only the conda version of torch works otherwise there's an issue with loading the torchviz library before torch
 #   ImportError: dlopen: cannot load any more object with static TLS
+# With the new CUDA & NVIDIA drivers the new conda also doesn't work. had to move to CYTHON to get code to work
 
 # Torch imports
 import torch
@@ -120,8 +96,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 
 # Display/Save options
-parser.add_argument('-s', '--save-dir', default='results', type=str,
-                    metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
+parser.add_argument('-s', '--save-dir', default='', type=str,
+                    metavar='PATH', help='directory to save results in. (default: <checkpoint_dir>/planlogs/)')
 
 def main():
     # Parse args
@@ -130,6 +106,10 @@ def main():
     pargs.cuda = not pargs.no_cuda and torch.cuda.is_available()
 
     # Create save directory and start tensorboard logger
+    if pargs.save_dir == '':
+        checkpoint_dir = pargs.checkpoint.rpartition('/')[0]
+        pargs.save_dir = checkpoint_dir + '/planlogs/'
+    print('Saving planning logs at: ' + pargs.save_dir)
     util.create_dir(pargs.save_dir)  # Create directory
     tblogger = util.TBLogger(pargs.save_dir + '/planlogs/')  # Start tensorboard logger
 
@@ -165,13 +145,26 @@ def main():
         raise RuntimeError
 
     # Create a model
-    model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                  input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                  init_posese3_iden=False, init_transse3_iden=False,
-                                  use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                  sharpen_rate=args.sharpen_rate, pre_conv=False) # TODO: pre-conv
-    if args.cuda:
+    if args.seq_len == 1:
+        model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                      se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                      input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                      init_posese3_iden=False, init_transse3_iden=False,
+                                      use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                      sharpen_rate=args.sharpen_rate, pre_conv=False) # TODO: pre-conv
+        posemaskpredfn = model.posemaskmodel.forward
+    else:
+        model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                               se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                               input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                               init_posese3_iden=args.init_posese3_iden,
+                                               init_transse3_iden=args.init_transse3_iden,
+                                               use_wt_sharpening=args.use_wt_sharpening,
+                                               sharpen_start_iter=args.sharpen_start_iter,
+                                               sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                                               decomp_model=args.decomp_model)
+        posemaskpredfn = model.forward_pose_mask
+    if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
 
     # Update parameters from trained network
@@ -185,7 +178,6 @@ def main():
 
     # Sanity check some parameters (TODO: remove it later)
     assert(args.num_se3 == num_se3)
-    assert(args.seq_len == seq_len)
     assert(args.img_scale == img_scale)
     try:
         cam_i = args.cam_intrinsics
@@ -230,16 +222,16 @@ def main():
     ########################
     ############ Get start & goal point clouds, predict poses & masks
     # Initialize problem
-    pangolin.initialize_problem(get_ptr(start_angles, 'float *'), get_ptr(goal_angles, 'float *'))
+    start_pts, da_goal_pts = torch.zeros(1,3,args.img_ht,args.img_wd), torch.zeros(1,3,args.img_ht,args.img_wd)
+    pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
 
-    # Get start and goal point clouds
-    start_pts = generate_ptcloud(start_angles)
+    # Get full goal point cloud
     goal_pts  = generate_ptcloud(goal_angles)
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
-    start_poses, start_masks = model.posemaskmodel(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
-    goal_poses, goal_masks   = model.posemaskmodel(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
+    start_poses, start_masks = posemaskpredfn(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
+    goal_poses, goal_masks   = posemaskpredfn(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
 
     # Display the masks as an image summary
     maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
@@ -250,10 +242,9 @@ def main():
         tblogger.image_summary(tag, images, 0)
 
     # Render the poses
-    # NOTE: Data that is passed via cffi needs to be be assigned to specific vars, not just created on the fly
+    # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
     start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
-    pangolin.initialize_poses(get_ptr(start_poses_f, 'float *'),
-                              get_ptr( goal_poses_f, 'float *'))
+    pangolin.initialize_poses(start_poses_f[0].numpy(), goal_poses_f[0].numpy())
 
     # Print error
     print('Initial jt angle error:')
@@ -279,19 +270,19 @@ def main():
 
     # Run the controller
     gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    for iter in xrange(pargs.max_iter):
+    for it in xrange(pargs.max_iter):
         # Print
         print('\n #####################')
 
         # Get current point cloud
         start = time.time()
-        curr_angles = angles[iter]
+        curr_angles = angles[it]
         curr_pts = generate_ptcloud(curr_angles).type(deftype)
         gen_time.update(time.time() - start)
 
         # Predict poses and masks
         start = time.time()
-        curr_poses, curr_masks = model.posemaskmodel(util.to_var(curr_pts), train_iter=num_train_iter)
+        curr_poses, curr_masks = posemaskpredfn(util.to_var(curr_pts), train_iter=num_train_iter)
         curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
         posemask_time.update(time.time() - start)
 
@@ -299,16 +290,15 @@ def main():
         start = time.time()
         _, curr_labels = curr_masks_f.max(dim=1)
         curr_labels_f = curr_labels.float()
-        pangolin.update_masklabels_and_poses(get_ptr(curr_labels_f, 'float *'),
-                                             get_ptr(curr_poses_f, 'float *'))
+        pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
 
         # Show masks using tensor flow
-        if (iter % args.disp_freq) == 0:
+        if (it % args.disp_freq) == 0:
             maskdisp = torchvision.utils.make_grid(curr_masks.data.cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                    nrow=args.num_se3, normalize=True, range=(0, 1))
             info = {'curr masks': util.to_np(maskdisp.narrow(0, 0, 1))}
             for tag, images in info.items():
-                tblogger.image_summary(tag, images, iter)
+                tblogger.image_summary(tag, images, it)
 
         viz_time.update(time.time() - start)
 
@@ -318,7 +308,7 @@ def main():
                                         poses=curr_poses, ctrl=init_ctrl_v,
                                         goal_poses=goal_poses_v)
         optim_time.update(time.time() - start)
-        ctrl_grads[iter] = ctrl_grad.cpu().float() # Save this
+        ctrl_grads[it] = ctrl_grad.cpu().float() # Save this
 
         # Set last 3 joint's controls to zero
         if pargs.only_top4_jts:
@@ -337,25 +327,25 @@ def main():
         next_angles = curr_angles - (curr_ctrl * dt)
 
         # Save stuff
-        losses[iter]       = loss
-        ctrls[iter]        = curr_ctrl
-        angles[iter+1]     = next_angles
-        deg_errors[iter+1] = (next_angles-goal_angles)*(180.0/np.pi)
+        losses[it]       = loss
+        ctrls[it]        = curr_ctrl
+        angles[it+1]     = next_angles
+        deg_errors[it+1] = (next_angles-goal_angles)*(180.0/np.pi)
 
         # Print losses and errors
-        print('Control Iter: {}/{}, Loss: {}'.format(iter+1, pargs.max_iter, loss))
+        print('Control Iter: {}/{}, Loss: {}'.format(it+1, pargs.max_iter, loss))
         print('Joint angle errors in degrees: ',
-              torch.cat([deg_errors[iter+1].unsqueeze(1), full_deg_error.unsqueeze(1)], 1))
+              torch.cat([deg_errors[it+1].unsqueeze(1), full_deg_error.unsqueeze(1)], 1))
 
         # Plot the errors & loss
-        if (iter % 4) == 0:
-            axes[0].set_title("Iter: {}, Jt angle errors".format(iter + 1))
-            axes[0].plot(deg_errors.numpy()[:iter+1])
-            axes[1].set_title("Iter: {}, Loss".format(iter + 1))
-            axes[1].plot(losses.numpy()[:iter+1])
+        if (it % 4) == 0:
+            axes[0].set_title("Iter: {}, Jt angle errors".format(it + 1))
+            axes[0].plot(deg_errors.numpy()[:it+1])
+            axes[1].set_title("Iter: {}, Loss".format(it + 1))
+            axes[1].plot(losses.numpy()[:it+1])
             fig.canvas.draw()  # Render
             plt.pause(0.01)
-        if (iter % args.disp_freq) == 0: # Clear now and then
+        if (it % args.disp_freq) == 0: # Clear now and then
             for ax in axes:
                 ax.cla()
 
@@ -441,19 +431,19 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
         Jt -= pred_poses_p.data.narrow(0,0,1).view(1, -1).expand_as(Jt) # [ f(x+eps) - f(x) ]
         Jt.div_(eps) # [ f(x+eps) - f(x) ] / eps
 
-        '''
         ### Option 1: Compute GN-gradient using torch stuff by adding eps * I
         # This is incredibly slow at the first iteration
         Jinv = torch.inverse(torch.mm(Jt, Jt.t()) + pargs.gn_lambda * I) # (J^t * J + \lambda I)^-1
         ctrl_grad = torch.mm(Jinv, torch.mm(Jt, pred_poses.grad.data.view(-1,1))) # (J^t*J + \lambda I)^-1 * (Jt * g)
-        '''
 
+        '''
         ### Option 2: Compute GN-gradient using numpy PINV (instead of adding eps * I)
         # Fastest, but doesn't do well on overall planning if we allow controlling all joints
         # If only controlling the top 4 jts this works just as well as the one above.
         Jtn = util.to_np(Jt)
         ctrl_gradn = np.dot(np.linalg.pinv(Jtn, rcond=pargs.gn_lambda).transpose(), util.to_np(pred_poses.grad.data.view(-1,1)))
         ctrl_grad  = torch.from_numpy(ctrl_gradn)
+        '''
 
         '''
         ### Option 3: Compute GN-gradient using numpy INV (add eps * I)
@@ -492,22 +482,16 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
             print('Grad diff => Min: {}, Max: {}, Mean: {}'.format(diff_g.min(), diff_g.max(), diff_g.abs().mean()))
 
         # Return the Gauss-Newton gradient
-        return ctrl_grad.cpu().clone(), loss.data[0]
-
-### Create a pointer to tensor memory
-def get_ptr(tensor, ptr_type):
-    assert(not util.is_var(tensor)) # Needs to be a tensor
-    return ffi.cast(ptr_type, tensor.data_ptr())
+        return ctrl_grad.cpu().view(-1).clone(), loss.data[0]
 
 ### Compute a point cloud give the arm config
 # Assumes that a "Tensor" is the input, not a "Variable"
 def generate_ptcloud(config):
     # Render the config & get the point cloud
     assert(not util.is_var(config))
-    config_f = config.clone().float()
-    output = pangolin.render_arm(get_ptr(config_f, 'float *'))
-    pts    = torch.FloatTensor(1, 3, args.img_ht, args.img_wd)
-    ffi.memmove(get_ptr(pts, 'float *'), output[2], pts.nelement() * 4) # output[2] is the point cloud
+    config_f = config.view(-1).clone().float()
+    pts      = torch.FloatTensor(1, 3, args.img_ht, args.img_wd)
+    pangolin.render_arm(config_f.numpy(), pts[0].numpy())
     return pts.type_as(config)
 
 ### Compute numerical jacobian via multiple back-props

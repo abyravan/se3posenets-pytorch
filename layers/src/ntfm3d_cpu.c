@@ -50,19 +50,19 @@ int NTfm3D_forward_float(
                 float y = *(points_data + 1*ps[1] + valp);
                 float z = *(points_data + 2*ps[1] + valp);
 
-                // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
+                // Compute p + sum_k w_k * (R_k*p + t_k - p) across the different SE3s
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                float xt = 0, yt = 0, zt = 0;
+                float xt = x, yt = y, zt = z; // pt = p
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
                     float w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th transform "
                     float *T  = tfms_data + b*ts[0] + k*ts[1];   // Get the 'k'th transform
 
-                    // Add w_k * (R_k*p + t_k) (for X,Y,Z coordinates)
-                    xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]); // w_k * (R_k * p_x + t_k)
-                    yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]); // w_k * (R_k * p_y + t_k)
-                    zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11]); // w_k * (R_k * p_z + t_k)
+                    // Add w_k * (R_k*p + t_k - p) (for X,Y,Z coordinates)
+                    xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]  - x); // w_k * (R_k * p_x + t_k - p_x)
+                    yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]  - y); // w_k * (R_k * p_y + t_k - p_y)
+                    zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11] - z); // w_k * (R_k * p_z + t_k - p_z)
                 }
 
                 // Copy to output
@@ -145,22 +145,22 @@ int NTfm3D_backward_float(
 
                 // Gradients w.r.t pts, masks & tfms
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                float gx = 0, gy = 0, gz = 0; // Grads w.r.t input pts
+                float gx = gxt, gy = gyt, gz = gzt; // Grads w.r.t input pts (init to gradients w.r.t tfm points)
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
                     float w_k = *(masks_data + k*ms[1] + valm);   // Get the weight for the 'k'th transform "
                     float *T  = tfms_data + b*ts[0] + k*ts[1];     // Get the 'k'th transform
 
-                    // === Gradient w.r.t input point (p = R^T * gpt, summed across all the "k" transforms)
-                    gx += w_k * (T[0] * gxt + T[4] * gyt + T[8]  * gzt);
-                    gy += w_k * (T[1] * gxt + T[5] * gyt + T[9]  * gzt);
-                    gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt);
+                    // === Gradient w.r.t input point (p = R^T * gpt - gpt, summed across all the "k" transforms)
+                    gx += w_k * (T[0] * gxt + T[4] * gyt + T[8]  * gzt - gxt);
+                    gy += w_k * (T[1] * gxt + T[5] * gyt + T[9]  * gzt - gyt);
+                    gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt - gzt);
 
-                    // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k - p) * gpt
+                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]  - x) +
+                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]  - y) +
+                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11] - z);
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
@@ -248,19 +248,19 @@ int NTfm3D_forward_double(
                 double y = *(points_data + 1*ps[1] + valp);
                 double z = *(points_data + 2*ps[1] + valp);
 
-                // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
+                // Compute p + sum_k w_k * (R_k*p + t_k - p) across the different SE3s
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                double xt = 0, yt = 0, zt = 0;
+                double xt = x, yt = y, zt = z; // pt = p
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
                     double w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th transform "
                     double *T  = tfms_data + b*ts[0] + k*ts[1];   // Get the 'k'th transform
 
-                    // Add w_k * (R_k*p + t_k) (for X,Y,Z coordinates)
-                    xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]); // w_k * (R_k * p_x + t_k)
-                    yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]); // w_k * (R_k * p_y + t_k)
-                    zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11]); // w_k * (R_k * p_z + t_k)
+                    // Add w_k * (R_k*p + t_k - p) (for X,Y,Z coordinates)
+                    xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]  - x); // w_k * (R_k * p_x + t_k - p_x)
+                    yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]  - y); // w_k * (R_k * p_y + t_k - p_y)
+                    zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11] - z); // w_k * (R_k * p_z + t_k - p_z)
                 }
 
                 // Copy to output
@@ -343,22 +343,22 @@ int NTfm3D_backward_double(
 
                 // Gradients w.r.t pts, masks & tfms
                 long valm = b*ms[0] + r*ms[2] + c*ms[3];
-                double gx = 0, gy = 0, gz = 0; // Grads w.r.t input pts
+                double gx = gxt, gy = gyt, gz = gzt; // Grads w.r.t input pts (init to gradients w.r.t tfm points)
                 for (k = 0; k < nSE3; k++)
                 {
                     // Get transform & wt
                     double w_k = *(masks_data + k*ms[1] + valm);   // Get the weight for the 'k'th transform "
                     double *T  = tfms_data + b*ts[0] + k*ts[1];     // Get the 'k'th transform
 
-                    // === Gradient w.r.t input point (p = R^T * gpt, summed across all the "k" transforms)
-                    gx += w_k * (T[0] * gxt + T[4] * gyt + T[8]  * gzt);
-                    gy += w_k * (T[1] * gxt + T[5] * gyt + T[9]  * gzt);
-                    gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt);
+                    // === Gradient w.r.t input point (p = R^T * gpt - gpt, summed across all the "k" transforms)
+                    gx += w_k * (T[0] * gxt + T[4] * gyt + T[8]  * gzt - gxt);
+                    gy += w_k * (T[1] * gxt + T[5] * gyt + T[9]  * gzt - gyt);
+                    gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt - gzt);
 
-                    // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k - p) * gpt
+                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]  - x) +
+                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]  - y) +
+                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11] - z);
 
                     // === Gradients w.r.t transforms (t_k)
                     double *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform

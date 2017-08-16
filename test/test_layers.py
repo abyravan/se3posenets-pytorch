@@ -175,16 +175,35 @@ assert (gradcheck(CRt, [input1, input2]))
 
 # Grad-Check
 import torch
+import torch.nn as nn
 from layers.NTfm3D import NTfm3D
 from torch.autograd import gradcheck, Variable
 
+# Set seed
+torch.manual_seed(100)
+
+####
+# Sample data
+n = NTfm3D()
+torch.set_default_tensor_type('torch.DoubleTensor')
+pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
+masks = Variable(torch.rand(2, 4, 4, 4), requires_grad=True)
+tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
+
+# get preds and grads
+preds = n(pts, masks ,tfms)
+targs = Variable(torch.rand(2, 3, 4, 4), requires_grad=False)
+loss = nn.MSELoss()(preds, targs)
+loss.backward()
+
+####
+# Grad check
 n = NTfm3D()
 torch.set_default_tensor_type('torch.DoubleTensor')
 pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
 masks = Variable(torch.rand(2, 4, 4, 4), requires_grad=True)
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
 assert (gradcheck(n, [pts, masks, tfms]))
-
 
 #################################################################
 # CollapseRtPivots

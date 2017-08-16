@@ -52,6 +52,17 @@ def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
         bs = layer.bias.data.view(num_se3, -1)
         bs.narrow(1, 6, 1).fill_(1)  # ~ [0,0,0,1]
 
+### Initialize the last deconv layer such that the mask predicts BG for first channel & zero for all other channels
+def init_sigmoidmask_bg(layer, num_se3=8):
+    # Init weights to be close to zero, so that biases affect the result primarily
+    layer.weight.data.uniform_(-1e-3,1e-3) # sigmoid(0) ~= 0.5
+
+    # Init first channel bias to large +ve value
+    layer.bias.data.narrow(0,0,1).uniform_(4.1,3.9) # sigmoid(4) ~= 1
+
+    # Init other layers biases to large -ve values
+    layer.bias.data.narrow(0,1,num_se3-1).uniform_(-4.1,-3.9)   # sigmoid(-4) ~= 0
+
 ################################################################################
 '''
     NN Modules / Loss functions
@@ -231,7 +242,8 @@ class PoseEncoder(nn.Module):
 # Model that takes in "depth/point cloud" to generate "k"-channel masks
 class MaskEncoder(nn.Module):
     def __init__(self, num_se3, pre_conv=False, input_channels=3, use_bn=True, nonlinearity='prelu',
-                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False):
         super(MaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -279,6 +291,10 @@ class MaskEncoder(nn.Module):
             self.sharpen_start_iter = sharpen_start_iter  # Start iter for the sharpening
             self.sharpen_rate = sharpen_rate  # Rate for sharpening
             self.maskdecoder = sharpen_masks  # Use the weight-sharpener
+        elif use_sigmoid_mask:
+            #lastdeconvlayer = self.deconv5.deconv if pre_conv else self.deconv5
+            #init_sigmoidmask_bg(lastdeconvlayer, num_se3) # Initialize last deconv layer to predict BG | all zeros
+            self.maskdecoder = nn.Sigmoid() # No normalization, each pixel can belong to multiple masks but values between (0-1)
         else:
             self.maskdecoder = nn.Softmax2d()  # SoftMax normalization
 
@@ -308,8 +324,8 @@ class MaskEncoder(nn.Module):
         m = self.deconv4(m, c1)
         m = self.deconv5(m)
 
-        # Predict a mask (either wt-sharpening or soft-mask approach)
-        # Normalize to sum across 1 along the channels
+        # Predict a mask (either wt-sharpening or sigmoid-mask or soft-mask approach)
+        # Normalize to sum across 1 along the channels (only for weight sharpening or soft-mask)
         if self.use_wt_sharpening:
             noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
             m = self.maskdecoder(m, add_noise=self.training, noise_std=noise_std, pow=pow)
@@ -326,7 +342,8 @@ class MaskEncoder(nn.Module):
 class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False, pre_conv=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
-                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -367,12 +384,16 @@ class PoseMaskEncoder(nn.Module):
         else:
             self.deconv5 = nn.ConvTranspose2d(8, num_se3, kernel_size=8, stride=2, padding=3)  # 8x8, 120x160 -> 240x320
 
-        # Normalize to generate mask (wt-sharpening vs soft-mask model)
+        # Normalize to generate mask (wt-sharpening vs sigmoid-mask vs soft-mask model)
         self.use_wt_sharpening = use_wt_sharpening
         if use_wt_sharpening:
             self.sharpen_start_iter = sharpen_start_iter # Start iter for the sharpening
             self.sharpen_rate = sharpen_rate # Rate for sharpening
             self.maskdecoder = sharpen_masks # Use the weight-sharpener
+        elif use_sigmoid_mask:
+            #lastdeconvlayer = self.deconv5.deconv if pre_conv else self.deconv5
+            #init_sigmoidmask_bg(lastdeconvlayer, num_se3) # Initialize last deconv layer to predict BG | all zeros
+            self.maskdecoder = nn.Sigmoid() # No normalization, each pixel can belong to multiple masks but values between (0-1)
         else:
             self.maskdecoder = nn.Softmax2d() # SoftMax normalization
 
@@ -433,8 +454,8 @@ class PoseMaskEncoder(nn.Module):
             m = self.deconv4(m, c1)
             m = self.deconv5(m)
 
-            # Predict a mask (either wt-sharpening or soft-mask approach)
-            # Normalize to sum across 1 along the channels
+            # Predict a mask (either wt-sharpening or sigmoid-mask or soft-mask approach)
+            # Normalize to sum across 1 along the channels (only for weight sharpening or soft-mask)
             if self.use_wt_sharpening:
                 noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
                 m = self.maskdecoder(m, add_noise=self.training, noise_std=noise_std, pow=pow)
@@ -525,7 +546,8 @@ class SE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
-                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -533,11 +555,12 @@ class SE3PoseModel(nn.Module):
                                              use_kinchain=use_kinchain, input_channels=input_channels,
                                              init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                              nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
-                                             sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
+                                             sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                             use_sigmoid_mask=use_sigmoid_mask)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
-                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
+                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,)
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -563,7 +586,8 @@ class MultiStepSE3PoseModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
-                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1):
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -577,14 +601,16 @@ class MultiStepSE3PoseModel(nn.Module):
             self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
                                          use_bn=use_bn, pre_conv=pre_conv,
                                          nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
-                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
+                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                         use_sigmoid_mask=use_sigmoid_mask)
         else:
             print('Using single network for pose & mask prediction')
             self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
                                                  use_kinchain=use_kinchain, input_channels=input_channels,
                                                  init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                                  nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
-                                                 sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate)
+                                                 sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                                 use_sigmoid_mask=use_sigmoid_mask)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,

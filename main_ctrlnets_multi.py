@@ -484,7 +484,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 currpts = predpts[k-1]  # Use previous predicted point cloud
 
             # Predict transformed point cloud based on the total delta-transform so far
-            nextpts = se3nn.NTfm3D()(currpts, initmask, compdeltaposes[k])
+            nextpts = ptpredlayer()(currpts, initmask, compdeltaposes[k])
             predpts.append(nextpts)
 
             # Compute 3D point loss

@@ -187,7 +187,7 @@ torch.manual_seed(100)
 n = NTfm3D()
 torch.set_default_tensor_type('torch.DoubleTensor')
 pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
-masks = Variable(torch.rand(2, 4, 4, 4), requires_grad=True)
+masks = Variable(nn.Softmax2d()(torch.rand(2, 4, 4, 4)).data.clone(), requires_grad=True)
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
 
 # get preds and grads
@@ -199,6 +199,41 @@ loss.backward()
 ####
 # Grad check
 n = NTfm3D()
+torch.set_default_tensor_type('torch.DoubleTensor')
+pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
+masks = Variable(torch.rand(2, 4, 4, 4), requires_grad=True)
+tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
+assert (gradcheck(n, [pts, masks, tfms]))
+
+###############################################################
+# NTfm3D - Delta
+
+# Grad-Check
+import torch
+import torch.nn as nn
+from layers.NTfm3DDelta import NTfm3DDelta
+from torch.autograd import gradcheck, Variable
+
+# Set seed
+torch.manual_seed(100)
+
+####
+# Sample data
+n = NTfm3DDelta()
+torch.set_default_tensor_type('torch.DoubleTensor')
+pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
+masks = Variable(nn.Softmax2d()(torch.rand(2, 4, 4, 4)).data.clone(), requires_grad=True)
+tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
+
+# get preds and grads
+preds = n(pts, masks ,tfms)
+targs = Variable(torch.rand(2, 3, 4, 4), requires_grad=False)
+loss = nn.MSELoss()(preds, targs)
+loss.backward()
+
+####
+# Grad check
+n = NTfm3DDelta()
 torch.set_default_tensor_type('torch.DoubleTensor')
 pts = Variable(torch.rand(2, 3, 4, 4), requires_grad=True)
 masks = Variable(torch.rand(2, 4, 4, 4), requires_grad=True)

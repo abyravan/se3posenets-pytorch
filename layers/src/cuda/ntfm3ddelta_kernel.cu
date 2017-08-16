@@ -6,20 +6,48 @@ extern "C" {
 #include <math.h>
 #include <float.h>
 #include <assert.h>
-#include "cudautils.h"
 
 __constant__ float constTfms[15000];  // ... or some other big enough number
+
+// =============== HELPERS ================== //
+
+#define WARPSIZE 32
+
+// Warp-shuffle to compute the sum across the warp very efficiently
+__inline__ __device__
+float warpReduceSum_1(float val) {
+  for (int offset = WARPSIZE/2; offset > 0; offset /= 2)
+    val += __shfl_down(val, offset);
+  return val;
+}
+
+/// Get the (batch,row,col) indices corresponding to a given thread index (3D point index)
+__device__ void getCoordinates_3(const int tid, const int nrows, const int ncols,
+                                 int &batch, int &row, int &col)
+{
+    // Get col id
+    int id = tid;
+    col = id % ncols;
+    id = id / ncols;
+
+    // Get row id
+    row = id % nrows;
+    id = id / nrows;
+
+    // Get batch id
+    batch = id;
+}
 
 // =============== FWD PASS ================== //
 
 ///////////// Kernel
 // Compute the transformed points by transforming each input point by all the "k" transforms, weighting the results
 // by the mask values and summing the resulting weighted points (in parallel)
-__global__ void computeTransformedPoints(const float *points, const float *masks, float *tfmpoints,
-                                         int nrows, int ncols, int npoints, int nSE3,
-                                         int ps0, int ps1, int ps2, int ps3,
-                                         int ms0, int ms1, int ms2, int ms3,
-                                         int ts0, int ts1, int ts2, int ts3)
+__global__ void computeDeltaTransformedPoints(const float *points, const float *masks, float *tfmpoints,
+                                              int nrows, int ncols, int npoints, int nSE3,
+                                              int ps0, int ps1, int ps2, int ps3,
+                                              int ms0, int ms1, int ms2, int ms3,
+                                              int ts0, int ts1, int ts2, int ts3)
 {
     // Get the index of the point
     int id = blockIdx.x * blockDim.x + threadIdx.x; // Since they are 1D only
@@ -27,7 +55,7 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
 
     // Get the batch, row and column indices
     int b,r,c;
-    getCoordinates(id, nrows, ncols, b, r, c);
+    getCoordinates_3(id, nrows, ncols, b, r, c);
 
     // Get 3D input point (p)
     int valp = b*ps0 + r*ps2 + c*ps3; // Don't add stride along 3D dim
@@ -35,9 +63,9 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
     float y = *(points + 1*ps1 + valp);
     float z = *(points + 2*ps1 + valp);
 
-    // Compute p + sum_k w_k * (R_k*p + t_k) across the different SE3s
+    // Compute p + sum_k w_k * (R_k*p + t_k - p) across the different SE3s
     int valm = b*ms0 + r*ms2 + c*ms3;
-    float xt = 0, yt = 0, zt = 0;
+    float xt = x, yt = y, zt = z;
     for (int k = 0; k < nSE3; k++)
     {
         // Get transform & wt
@@ -45,9 +73,9 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
         float *T = constTfms + b*ts0 + k*ts1; // Get the 'k'th transform
 
         // Add w_k * (R_k*p + t_k) (for X,Y,Z coordinates)
-        xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]); // w_k * (R_k * p_x + t_k)
-        yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]); // w_k * (R_k * p_y + t_k)
-        zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11]); // w_k * (R_k * p_z + t_k)
+        xt += w_k * (T[0] * x + T[1] * y + T[2]  * z + T[3]  - x); // w_k * (R_k * p_x + t_k - p_x)
+        yt += w_k * (T[4] * x + T[5] * y + T[6]  * z + T[7]  - y); // w_k * (R_k * p_y + t_k - p_y)
+        zt += w_k * (T[8] * x + T[9] * y + T[10] * z + T[11] - z); // w_k * (R_k * p_z + t_k - p_z)
     }
 
     // Copy to output
@@ -57,7 +85,7 @@ __global__ void computeTransformedPoints(const float *points, const float *masks
 }
 
 ///////////////// FWD pass launcher
-int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float *tfms, float *tfmpoints,
+int NTfm3DDelta_ForwardLauncher(const float *points, const float *masks, const float *tfms, float *tfmpoints,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 								  const long *ps, const long *ms, const long *ts,
 								  cudaStream_t stream)
@@ -78,27 +106,27 @@ int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float 
 //    cudaEventRecord(start);
 
     // Project the points and run the depth test first (parallelize across number of points)
-    computeTransformedPoints <<< blocks, threads, 0, stream >>>(
-                                                                 points,
-                                                                 masks,
-                                                                 tfmpoints,
-                                                                 nrows,
-                                                                 ncols,
-                                                                 npoints,
-                                                                 nSE3,
-                                                                 (int) ps[0],
-                                                                 (int) ps[1],
-                                                                 (int) ps[2],
-                                                                 (int) ps[3],
-                                                                 (int) ms[0],
-                                                                 (int) ms[1],
-                                                                 (int) ms[2],
-                                                                 (int) ms[3],
-                                                                 (int) ts[0],
-                                                                 (int) ts[1],
-                                                                 (int) ts[2],
-                                                                 (int) ts[3]
-                                                                             );
+    computeDeltaTransformedPoints <<< blocks, threads, 0, stream >>>(
+                                                                     points,
+                                                                     masks,
+                                                                     tfmpoints,
+                                                                     nrows,
+                                                                     ncols,
+                                                                     npoints,
+                                                                     nSE3,
+                                                                     (int) ps[0],
+                                                                     (int) ps[1],
+                                                                     (int) ps[2],
+                                                                     (int) ps[3],
+                                                                     (int) ms[0],
+                                                                     (int) ms[1],
+                                                                     (int) ms[2],
+                                                                     (int) ms[3],
+                                                                     (int) ts[0],
+                                                                     (int) ts[1],
+                                                                     (int) ts[2],
+                                                                     (int) ts[3]
+                                                                                 );
 
     // Wait for kernel to finish
     cudaDeviceSynchronize();
@@ -123,13 +151,13 @@ int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float 
 // ============= BWD PASS =================== //
 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
-__global__ void computeGradients(const float *points, const float *masks,
-                                 float *gradPoints, float *gradMasks, float *gradTfms,
-                                 const float *gradTfmpoints,
-                                 int nrows, int ncols, int nSE3,
-                                 int ps0, int ps1, int ps2, int ps3,
-                                 int ms0, int ms1, int ms2, int ms3,
-                                 int ts0, int ts1, int ts2, int ts3)
+__global__ void computeDeltaGradients(const float *points, const float *masks,
+                                      float *gradPoints, float *gradMasks, float *gradTfms,
+                                      const float *gradTfmpoints,
+                                      int nrows, int ncols, int nSE3,
+                                      int ps0, int ps1, int ps2, int ps3,
+                                      int ms0, int ms1, int ms2, int ms3,
+                                      int ts0, int ts1, int ts2, int ts3)
 {
     // Get the row, col, batch IDs & figure out if we are within limits
     int c = (blockIdx.x * blockDim.x) + threadIdx.x; // col ID (innermost dimension in our data for coalescing)
@@ -166,7 +194,7 @@ __global__ void computeGradients(const float *points, const float *masks,
 
     // Compute the gradients over all the transforms from a given 3D point
     int valm = b*ms0 + r*ms2 + c*ms3;
-    float gx = 0, gy = 0, gz = 0; // Grads w.r.t input pts
+    float gx = gxt, gy = gyt, gz = gzt; // Grads w.r.t input pts (init to gradients w.r.t tfm points)
     for(int k = 0; k < nSE3; k++)
     {
         // Compute all the gradients if within limits or set the grads to zero
@@ -181,14 +209,14 @@ __global__ void computeGradients(const float *points, const float *masks,
             float ty = (T[1] * gxt + T[5] * gyt + T[9]  * gzt);
             float tz = (T[2] * gxt + T[6] * gyt + T[10] * gzt);
 
-            // === Gradient w.r.t input point (p = R^T * gpt, summed across all the "k" transforms)
-            gx += w_k * tx;
-            gy += w_k * ty;
-            gz += w_k * tz;
+            // === Gradient w.r.t input point (p = R^T * gpt - gpt, summed across all the "k" transforms)
+            gx += w_k * (tx - gxt);
+            gy += w_k * (ty - gyt);
+            gz += w_k * (tz - gzt);
 
-            // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
+            // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k - p) * gpt
             *(gradMasks + k*ms1 + valm) = x * tx + y * ty + z * tz +
-                                          gxt * T[3] + gyt * T[7] + gzt * T[11];
+                                          gxt * (T[3] - x) + gyt * (T[7] - y) + gzt * (T[11] - z);
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
             // Grads w.r.t rotation parameters (sum across all pts)
@@ -245,7 +273,7 @@ __global__ void computeGradients(const float *points, const float *masks,
         {
             for(int i = 0; i < 12; i++)
             {
-                float sum = warpReduceSum(sharedGradTfms[i*nThreads + tid]);
+                float sum = warpReduceSum_1(sharedGradTfms[i*nThreads + tid]);
                 if (tid == 0)
                     sharedGradTfmResults[k*12+i] = sum; // Store final summed result in shared memory, we can copy to global later in parallel
             }
@@ -268,7 +296,7 @@ __global__ void computeGradients(const float *points, const float *masks,
 
 ////////////////////////////////////
 // == BWD pass code
-int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints,
+int NTfm3DDelta_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints,
 									float *gradPoints, float *gradMasks, float *gradTfms, const float *gradTfmpoints,
 									int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 									const long *ps, const long *ms, const long *ts,
@@ -294,29 +322,29 @@ int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float
 //    cudaEventCreate(&stop);
 //    cudaEventRecord(start);
 
-    computeGradients<<< blocks, threads, sharedMemSize, stream >>>(
-                                                                    points,
-                                                                    masks,
-                                                                    gradPoints,
-                                                                    gradMasks,
-                                                                    gradTfms,
-                                                                    gradTfmpoints,
-                                                                    nrows,
-                                                                    ncols,
-                                                                    nSE3,
-                                                                    (int) ps[0],
-                                                                    (int) ps[1],
-                                                                    (int) ps[2],
-                                                                    (int) ps[3],
-                                                                    (int) ms[0],
-                                                                    (int) ms[1],
-                                                                    (int) ms[2],
-                                                                    (int) ms[3],
-                                                                    (int) ts[0],
-                                                                    (int) ts[1],
-                                                                    (int) ts[2],
-                                                                    (int) ts[3]
-                                                                                );
+    computeDeltaGradients<<< blocks, threads, sharedMemSize, stream >>>(
+                                                                        points,
+                                                                        masks,
+                                                                        gradPoints,
+                                                                        gradMasks,
+                                                                        gradTfms,
+                                                                        gradTfmpoints,
+                                                                        nrows,
+                                                                        ncols,
+                                                                        nSE3,
+                                                                        (int) ps[0],
+                                                                        (int) ps[1],
+                                                                        (int) ps[2],
+                                                                        (int) ps[3],
+                                                                        (int) ms[0],
+                                                                        (int) ms[1],
+                                                                        (int) ms[2],
+                                                                        (int) ms[3],
+                                                                        (int) ts[0],
+                                                                        (int) ts[1],
+                                                                        (int) ts[2],
+                                                                        (int) ts[3]
+                                                                                    );
 
     // Wait for kernel to finish
     cudaDeviceSynchronize();

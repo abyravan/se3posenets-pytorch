@@ -7,6 +7,7 @@ if [ -d "$CUDA_PATH" ]; then
 	mkdir lib
 	echo "Compiling CUDA kernels using nvcc..."
 	nvcc -c -o lib/ntfm3d_kernel.cu.o ntfm3d_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
+    nvcc -c -o lib/ntfm3ddelta_kernel.cu.o ntfm3ddelta_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	nvcc -c -o lib/project3dpts_kernel.cu.o project3dpts_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
     nvcc -c -o lib/wt3dtfmloss_kernel.cu.o wt3dtfmloss_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	cd ../../

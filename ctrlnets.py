@@ -473,7 +473,8 @@ class PoseMaskEncoder(nn.Module):
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, use_pivot=False, se3_type='se3aa',
-                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False):
+                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
+                 local_delta_se3=False):
         super(TransitionModel, self).__init__()
         self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
         self.num_se3 = num_se3
@@ -524,6 +525,16 @@ class TransitionModel(nn.Module):
 	    # So, the full transform is: p_t2 = p_t1 * p_t2_to_t1 (or: p_t2 (t2 to cam) = p_t1 (t1 to cam) * p_t2_to_t1 (t2 to t1))
         self.posedecoder = se3nn.ComposeRtPair()
 
+        # In case the predicted delta (D) is in the local frame of reference, we compute the delta in the global reference
+        # system in the following way:
+        # SE3_2 = SE3_1 * D_local (this takes a point from the local reference frame to the global frame)
+        # D_global = SE3_1 * D_local * SE3_1^-1 (this takes a point in the global reference frame, transforms it and returns a point in the same reference frame)
+        self.local_delta_se3 = local_delta_se3
+        if self.local_delta_se3:
+            print('Deltas predicted by transition model will affect points in local frame of reference')
+            self.rtinv = se3nn.RtInverse()
+            self.globaldeltadecoder = se3nn.ComposeRtPair()
+
     def forward(self, x):
         # Run the forward pass
         p, c = x # Pose, Control
@@ -533,11 +544,18 @@ class TransitionModel(nn.Module):
         x = torch.cat([pe,ce], 1)    # Concatenate encoded vectors
         x = self.deltase3decoder(x)  # Predict delta-SE3
         x = x.view(-1, self.num_se3, self.se3_dim)
-        x = self.deltaposedecoder(x) # Convert delta-SE3 to delta-Pose
-        y = self.posedecoder(x, p) # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
+        x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
+        if self.local_delta_se3:
+            # Predicted delta is in the local frame of reference, can't use it directly
+            z = self.posedecoder(p, x) # SE3_2 = SE3_1 * D_local (takes a point in local frame to global frame)
+            y = self.globaldeltadecoder(z, self.rtinv(p)) # D_global = SE3_2 * SE3_1^-1 = SE3_1 * D_local * SE3_1^-1 (from global to global)
+        else:
+            # Predicted delta is already in the global frame of reference, use it directly (from global to global)
+            z = self.posedecoder(x, p) # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
+            y = x # D = SE3_2 * SE3_1^-1 (global to global)
 
         # Return
-        return [x, y] # Return both the deltas and the composed next pose
+        return [y, z] # Return both the deltas (in global frame) and the composed next pose
 
 ####################################
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
@@ -547,7 +565,7 @@ class SE3PoseModel(nn.Module):
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False):
+                 use_sigmoid_mask=False, local_delta_se3=False):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -560,7 +578,8 @@ class SE3PoseModel(nn.Module):
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
-                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,)
+                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
+                                               local_delta_se3=local_delta_se3)
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -587,7 +606,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False):
+                 use_sigmoid_mask=False, local_delta_se3=False):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -615,7 +634,8 @@ class MultiStepSE3PoseModel(nn.Module):
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
-                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
+                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
+                                               local_delta_se3=local_delta_se3)
     # Predict pose only
     def forward_only_pose(self, x):
         if self.decomp_model:

@@ -8,6 +8,7 @@ from layers.Noise import Noise
 from layers.NormalizedMSELoss import NormalizedMSELoss
 from layers.NormalizedMSESqrtLoss import NormalizedMSESqrtLoss
 from layers.NTfm3D import NTfm3D
+from layers.NTfm3DDelta import NTfm3DDelta
 from layers.RtInverse import RtInverse
 from layers.SE3ToRt import SE3ToRt
 from layers.WeightedAveragePoints import WeightedAveragePoints

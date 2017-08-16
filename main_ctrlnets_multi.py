@@ -65,6 +65,11 @@ parser.add_argument('--init-posese3-iden', action='store_true', default=False,
                     help='Initialize the weights for the SE3 prediction layer of the pose-mask model to predict identity')
 parser.add_argument('--decomp-model', action='store_true', default=False,
                     help='Use a separate encoder for predicting the pose and masks')
+parser.add_argument('--local-delta-se3', action='store_true', default=False,
+                    help='Predicted delta-SE3 operates in local co-ordinates not global co-ordinates, '
+                         'so if we predict "D", full-delta = P1 * D * P1^-1, P2 = P1 * D')
+parser.add_argument('--use-ntfm-delta', action='store_true', default=False,
+                    help='Uses the variant of the NTFM3D layer that computes the weighted avg. delta')
 
 # Mask options
 parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
@@ -194,6 +199,10 @@ def main():
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
+    # NTFM3D-Delta
+    if args.use_ntfm_delta:
+        print('Using the variant of NTFM3D that computes a weighted avg. flow per point using the SE3 transforms')
+
     # Decomp model
     if args.decomp_model:
         assert args.seq_len > 1, "Decomposed pose/mask encoders can be used only with multi-step models"
@@ -240,7 +249,7 @@ def main():
                                            init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                                            use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                                            sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
-                                           use_sigmoid_mask=args.use_sigmoid_mask)
+                                           use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -396,6 +405,11 @@ def iterate(data_loader, model, tblogger, num_iters,
             predictions[name] = result
         return hook
     model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
+
+    # Point predictor
+    # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
+    # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
+    ptpredlayer = se3nn.NTfm3DDelta if args.use_ntfm_delta else se3nn.NTfm3D
 
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(

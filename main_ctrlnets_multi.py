@@ -73,6 +73,8 @@ parser.add_argument('--sharpen-start-iter', default=0, type=int,
                     metavar='N', help='Start the weight sharpening from this training iteration (default: 0)')
 parser.add_argument('--sharpen-rate', default=1.0, type=float,
                     metavar='W', help='Slope of the weight sharpening (default: 1.0)')
+parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
+                    help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
 
 # Loss options
 parser.add_argument('--pt-wt', default=0.01, type=float,
@@ -186,6 +188,9 @@ def main():
     if args.use_wt_sharpening:
         print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
             args.sharpen_start_iter, args.sharpen_rate))
+        assert not args.use_sigmoid_mask, "Cannot set both weight sharpening and sigmoid mask options together"
+    elif args.use_sigmoid_mask:
+        print('Using sigmoid to generate masks, treating each channel independently. A pixel can belong to multiple masks now')
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
 
@@ -234,7 +239,8 @@ def main():
                                            input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                            init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                                            use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                           sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model)
+                                           sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
+                                           use_sigmoid_mask=args.use_sigmoid_mask)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -469,7 +475,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # Compute 3D point loss
             # For soft mask model, compute losses without predicting points (using composed transforms). Otherwise use predicted pts
-            if args.use_wt_sharpening:
+            if args.use_wt_sharpening or args.use_sigmoid_mask:
                 # Squared error between the predicted points and target points (Same as MSE loss)
                 currptloss = pt_wt * ctrlnets.BiMSELoss(nextpts, tarpts[:,k])
             else:

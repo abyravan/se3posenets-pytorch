@@ -101,6 +101,7 @@ void Weighted3DTransformLoss_backward_float(
 			THFloatTensor *gradPoints,
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
+            THFloatTensor *gradOutput,
             int sizeAverage)
 {
     // Initialize vars
@@ -128,6 +129,7 @@ void Weighted3DTransformLoss_backward_float(
     float *gradMasks_data     = THFloatTensor_data(gradMasks);
     float *gradTfms_data      = THFloatTensor_data(gradTfms);
     float *targetpts_data     = THFloatTensor_data(targetpoints);
+    float *gradOutput_data    = THFloatTensor_data(gradOutput);
 
     // Get strides
     long *ps = points->stride;
@@ -209,18 +211,19 @@ void Weighted3DTransformLoss_backward_float(
         }
     }
 
-    // Average the gradients if sizeaverage is set
+    // Get gradient w.r.t output
+    float norm = gradOutput_data[0];
     if (sizeAverage)
     {
-        // Compute scale factor
+        // Average the gradients if "sizeAverage" is set
         long nElements = THFloatTensor_nElement(points);
-        float norm = 1.0/((float)nElements);
-
-        // Average gradients
-        THFloatTensor_mul(gradPoints, gradPoints, norm);
-        THFloatTensor_mul(gradMasks, gradMasks, norm);
-        THFloatTensor_mul(gradTfms, gradTfms, norm);
+        norm *= 1.0/((float)nElements);
     }
+
+    // Scale by grad output & average gradients
+    THFloatTensor_mul(gradPoints, gradPoints, norm);
+    THFloatTensor_mul(gradMasks, gradMasks, norm);
+    THFloatTensor_mul(gradTfms, gradTfms, norm);
 
     // Free memory
     THFloatTensor_free(points);
@@ -328,6 +331,7 @@ void Weighted3DTransformLoss_backward_double(
 			THDoubleTensor *gradPoints,
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
+            THDoubleTensor *gradOutput,
             int sizeAverage)
 {
     // Initialize vars
@@ -355,6 +359,7 @@ void Weighted3DTransformLoss_backward_double(
     double *gradMasks_data     = THDoubleTensor_data(gradMasks);
     double *gradTfms_data      = THDoubleTensor_data(gradTfms);
     double *targetpts_data     = THDoubleTensor_data(targetpoints);
+    double *gradOutput_data    = THDoubleTensor_data(gradOutput);
 
     // Get strides
     long *ps = points->stride;
@@ -436,18 +441,19 @@ void Weighted3DTransformLoss_backward_double(
         }
     }
 
-    // Average the gradients if sizeaverage is set
+    // Get gradient w.r.t output
+    double norm = gradOutput_data[0];
     if (sizeAverage)
     {
-        // Compute scale factor
+        // Average the gradients if "sizeAverage" is set
         long nElements = THDoubleTensor_nElement(points);
-        double norm = 1.0/((float)nElements);
-
-        // Average gradients
-        THDoubleTensor_mul(gradPoints, gradPoints, norm);
-        THDoubleTensor_mul(gradMasks, gradMasks, norm);
-        THDoubleTensor_mul(gradTfms, gradTfms, norm);
+        norm *= 1.0/((double)nElements);
     }
+
+    // Scale by grad output & average gradients
+    THDoubleTensor_mul(gradPoints, gradPoints, norm);
+    THDoubleTensor_mul(gradMasks, gradMasks, norm);
+    THDoubleTensor_mul(gradTfms, gradTfms, norm);
 
     // Free memory
     THDoubleTensor_free(points);

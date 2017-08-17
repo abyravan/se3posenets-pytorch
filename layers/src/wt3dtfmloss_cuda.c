@@ -84,6 +84,7 @@ void Weighted3DTransformLoss_backward_cuda(
 			THCudaTensor *gradPoints,
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
+            THCudaTensor *gradOutput,
 			int sizeAverage)
 {
     // Initialize vars
@@ -121,6 +122,7 @@ void Weighted3DTransformLoss_backward_cuda(
     float *gradPoints_data    = THCudaTensor_data(state, gradPoints);
     float *gradMasks_data 	  = THCudaTensor_data(state, gradMasks);
     float *gradTfms_data      = THCudaTensor_data(state, gradTfms);
+    float *gradOutput_data    = THCudaTensor_data(state, gradOutput);
 
 	 // Get strides
     long *ps = points->stride;
@@ -138,18 +140,20 @@ void Weighted3DTransformLoss_backward_cuda(
 		  ps, ms, ts,
 		  stream);
 
-    // Average the gradients if sizeaverage is set
+    // Get gradient w.r.t output
+    float norm;
+    cudaMemcpy(&norm, gradOutput_data, sizeof(float), cudaMemcpyDeviceToHost);
     if (sizeAverage)
     {
-        // Compute scale factor
+        // Average the gradients if "sizeAverage" is set
         long nElements = THCudaTensor_nElement(state, points);
-        float norm = 1.0/((float)nElements);
-
-        // Average gradients
-        THCudaTensor_mul(state, gradPoints, gradPoints, norm);
-        THCudaTensor_mul(state, gradMasks, gradMasks, norm);
-        THCudaTensor_mul(state, gradTfms, gradTfms, norm);
+        norm *= 1.0/((float)nElements);
     }
+
+    // Scale by grad output & average gradients
+    THCudaTensor_mul(state, gradPoints, gradPoints, norm);
+    THCudaTensor_mul(state, gradMasks, gradMasks, norm);
+    THCudaTensor_mul(state, gradTfms, gradTfms, norm);
 
     // Free memory
     THCudaTensor_free(state, points);

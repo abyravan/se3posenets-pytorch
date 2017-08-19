@@ -68,6 +68,8 @@ parser.add_argument('--local-delta-se3', action='store_true', default=False,
                          'so if we predict "D", full-delta = P1 * D * P1^-1, P2 = P1 * D')
 parser.add_argument('--use-ntfm-delta', action='store_true', default=False,
                     help='Uses the variant of the NTFM3D layer that computes the weighted avg. delta')
+parser.add_argument('--wide-model', action='store_true', default=False,
+                    help='Wider network')
 
 # Mask options
 parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
@@ -208,6 +210,10 @@ def main():
     if args.use_ntfm_delta:
         print('Using the variant of NTFM3D that computes a weighted avg. flow per point using the SE3 transforms')
 
+    # Wide model
+    if args.wide_model:
+        print('Using a wider network!')
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -249,7 +255,8 @@ def main():
                                   init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                                   use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                                   sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                                  use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3)
+                                  use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
+                                  wide=args.wide_model)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

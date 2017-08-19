@@ -194,40 +194,100 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
     # Iterate over each load directory to find the datasets
     datasets = []
     for load_dir in load_dir_splits:
-        # Get folder names & data statistics for a single load-directory
-        dirs = os.listdir(load_dir)
-        for dir in dirs:
-            path = os.path.join(load_dir, dir) + '/'
-            if (os.path.isdir(path)):
-                # Get number of images in the folder
-                statsfilename = os.path.join(path, 'postprocessstats.txt')
-                assert (os.path.exists(statsfilename))
-                with open(statsfilename, 'rb') as csvfile:
-                    reader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-                    nimages = int(reader.next()[0])
-                    print('Found {} images in the dataset: {}'.format(int(nimages), path))
+        if os.path.exists(load_dir + '/postprocessstats.txt'): # This dataset is made up of multiple sub motions
+            # Load stats file, get num images & sub-dirs
+            statsfilename = load_dir + '/postprocessstats.txt'
+            max_flow_step = (step_len * seq_len) # This is the maximum future step (k) for which we need flows (flow_k/)
+            with open(statsfilename, 'rb') as csvfile:
+                reader = csv.reader(csvfile, delimiter=' ')
+                dirnames, numdata, numinvalid = [], [], 0
+                for row in reader:
+                    invalid = int(row[0]) # If this = 1, the data for this row is not valid!
+                    if invalid:
+                        numinvalid += 1
+                    else:
+                        nimages = int(row[3])
+                        numdata.append(int(nimages - max_flow_step)) # We only have flows for these many images!
+                        dirnames.append(row[5])
+                print('Found {} motions ({} images, {} invalid) in dataset: {}'.format(len(numdata), sum(numdata), numinvalid, load_dir))
 
-                # Setup training and test splits in the dataset
-                ntrain = int(train_per * nimages)  # Use first train_per images for training
-                nval = int(val_per * nimages)  # Use next val_per images for validation set
-                ntest = int(nimages - (ntrain + nval))  # Use remaining images as test set
+            # Setup training and test splits in the dataset, here we actually split based on the sub-dirs
+            ndirs = len(dirnames)
+            ndirtrain, ndirval = int(train_per * ndirs), int(val_per * ndirs) # First train_per datasets for training, next val_per for validation
+            ndirtest = int(ndirs - (ndirtrain + ndirval)) # Rest dirs are for testing
 
-                dataset = {'path'   : path,
-                           'suffix' : img_suffix,
-                           'step'   : step_len,
-                           'seq'    : seq_len,
-                           'numdata': nimages,
-                           'train'  : [0, ntrain - 1],
-                           'val'    : [ntrain, ntrain + nval - 1],
-                           'test'   : [ntrain + nval, nimages - 1]}  # start & end inclusive
-                datasets.append(dataset)
+            # Get number of images in the datasets
+            nimages = sum(numdata)
+            ntrain = sum(numdata[:ndirtrain]) # Num images for training
+            nval   = sum(numdata[ndirtrain:ndirtrain+ndirval]) # Validation
+            ntest  = nimages - (ntrain + nval) # Number of test images
+            print('\tNum train: {} ({}), val: {} ({}), test: {} ({})'.format(
+                ndirtrain, ntrain, ndirval, nval, ndirtest, ntest))
+
+            # Setup the dataset structure
+            numdata.insert(0, 0) # Add a zero in front for the cumsum
+            dataset = {'path'   : load_dir,
+                       'suffix' : img_suffix,
+                       'step'   : step_len,
+                       'seq'    : seq_len,
+                       'numdata': nimages,
+                       'train'  : [0, ntrain - 1],
+                       'val'    : [ntrain, ntrain + nval - 1],
+                       'test'   : [ntrain + nval, nimages - 1],
+                       'subdirs': {'dirnames': dirnames,
+                                   'datahist': np.cumsum(numdata),
+                                   'train'   : [0, ndirtrain - 1],
+                                   'val'     : [ndirtrain, ndirtrain + ndirval - 1],
+                                   'test'    : [ndirtrain + ndirval, ndirs - 1]}
+                       }  # start & end inclusive
+            datasets.append(dataset)
+        else:
+            # Get folder names & data statistics for a single load-directory
+            dirs = os.listdir(load_dir)
+            for dir in dirs:
+                path = os.path.join(load_dir, dir) + '/'
+                if (os.path.isdir(path)):
+                    # Get number of images in the folder
+                    statsfilename = os.path.join(path, 'postprocessstats.txt')
+                    assert (os.path.exists(statsfilename))
+                    max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows (flow_k/)
+                    with open(statsfilename, 'rb') as csvfile:
+                        reader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
+                        nimages = int(reader.next()[0]) - max_flow_step # We only have flows for these many images!
+                        print('Found {} images in the dataset: {}'.format(int(nimages), path))
+
+                    # Setup training and test splits in the dataset
+                    ntrain = int(train_per * nimages)  # Use first train_per images for training
+                    nval = int(val_per * nimages)  # Use next val_per images for validation set
+                    ntest = int(nimages - (ntrain + nval))  # Use remaining images as test set
+
+                    dataset = {'path'   : path,
+                               'suffix' : img_suffix,
+                               'step'   : step_len,
+                               'seq'    : seq_len,
+                               'numdata': nimages,
+                               'train'  : [0, ntrain - 1],
+                               'val'    : [ntrain, ntrain + nval - 1],
+                               'test'   : [ntrain + nval, nimages - 1]}  # start & end inclusive
+                    datasets.append(dataset)
+
     return datasets
 
-
 ### Generate the data files (with all the depth, flow etc.) for each sequence
-def generate_baxter_sequence(dataset, id):
+def generate_baxter_sequence(dataset, idx):
     # Get stuff from the dataset
-    path, step, seq, suffix = dataset['path'], dataset['step'], dataset['seq'], dataset['suffix']
+    step, seq, suffix = dataset['step'], dataset['seq'], dataset['suffix']
+    # If the dataset has subdirs, find the proper sub-directory to use
+    if (dataset.has_key('subdirs')):
+        # Find the sub-directory the data falls into
+        assert (idx < dataset['numdata']);  # Check if we are within limits
+        did = np.searchsorted(dataset['subdirs']['datahist'], idx, 'right') - 1  # ID of sub-directory. If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
+        # Update the ID and path so that we get the correct images
+        id   = idx - dataset['subdirs']['datahist'][did] # ID of image within the sub-directory
+        path = dataset['path'] + '/' + dataset['subdirs']['dirnames'][did] + '/' # Get the path of the sub-directory
+    else:
+        id   = idx # Use passed in ID directly
+        path = dataset['path'] # Root of dataset
     # Setup start/end IDs of the sequence
     start, end = id, id + (step * seq)
     sequence, ct, stepid = {}, 0, step
@@ -238,7 +298,8 @@ def generate_baxter_sequence(dataset, id):
                         'state2'    : path + 'state' + str(k + 1) + '.txt',
                         'se3state1' : path + 'se3state' + str(k) + '.txt',
                         'se3state2' : path + 'se3state' + str(k + 1) + '.txt',
-                        'flow': path + 'flow_' + str(stepid) + '/flow' + suffix + str(start) + '.png'}
+                        'flow'   : path + 'flow_' + str(stepid) + '/flow' + suffix + str(start) + '.png',
+                        'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png'}
         stepid += step  # Get flow from start image to the next step
         ct += 1  # Increment counter
     return sequence

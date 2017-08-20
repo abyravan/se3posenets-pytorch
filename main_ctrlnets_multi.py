@@ -450,8 +450,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         pts      = util.to_var(sample['points'].type(deftype), requires_grad=True)
         ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=True)
         fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
-        #tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
-        #tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
+        tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
+        tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -531,7 +531,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type)
             else:
                 # Use the weighted 3D transform loss, do not use explicitly predicted points
-                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], (pts[:,0] + fwdflows[:,k]))  # Weighted point loss!
+                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], tarpts[:,k])  # Weighted point loss!
 
             # Compute pose consistency loss
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model

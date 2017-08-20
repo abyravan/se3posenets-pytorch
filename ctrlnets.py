@@ -113,8 +113,7 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
     # Get number of points that move in each example of the batch
     bsz = input.size(0) # batch size
     assert input.is_same_size(target), "Input and Target sizes need to match"
-    nummotionpts = (motion.abs().sum(1) > thresh).float().view(bsz, -1).sum(1) # Per element in batch
-    nummotionpts.clamp(min=100) # Takes care of numerical instabilities & acts as margin
+    nummotionpts = (motion.abs().sum(1) > thresh).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
     # Compute loss
     if loss_type == 'mse':
         diff = (input - target).view(bsz, -1)

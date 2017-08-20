@@ -78,6 +78,62 @@ def BiMSELoss(input, target, size_average=True):
     else:
         return loss
 
+# ABS Loss that gives gradients w.r.t both input & target
+def BiAbsLoss(input, target, size_average=True):
+    loss = (input - target).abs().view(-1).sum()
+    if size_average:
+        return loss / input.nelement()
+    else:
+        return loss
+
+# NORMMSESQRT Loss that gives gradients w.r.t both input & target
+def BiNormMSESqrtLoss(input, target, size_average=True):
+    sigma = (0.5 * target.abs()).clamp(min=5e-3).view(-1) # scale * y, clamp for numerical stability
+    diff = (input - target).view(-1)
+    loss = 0.5 * diff.pow(2).div(sigma).sum()  # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
+    if size_average:
+        return loss / input.nelement()
+    else:
+        return loss
+
+# Loss for 3D point errors
+def Loss3D(input, target, loss_type='mse'):
+    if loss_type == 'mse':
+        return BiMSELoss(input, target)
+    elif loss_type == 'abs':
+        return BiAbsLoss(input, target)
+    elif loss_type == 'normmsesqrt':
+        return BiNormMSESqrtLoss(input, target)
+    else:
+        assert False, "Unknown loss type: " + loss_type
+
+# Loss normalized by the number of points that move in the GT flow
+def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
+                           thresh=2.5e-3):
+    # Get number of points that move in each example of the batch
+    bsz = input.size(0) # batch size
+    assert input.is_same_size(target), "Input and Target sizes need to match"
+    nummotionpts = (motion.abs().sum(1) > thresh).float().view(bsz, -1).sum(1) # Per element in batch
+    nummotionpts.clamp(min=100) # Takes care of numerical instabilities & acts as margin
+    # Compute loss
+    if loss_type == 'mse':
+        diff = (input - target).view(bsz, -1)
+        loss = diff.pow(2).sum(1).div(2*nummotionpts).mean() # 0.5 * sum_i (err_i/N_i); err_i = sum_j (pred_ij - tar_ij)^2
+    elif loss_type == 'abs':
+        diff = (input - target).view(bsz, -1)
+        loss = diff.abs().sum(1).div(nummotionpts).mean()  # sum_i (err_i/N_i); err_i = sum_j |pred_ij - tar_ij|_1
+    elif loss_type == 'normmsesqrt':
+        # This loss is a scale invariant version of the mse loss
+        # Scales the squared error by a variance term based on the target magnitude
+        # TODO: DO we need args for the scale & default sigma?
+        sigma = (0.5 * target.abs()).clamp(min = 5e-3).view(bsz, -1) # scale * y, clamp for numerical stability
+        diff  = (input - target).view(bsz, -1)
+        loss  = diff.pow(2).div(sigma).sum(1).div(2*nummotionpts).mean() # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
+    else:
+        assert False, "Unknown loss type: " + loss_type
+    # Return
+    return loss
+
 ### Basic Conv + Pool + BN + Non-linearity structure
 class BasicConv2D(nn.Module):
     def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):

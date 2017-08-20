@@ -84,6 +84,12 @@ parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
                     help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
 
 # Loss options
+parser.add_argument('--loss-type', default='mse', type=str,
+                    metavar='STR', help='Type of loss to use for 3D point errors, only works if we are not using soft-masks (default: mse | abs, normmsesqrt )')
+parser.add_argument('--motion-norm-loss', action='store_true', default=False,
+                    help='normalize the losses by number of points that actually move instead of size average (default: False)')
+parser.add_argument('--delta-flow-loss', action='store_true', default=False,
+                    help='Penalize only the current flow per unroll of the network rather than penalizing the entire flow for each unroll (default: False)')
 parser.add_argument('--pt-wt', default=0.01, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 0.01)')
 parser.add_argument('--consis-wt', default=0.01, type=float,
@@ -200,6 +206,14 @@ def main():
         print('Using sigmoid to generate masks, treating each channel independently. A pixel can belong to multiple masks now')
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
+        assert not args.motion_norm_loss, "Cannot use normalized-motion losses along with soft-masking"
+        assert not args.delta_flow_loss,  "Cannot use delta-flow losses along with soft-masking"
+
+    # Loss type
+    if args.use_wt_sharpening or args.use_sigmoid_mask:
+        norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
+        delta_loss  = ', Penalizing the delta-flow loss per unroll' if args.delta_flow_loss else ''
+        print('3D loss type: ' + args.loss_type + norm_motion + delta_loss)
 
     # NTFM3D-Delta
     if args.use_ntfm_delta:
@@ -433,10 +447,11 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts    = util.to_var(sample['points'].type(deftype), requires_grad=True)
-        ctrls  = util.to_var(sample['controls'].type(deftype), requires_grad=True)
-        tarpts = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
-        tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
+        pts      = util.to_var(sample['points'].type(deftype), requires_grad=True)
+        ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=True)
+        fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
+        #tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
+        #tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -497,11 +512,26 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Compute 3D point loss
             # For soft mask model, compute losses without predicting points (using composed transforms). Otherwise use predicted pts
             if args.use_wt_sharpening or args.use_sigmoid_mask:
-                # Squared error between the predicted points and target points (Same as MSE loss)
-                currptloss = pt_wt * ctrlnets.BiMSELoss(nextpts, tarpts[:,k])
+                # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
+                # TODO: For normmse losses we can also try to penalize the flow at this step (so, target flow for this step & pred flow in this step)
+                if args.delta_flow_loss:
+                    # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
+                    # and compare that against the predicted flows for that step alone!
+                    inputs  = nextpts - currpts # Delta flow for that step
+                    targets = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1]) # Flow for those points in that step alone!
+                else:
+                    inputs  = nextpts - pts[:,0] # Total flow till that step
+                    targets = fwdflows[:,k] # Flow for points for all steps till now
+                    #inputs, targets = [nextpts, tarpts[:,k]] if (args.loss_type == 'normmsesqrt') else [nextpts-pts[:,0], tarpts[:,k]-pts[:,0]]
+                    #motion = fwdflows[:,k]
+                # If motion-normalized loss, pass in GT flows
+                if args.motion_norm_loss:
+                    currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=targets, loss_type=args.loss_type)
+                else:
+                    currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type)
             else:
                 # Use the weighted 3D transform loss, do not use explicitly predicted points
-                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], tarpts[:,k])  # Weighted point loss!
+                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], (pts[:,0] + fwdflows[:,k]))  # Weighted point loss!
 
             # Compute pose consistency loss
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
@@ -543,7 +573,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
         predflows = torch.cat([(x.data - pts.data[:,0]).unsqueeze(1) for x in predpts], 1)
-        flows = sample['fwdflows'].type(deftype)
+        flows = fwdflows.data
         flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
 
         # Update stats

@@ -82,6 +82,10 @@ parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
                     help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
 
 # Loss options
+parser.add_argument('--loss-type', default='mse', type=str,
+                    metavar='STR', help='Type of loss to use for 3D point errors, only works if we are not using soft-masks (default: mse | abs, normmsesqrt )')
+parser.add_argument('--motion-norm-loss', action='store_true', default=False,
+                    help='normalize the losses by number of points that actually move instead of size average (default: False)')
 parser.add_argument('--fwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
 parser.add_argument('--bwd-wt', default=1.0, type=float,
@@ -205,6 +209,12 @@ def main():
         print('Using sigmoid to generate masks, treating each channel independently. A pixel can belong to multiple masks now')
     else:
         print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
+        assert not args.motion_norm_loss, "Cannot use normalized-motion losses along with soft-masking"
+
+    # Loss type
+    if args.use_wt_sharpening or args.use_sigmoid_mask:
+        norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
+        print('3D loss type: ' + args.loss_type + norm_motion)
 
     # NTFM3D-Delta
     if args.use_ntfm_delta:
@@ -440,8 +450,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         pts_1    = util.to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=True)
         pts_2    = util.to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=True)
         ctrls_1  = util.to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=True)
-        tarpts_1 = util.to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
-        tarpts_2 = util.to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
+        fwdflows = util.to_var(sample['fwdflows'][:, 0].clone().type(deftype), requires_grad=False)
+        bwdflows = util.to_var(sample['bwdflows'][:, 0].clone().type(deftype), requires_grad=False)
+        #tarpts_1 = util.to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
+        #tarpts_2 = util.to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -464,13 +476,23 @@ def iterate(data_loader, model, tblogger, num_iters,
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if args.use_wt_sharpening or args.use_sigmoid_mask:
-            # Squared error between the predicted points and target points (Same as MSE loss)
-            ptloss_1 = fwd_wt * ctrlnets.BiMSELoss(predpts_1, tarpts_1)
-            ptloss_2 = bwd_wt * ctrlnets.BiMSELoss(predpts_2, tarpts_2)
+            # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
+            #inputs_1, targets_1 = [predpts_1, tarpts_1] if (args.loss_type == 'normmsesqrt') else [predpts_1-pts_1, tarpts_1-pts_1]
+            #inputs_2, targets_2 = [predpts_2, tarpts_2] if (args.loss_type == 'normmsesqrt') else [predpts_2-pts_2, tarpts_2-pts_2]
+            # We just measure error in flow space
+            inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
+            inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
+            # If motion-normalized loss, pass in GT flows
+            if args.motion_norm_loss:
+                ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows, loss_type=args.loss_type)
+                ptloss_2 = bwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_2, targets_2, bwdflows, loss_type=args.loss_type)
+            else:
+                ptloss_1 = fwd_wt * ctrlnets.Loss3D(inputs_1, targets_1, loss_type=args.loss_type)
+                ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
         else:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, (pts_1 + fwdflows))  # Predict pts in FWD dirn and compare to target @ t2
+            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, (pts_2 + bwdflows))  # Predict pts in BWD dirn and compare to target @ t1
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
@@ -523,14 +545,12 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
-        predfwdflows = (predpts_1.data - pts_1.data)
-        predbwdflows = (predpts_2.data - pts_2.data)
-        fwdflows = sample['fwdflows'][:, 0].clone().type_as(predfwdflows)
-        bwdflows = sample['bwdflows'][:, 0].clone().type_as(predbwdflows)
-        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.unsqueeze(1),
-                                                                           fwdflows.unsqueeze(1))
-        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.unsqueeze(1),
-                                                                           bwdflows.unsqueeze(1))
+        predfwdflows = (predpts_1 - pts_1)
+        predbwdflows = (predpts_2 - pts_2)
+        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1),
+                                                                           fwdflows.data.unsqueeze(1))
+        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1),
+                                                                           bwdflows.data.unsqueeze(1))
 
         # Update stats
         flowlossm_sum_f.update(flowloss_sum_fwd); flowlossm_sum_b.update(flowloss_sum_bwd)
@@ -582,10 +602,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 id = random.randint(0, sample['points'].size(0)-1)
 
                 # Concat the flows, depths and masks into one tensor
-                flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.narrow(0,id,1),
-                                                                   bwdflows.narrow(0,id,1),
-                                                                   predfwdflows.narrow(0,id,1),
-                                                                   predbwdflows.narrow(0,id,1)], 0).cpu(),
+                flowdisp  = torchvision.utils.make_grid(torch.cat([gtfwdflows.data.narrow(0,id,1),
+                                                                   gtbwdflows.data.narrow(0,id,1),
+                                                                   predfwdflows.data.narrow(0,id,1),
+                                                                   predbwdflows.data.narrow(0,id,1)], 0).cpu(),
                                                         nrow=2, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),

@@ -23,6 +23,8 @@ from util import AverageMeter, DataEnumerator
 # Common
 import options
 parser = options.setup_comon_options()
+parser.add_argument('-m', '--num', default=100, type=int,
+                    metavar='N', help='Number of batches to load (default: 100)')
 
 ################ MAIN
 #@profile
@@ -86,10 +88,9 @@ def main():
 
     # Test
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    num = 50
-    print('Loading {} batches to test speed'.format(num))
+    print('Loading {} batches to test speed'.format(args.num))
     data_time = AverageMeter()
-    for k in xrange(num):
+    for k in xrange(args.num):
         # Time it
         st = time.time()
 
@@ -111,8 +112,8 @@ def main():
         time.sleep(0.25)
 
         # Stats
-        if (k % 10 == 0) or (k == num-1):
-            print('Loaded {}/{} batches, Total/Avg time: {}/{}'.format(k+1, num, data_time.sum, data_time.avg))
+        if (k % 10 == 0) or (k == args.num-1):
+            print('Loaded {}/{} batches, Total/Avg time: {}/{}'.format(k+1, args.num, data_time.sum, data_time.avg))
 
 ################ RUN MAIN
 if __name__ == '__main__':

@@ -1,3 +1,11 @@
+# Add path to necessary packages
+import os.path as osp
+import sys
+this_dir = osp.dirname(__file__)
+lib_path = osp.join(this_dir, '../../')
+if lib_path not in sys.path:
+    sys.path.insert(0, lib_path)
+
 # Global imports
 import time
 

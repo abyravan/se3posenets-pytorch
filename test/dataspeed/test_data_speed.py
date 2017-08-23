@@ -82,6 +82,7 @@ def main():
     train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                                         num_workers=args.num_workers, pin_memory=args.use_pin_memory,
                                         collate_fn=train_dataset.collate_batch))
+    time.sleep(10) # Wait for some loading to happen initially
 
     # Test
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type

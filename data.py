@@ -188,7 +188,8 @@ def NTfm3D(points, masks, transforms, output=None):
 ### Helper functions for reading the data directories & loading train/test files
 def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, train_per=0.6, val_per=0.15):
     # Get all the load directories
-    #load_dir_splits = load_dirs.split(',,')  # Get all the load directories
+    if type(load_dirs) == str: # BWDs compatibility
+        load_dirs = load_dirs.split(',,')  # Get all the load directories
     assert (train_per + val_per < 1);  # Train + val < test
 
     # Iterate over each load directory to find the datasets

@@ -74,7 +74,7 @@ def main():
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=True)
+                                                                       compute_bwdflows=False)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

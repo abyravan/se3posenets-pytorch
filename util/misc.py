@@ -44,3 +44,48 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+
+### Write to stdout and log file
+class Tee(object):
+    def __init__(self, stdout, logfile):
+        self.stdout = stdout
+        self.logfile = logfile
+
+    def write(self, obj):
+        self.stdout.write(obj)
+        self.logfile.write(obj)
+
+    def flush(self):
+        self.stdout.flush()
+
+    def __del__(self):
+        self.logfile.close()
+
+### Enumerate over data
+class DataEnumerator(object):
+    """Allows iterating over a data loader easily"""
+    def __init__(self, data):
+        self.data   = data # Store the data
+        self.len    = len(self.data) # Number of samples in the entire data
+        self.niters = 0    # Num iterations in current run
+        self.nruns  = 0    # Num rounds over the entire data
+        self.enumerator = enumerate(self.data) # Keeps an iterator around
+
+    def next(self):
+        try:
+            sample = self.enumerator.next() # Get next sample
+        except StopIteration:
+            self.enumerator = enumerate(self.data) # Reset enumerator once it reaches the end
+            self.nruns += 1 # Done with one complete run of the data
+            self.niters = 0 # Num iters in current run
+            sample = self.enumerator.next() # Get next sample
+            #print('Completed a run over the data. Num total runs: {}, Num total iters: {}'.format(
+            #    self.nruns, self.niters+1))
+        self.niters += 1 # Increment iteration count
+        return sample # Return sample
+
+    def __len__(self):
+        return len(self.data)
+
+    def iteration_count(self):
+        return (self.nruns * self.len) + self.niters

@@ -1,5 +1,4 @@
 # Global imports
-import argparse
 import os
 import sys
 import shutil
@@ -21,121 +20,20 @@ import se3layers as se3nn
 import data
 import ctrlnets
 import util
-from util import AverageMeter
+from util import AverageMeter, Tee, DataEnumerator
 
-# Parse arguments
-parser = argparse.ArgumentParser(description='SE3-Pose-Nets Training')
+#### Setup options
+# Common
+import options
+parser = options.setup_comon_options()
 
-# Dataset options
-parser.add_argument('data', metavar='DIR',
-                    help='path to dataset')
-parser.add_argument('-b', '--batch-size', default=32, type=int,
-                    metavar='N', help='mini-batch size (default: 32)')
-parser.add_argument('-j', '--num-workers', default=4, type=int, metavar='N',
-                    help='number of data loading workers (default: 4)')
-parser.add_argument('--train-per', default=0.6, type=float,
-                    metavar='FRAC', help='fraction of data for the training set (default: 0.6)')
-parser.add_argument('--val-per', default=0.15, type=float,
-                    metavar='FRAC', help='fraction of data for the validation set (default: 0.15)')
-parser.add_argument('--img-scale', default=1e-4, type=float,
-                    metavar='IS', help='conversion scalar from depth resolution to meters (default: 1e-4)')
-parser.add_argument('--step-len', default=1, type=int,
-                    metavar='N', help='number of frames separating each example in the training sequence (default: 1)')
-parser.add_argument('--seq-len', default=1, type=int,
-                    metavar='N', help='length of the training sequence (default: 1)')
-parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
-                    metavar='STR', help='Control type: actvel | actacc | comvel | comacc | comboth | [actdiffvel] | comdiffvel')
-
-# Model options
-parser.add_argument('--no-batch-norm', action='store_true', default=False,
-                    help='disables batch normalization (default: False)')
-parser.add_argument('--pre-conv', action='store_true', default=False,
-                    help='puts batch normalization and non-linearity before the convolution / de-convolution (default: False)')
-parser.add_argument('--nonlin', default='prelu', type=str,
-                    metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu')
-parser.add_argument('--se3-type', default='se3aa', type=str,
-                    metavar='SE3', help='SE3 parameterization: [se3aa] | se3quat | se3spquat | se3euler | affine')
-parser.add_argument('--pred-pivot', action='store_true', default=False,
-                    help='Predict pivot in addition to the SE3 parameters (default: False)')
-parser.add_argument('-n', '--num-se3', type=int, default=8,
-                    help='Number of SE3s to predict (default: 8)')
-parser.add_argument('--init-transse3-iden', action='store_true', default=False,
-                    help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
-parser.add_argument('--init-posese3-iden', action='store_true', default=False,
-                    help='Initialize the weights for the SE3 prediction layer of the pose-mask model to predict identity')
-parser.add_argument('--local-delta-se3', action='store_true', default=False,
-                    help='Predicted delta-SE3 operates in local co-ordinates not global co-ordinates, '
-                         'so if we predict "D", full-delta = P1 * D * P1^-1, P2 = P1 * D')
-parser.add_argument('--use-ntfm-delta', action='store_true', default=False,
-                    help='Uses the variant of the NTFM3D layer that computes the weighted avg. delta')
-parser.add_argument('--wide-model', action='store_true', default=False,
-                    help='Wider network')
-
-# Mask options
-parser.add_argument('--use-wt-sharpening', action='store_true', default=False,
-                    help='use weight sharpening for the mask prediction (instead of the soft-mask model) (default: False)')
-parser.add_argument('--sharpen-start-iter', default=0, type=int,
-                    metavar='N', help='Start the weight sharpening from this training iteration (default: 0)')
-parser.add_argument('--sharpen-rate', default=1.0, type=float,
-                    metavar='W', help='Slope of the weight sharpening (default: 1.0)')
-parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
-                    help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
-
-# Loss options
-parser.add_argument('--loss-type', default='mse', type=str,
-                    metavar='STR', help='Type of loss to use for 3D point errors, only works if we are not using soft-masks (default: mse | abs, normmsesqrt )')
-parser.add_argument('--motion-norm-loss', action='store_true', default=False,
-                    help='normalize the losses by number of points that actually move instead of size average (default: False)')
+# Specific
 parser.add_argument('--fwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
 parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
-parser.add_argument('--consis-wt', default=0.01, type=float,
-                    metavar='WT', help='Weight for the pose consistency loss (default: 0.01)')
 parser.add_argument('--poswtavg-wt', default=0, type=float,
                     metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
-parser.add_argument('--loss-scale', default=10000, type=float,
-                    metavar='WT', help='Default scale factor for all the losses (default: 1000)')
-
-# Training options
-parser.add_argument('--no-cuda', action='store_true', default=False,
-                    help='disables CUDA training (default: False)')
-parser.add_argument('--use-pin-memory', action='store_true', default=False,
-                    help='Use pin memory - note that this uses additional CPU RAM (default: False)')
-parser.add_argument('--epochs', default=100, type=int, metavar='N',
-                    help='number of total epochs to run (default: 100)')
-parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
-                    help='manual epoch number (useful on restarts) (default: 0)')
-parser.add_argument('--train-ipe', default=2000, type=int, metavar='N',
-                    help='number of training iterations per epoch (default: 1000)')
-parser.add_argument('--val-ipe', default=500, type=int, metavar='N',
-                    help='number of validation iterations per epoch (default: 500)')
-parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
-                    help='evaluate model on test set (default: False)')
-parser.add_argument('--seed', type=int, default=1, metavar='S',
-                    help='random seed (default: 1)')
-
-# Optimization options
-parser.add_argument('-o', '--optimization', default='adam', type=str,
-                    metavar='OPTIM', help='type of optimization: sgd | [adam]')
-parser.add_argument('--lr', '--learning-rate', default=1e-3, type=float,
-                    metavar='LR', help='initial learning rate (default: 1e-3)')
-parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
-                    help='momentum (default: 0.9)')
-parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
-                    metavar='W', help='weight decay (default: 1e-4)')
-parser.add_argument('--lr-decay', default=0.1, type=float, metavar='M',
-                    help='Decay learning rate by this value every decay-epochs (default: 0.1)')
-parser.add_argument('--decay-epochs', default=30, type=int,
-                    metavar='M', help='Decay learning rate every this many epochs (default: 10)')
-
-# Display/Save options
-parser.add_argument('--disp-freq', '-p', default=20, type=int,
-                    metavar='N', help='print/disp/save frequency (default: 10)')
-parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                    help='path to latest checkpoint (default: none)')
-parser.add_argument('-s', '--save-dir', default='results', type=str,
-                    metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
 
 ################ MAIN
 #@profile
@@ -152,14 +50,11 @@ def main():
     now = time.strftime("%c")
     tblogger = util.TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
 
-    # TODO: Fix logfile to save prints - create new one if it is evaluated / resumed
-    '''
     # Create logfile to save prints
     logfile = open(args.save_dir + '/logs/' + now + '/logfile.txt', 'w')
     backup = sys.stdout
     sys.stdout = Tee(sys.stdout, logfile)
-    '''
-    
+
     ########################
     ############ Parse options
     # Set seed
@@ -173,7 +68,7 @@ def main():
     print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
 
     # Read mesh ids and camera data
-    load_dir = args.data.split(',,')[0]
+    load_dir = args.data[0] #args.data.split(',,')[0]
     args.baxter_labels = data.read_baxter_labels_file(load_dir + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
     args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
@@ -477,11 +372,11 @@ def iterate(data_loader, model, tblogger, num_iters,
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if args.use_wt_sharpening or args.use_sigmoid_mask:
             # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
-            #inputs_1, targets_1 = [predpts_1, tarpts_1] if (args.loss_type == 'normmsesqrt') else [predpts_1-pts_1, tarpts_1-pts_1]
-            #inputs_2, targets_2 = [predpts_2, tarpts_2] if (args.loss_type == 'normmsesqrt') else [predpts_2-pts_2, tarpts_2-pts_2]
+            inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type == 'normmsesqrt') else [predpts_1, tarpts_1]
+            inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type == 'normmsesqrt') else [predpts_2, tarpts_2]
             # We just measure error in flow space
-            inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
-            inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
+            #inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
+            #inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
             # If motion-normalized loss, pass in GT flows
             if args.motion_norm_loss:
                 ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows, loss_type=args.loss_type)
@@ -748,46 +643,6 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
-
-################# HELPER CLASSES
-
-### Enumerate oer data
-class DataEnumerator(object):
-    """Allows iterating over a data loader easily"""
-    def __init__(self, data):
-        self.data   = data # Store the data
-        self.len    = len(self.data) # Number of samples in the entire data
-        self.niters = 0    # Num iterations in current run
-        self.nruns  = 0    # Num rounds over the entire data
-        self.enumerator = enumerate(self.data) # Keeps an iterator around
-
-    def next(self):
-        try:
-            sample = self.enumerator.next() # Get next sample
-        except StopIteration:
-            self.enumerator = enumerate(self.data) # Reset enumerator once it reaches the end
-            self.nruns += 1 # Done with one complete run of the data
-            self.niters = 0 # Num iters in current run
-            sample = self.enumerator.next() # Get next sample
-            #print('Completed a run over the data. Num total runs: {}, Num total iters: {}'.format(
-            #    self.nruns, self.niters+1))
-        self.niters += 1 # Increment iteration count
-        return sample # Return sample
-
-    def __len__(self):
-        return len(self.data)
-
-    def iteration_count(self):
-        return (self.nruns * self.len) + self.niters
-
-### Write to stdout and log file
-class Tee(object):
-    def __init__(self, *files):
-        self.files = files
-
-    def write(self, obj):
-        for f in self.files:
-            f.write(obj)
 
 ################ RUN MAIN
 if __name__ == '__main__':

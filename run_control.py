@@ -14,7 +14,7 @@ img_ht, img_wd, img_scale = 240, 320, 1e-4
 seq_len = 1 # For now, only single step
 num_se3 = 8 # TODO: Especially this parameter!
 dt = 1.0/30.0
-oldgrippermodel = True # TODO: When are we actually going to use the new ones?
+oldgrippermodel = False # TODO: When are we actually going to use the new ones?
 cam_intrinsics = {'fx': 589.3664541825391 / 2,
                   'fy': 589.3664541825391 / 2,
                   'cx': 320.5 / 2,
@@ -151,7 +151,7 @@ def main():
                                       input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                       init_posese3_iden=False, init_transse3_iden=False,
                                       use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                      sharpen_rate=args.sharpen_rate, pre_conv=False) # TODO: pre-conv
+                                      sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model) # TODO: pre-conv
         posemaskpredfn = model.posemaskmodel.forward
     else:
         model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
@@ -162,7 +162,7 @@ def main():
                                                use_wt_sharpening=args.use_wt_sharpening,
                                                sharpen_start_iter=args.sharpen_start_iter,
                                                sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                                               decomp_model=args.decomp_model)
+                                               decomp_model=args.decomp_model, wide=args.wide_model)
         posemaskpredfn = model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled

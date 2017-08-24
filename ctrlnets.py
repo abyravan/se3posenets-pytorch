@@ -88,7 +88,7 @@ def BiAbsLoss(input, target, size_average=True):
 
 # NORMMSESQRT Loss that gives gradients w.r.t both input & target
 def BiNormMSESqrtLoss(input, target, size_average=True):
-    sigma = (0.5 * target.abs()).clamp(min=5e-3).view(-1) # scale * y, clamp for numerical stability
+    sigma = (0.5 * target.abs()).clamp(min=2e-3).view(-1) # scale * y, clamp for numerical stability (changed clamp to 2mm)
     diff = (input - target).view(-1)
     loss = 0.5 * diff.pow(2).div(sigma).sum()  # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     if size_average:
@@ -125,7 +125,7 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
         # This loss is a scale invariant version of the mse loss
         # Scales the squared error by a variance term based on the target magnitude
         # TODO: DO we need args for the scale & default sigma?
-        sigma = (0.5 * target.abs()).clamp(min = 5e-3).view(bsz, -1) # scale * y, clamp for numerical stability
+        sigma = (0.5 * target.abs()).clamp(min = 2e-3).view(bsz, -1) # scale * y, clamp for numerical stability (Changed clamp to 2mm)
         diff  = (input - target).view(bsz, -1)
         loss  = diff.pow(2).div(sigma).sum(1).div(2*nummotionpts).mean() # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     else:

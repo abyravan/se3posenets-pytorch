@@ -273,11 +273,10 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
             gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
             // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-            float err = 0.5 * ( (xp-xt)*(xp-xt) + (yp-yt)*(yp-yt) + (zp-zt)*(zp-zt) );
             if (useMaskGradMag)
-                *(gradMasks + k*ms1 + valm) = err;
+                *(gradMasks + k*ms1 + valm) = 0.5 * ( (xp-xt)*(xp-xt) + (yp-yt)*(yp-yt) + (zp-zt)*(zp-zt) );
             else
-                *(gradMasks + k*ms1 + valm) = sgn(err);
+                *(gradMasks + k*ms1 + valm) = 0.5; // sign is always +ve
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
             // Grads w.r.t rotation parameters (sum across all pts)

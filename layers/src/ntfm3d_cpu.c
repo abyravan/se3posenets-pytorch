@@ -174,9 +174,9 @@ int NTfm3D_backward_float(
                                                              gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
                                                              gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
                     else
-                        *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                             sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                             sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+                        *(gradMasks_data + k*ms[1] + valm) = sgnf(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgnf(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgnf(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
@@ -378,9 +378,9 @@ int NTfm3D_backward_double(
                                                              gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
                                                              gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
                     else
-                        *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                             sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                             sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+                        *(gradMasks_data + k*ms[1] + valm) = sgnd(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgnd(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgnd(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
 
                     // === Gradients w.r.t transforms (t_k)

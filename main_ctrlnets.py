@@ -131,7 +131,7 @@ def main():
     # Mask gradient magnitude
     args.use_mask_gradmag = not args.no_mask_gradmag
     if args.no_mask_gradmag:
-        assert (not args.use_wt_sharpening or args.use_sigmoid_mask), "Option to not use mask gradient magnitudes is currently only possible with soft-masking"
+        assert (not args.use_sigmoid_mask or args.use_ntfm_delta), "Option to not use mask gradient magnitudes is not possible with sigmoid-masking/NTFM delta"
         print("Using only the gradient's sign for training the masks. Discarding the magnitude")
 
     # TODO: Add option for using encoder pose for tfm t2
@@ -380,8 +380,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute predicted points based on the masks
         # TODO: Add option for using encoder pose for tfm t2
-        predpts_1 = ptpredlayer()(pts_1, mask_1, deltapose_t_12)
-        predpts_2 = ptpredlayer()(pts_2, mask_2, deltapose_t_21)
+        predpts_1 = ptpredlayer(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12)
+        predpts_2 = ptpredlayer(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21)
 
         # Compute 3D point loss (3D losses @ t & t+1)
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts

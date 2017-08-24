@@ -12,7 +12,7 @@ int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float 
 
 int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints,
 									float *gradPoints, float *gradMasks, float *gradTfms, const float *gradTfmPoints,
-									int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
+									int useMaskGradMag, int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 									const long *ps, const long *ms, const long *ts,
 									cudaStream_t stream);
 

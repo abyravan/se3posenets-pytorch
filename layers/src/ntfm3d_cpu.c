@@ -1,6 +1,16 @@
 #include <TH/TH.h>
 #include <assert.h>
 
+// Sign of a number
+inline int sgnf(float val) {
+    return (0.0f < val) - (val < 0.0f);
+}
+
+// Sign of a number
+inline int sgnd(double val) {
+    return (0.0 < val) - (val < 0.0);
+}
+
 // ===== FLOAT DATA
 
 int NTfm3D_forward_float(
@@ -90,7 +100,8 @@ int NTfm3D_backward_float(
 			THFloatTensor *gradPoints,
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
-			THFloatTensor *gradTfmpoints)
+			THFloatTensor *gradTfmpoints,
+            int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -158,9 +169,14 @@ int NTfm3D_backward_float(
                     gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt);
 
                     // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    if (useMaskGradMag)
+                        *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    else
+                        *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
@@ -288,7 +304,8 @@ int NTfm3D_backward_double(
 			THDoubleTensor *gradPoints,
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
-			THDoubleTensor *gradTfmpoints)
+			THDoubleTensor *gradTfmpoints,
+			int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -356,9 +373,15 @@ int NTfm3D_backward_double(
                     gz += w_k * (T[2] * gxt + T[6] * gyt + T[10] * gzt);
 
                     // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-                    *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                         gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                         gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    if (useMaskGradMag)
+                        *(gradMasks_data + k*ms[1] + valm) = gxt * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
+                    else
+                        *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+
 
                     // === Gradients w.r.t transforms (t_k)
                     double *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform

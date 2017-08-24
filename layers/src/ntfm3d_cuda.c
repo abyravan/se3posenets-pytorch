@@ -76,7 +76,8 @@ int NTfm3D_backward_cuda(
 			THCudaTensor *gradPoints,
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
-			THCudaTensor *gradTfmpoints)
+			THCudaTensor *gradTfmpoints,
+            int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -125,7 +126,7 @@ int NTfm3D_backward_cuda(
 	// Run the kernel
     NTfm3D_BackwardLauncher(
 		  points_data, masks_data, tfms_data, tfmpoints_data,
-		  gradPoints_data, gradMasks_data, gradTfms_data, gradTfmpoints_data,
+		  gradPoints_data, gradMasks_data, gradTfms_data, gradTfmpoints_data, useMaskGradMag,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  ps, ms, ts,
 		  stream);

@@ -13,7 +13,8 @@ int NTfm3D_backward_float(
 			THFloatTensor *gradPoints,
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
-			THFloatTensor *gradTfmpoints);
+			THFloatTensor *gradTfmpoints,
+            int useMaskGradMag);
 
 // == Double
 int NTfm3D_forward_double(
@@ -30,4 +31,5 @@ int NTfm3D_backward_double(
 			THDoubleTensor *gradPoints,
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
-			THDoubleTensor *gradTfmpoints);
+			THDoubleTensor *gradTfmpoints,
+            int useMaskGradMag);

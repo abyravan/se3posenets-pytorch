@@ -12,4 +12,5 @@ int NTfm3D_backward_cuda(
 			THCudaTensor *gradPoints,
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
-			THCudaTensor *gradTfmpoints);
+			THCudaTensor *gradTfmpoints,
+            int useMaskGradMag);

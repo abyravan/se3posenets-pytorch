@@ -10,6 +10,12 @@ extern "C" {
 
 __constant__ float constTfms[15000];  // ... or some other big enough number
 
+// Sign of a number
+__inline__ __device__
+int sgn(float val) {
+    return (float(0) < val) - (val < float(0));
+}
+
 // =============== FWD PASS ================== //
 
 ///////////// Kernel
@@ -125,7 +131,7 @@ int NTfm3D_ForwardLauncher(const float *points, const float *masks, const float 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
 __global__ void computeGradients(const float *points, const float *masks,
                                  float *gradPoints, float *gradMasks, float *gradTfms,
-                                 const float *gradTfmpoints,
+                                 const float *gradTfmpoints, int useMaskGradMag,
                                  int nrows, int ncols, int nSE3,
                                  int ps0, int ps1, int ps2, int ps3,
                                  int ms0, int ms1, int ms2, int ms3,
@@ -187,8 +193,13 @@ __global__ void computeGradients(const float *points, const float *masks,
             gz += w_k * tz;
 
             // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-            *(gradMasks + k*ms1 + valm) = x * tx + y * ty + z * tz +
+            if (useMaskGradMag)
+                *(gradMasks + k*ms1 + valm) = x * tx + y * ty + z * tz +
                                           gxt * T[3] + gyt * T[7] + gzt * T[11];
+            else
+                *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                     sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                     sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
             // Grads w.r.t rotation parameters (sum across all pts)
@@ -270,7 +281,7 @@ __global__ void computeGradients(const float *points, const float *masks,
 // == BWD pass code
 int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *tfmpoints,
 									float *gradPoints, float *gradMasks, float *gradTfms, const float *gradTfmpoints,
-									int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
+									int useMaskGradMag, int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 									const long *ps, const long *ms, const long *ts,
 									cudaStream_t stream)
 {
@@ -301,6 +312,7 @@ int NTfm3D_BackwardLauncher(const float *points, const float *masks, const float
                                                                     gradMasks,
                                                                     gradTfms,
                                                                     gradTfmpoints,
+                                                                    useMaskGradMag,
                                                                     nrows,
                                                                     ncols,
                                                                     nSE3,

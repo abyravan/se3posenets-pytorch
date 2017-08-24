@@ -12,7 +12,7 @@ __constant__ float constTfms[15000];  // ... or some other big enough number
 
 // Sign of a number
 __inline__ __device__
-int sgn(float val) {
+int sgn_1(float val) {
     return (float(0) < val) - (val < float(0));
 }
 
@@ -197,9 +197,9 @@ __global__ void computeGradients(const float *points, const float *masks,
                 *(gradMasks + k*ms1 + valm) = x * tx + y * ty + z * tz +
                                           gxt * T[3] + gyt * T[7] + gzt * T[11];
             else
-                *(gradMasks_data + k*ms[1] + valm) = sgn(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                     sgn(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                     sgn(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+                *(gradMasks + k*ms1 + valm) = sgn_1(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                              sgn_1(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                              sgn_1(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
             // Grads w.r.t rotation parameters (sum across all pts)

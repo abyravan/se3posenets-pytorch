@@ -2,12 +2,12 @@
 #include <assert.h>
 
 // Sign of a number
-inline int sgnf(float val) {
+inline int sgnf_1(float val) {
     return (0.0f < val) - (val < 0.0f);
 }
 
 // Sign of a number
-inline int sgnd(double val) {
+inline int sgnd_1(double val) {
     return (0.0 < val) - (val < 0.0);
 }
 
@@ -174,9 +174,9 @@ int NTfm3D_backward_float(
                                                              gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
                                                              gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
                     else
-                        *(gradMasks_data + k*ms[1] + valm) = sgnf(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                             sgnf(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                             sgnf(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+                        *(gradMasks_data + k*ms[1] + valm) = sgnf_1(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgnf_1(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgnf_1(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
@@ -378,9 +378,9 @@ int NTfm3D_backward_double(
                                                              gyt * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
                                                              gzt * (T[8] * x + T[9] * y + T[10] * z + T[11]);
                     else
-                        *(gradMasks_data + k*ms[1] + valm) = sgnd(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
-                                                             sgnd(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
-                                                             sgnd(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
+                        *(gradMasks_data + k*ms[1] + valm) = sgnd_1(gxt) * (T[0] * x + T[1] * y + T[2]  * z + T[3]) +
+                                                             sgnd_1(gyt) * (T[4] * x + T[5] * y + T[6]  * z + T[7]) +
+                                                             sgnd_1(gzt) * (T[8] * x + T[9] * y + T[10] * z + T[11]); // Use only sign
 
 
                     // === Gradients w.r.t transforms (t_k)

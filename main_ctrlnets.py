@@ -34,6 +34,8 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--poswtavg-wt', default=0, type=float,
                     metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
+parser.add_argument('--seg-wt', default=0, type=float,
+                    metavar='WT', help='Segmentation mask error (default: 0)')
 
 ################ MAIN
 #@profile
@@ -119,6 +121,10 @@ def main():
     if args.wide_model:
         print('Using a wider network!')
 
+    # Seg loss
+    if args.seg_wt > 0:
+        assert args.num_se3==2, "Segmentation loss only works for 2 SE3s currently"
+        print('Adding a segmentation loss based on flow magnitude. Loss weight: {}'.format(args.seg_wt))
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -302,6 +308,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    seglossm_f, seglossm_b = AverageMeter(), AverageMeter()
     poswtavglossm  = AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
@@ -407,8 +414,18 @@ def iterate(data_loader, model, tblogger, num_iters,
             poswtavgloss = 0.5 * args.poswtavg_wt * args.loss_scale * (poswtavgloss_1 + poswtavgloss_2) # Sum up losses
             poswtavglossm.update(poswtavgloss.data[0]) # Update avg. meter
 
+        # Use a segmentation loss to encourage better segmentation
+        # Pts that have flow > 0 are bunched into a single mask & rest in another mask
+        segloss_1, segloss_2 = 0, 0
+        if args.seg_wt > 0:
+            seg_wt = args.seg_wt * args.loss_scale
+            masktargs_1, masktargs_2 = fwdflows.abs().sum(1).gt(0).squeeze().long(), bwdflows.abs().sum(1).gt(0).squeeze().long()
+            segloss_1 = seg_wt * nn.CrossEntropyLoss(size_average=True)(mask_1, masktargs_1)
+            segloss_2 = seg_wt * nn.CrossEntropyLoss(size_average=True)(mask_2, masktargs_2)
+            seglossm_f.update(segloss_1.data[0]); seglossm_b.update(segloss_2.data[0])
+
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss
+        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss + segloss_1 + segloss_2
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
@@ -462,6 +479,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                         consisloss=consislossm, poswtavgloss=poswtavglossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+            print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
+                  'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f})'.format(
+                fwd=seglossm_f, bwd=seglossm_b))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening:
@@ -538,6 +558,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 consisloss=consislossm, poswtavgloss=poswtavglossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+    print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
+          'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f})'.format(
+        fwd=seglossm_f, bwd=seglossm_b))
     print('========================================================')
 
     # Return the loss & flow loss

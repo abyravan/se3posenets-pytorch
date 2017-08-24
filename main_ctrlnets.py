@@ -36,6 +36,8 @@ parser.add_argument('--poswtavg-wt', default=0, type=float,
                     metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
 parser.add_argument('--seg-wt', default=0, type=float,
                     metavar='WT', help='Segmentation mask error (default: 0)')
+parser.add_argument('--no-mask-gradmag', action='store_true', default=False,
+                    help='uses only the loss gradient sign for training the masks (default: False)')
 
 ################ MAIN
 #@profile
@@ -125,6 +127,13 @@ def main():
     if args.seg_wt > 0:
         assert args.num_se3==2, "Segmentation loss only works for 2 SE3s currently"
         print('Adding a segmentation loss based on flow magnitude. Loss weight: {}'.format(args.seg_wt))
+
+    # Mask gradient magnitude
+    args.use_mask_gradmag = not args.no_mask_gradmag
+    if args.no_mask_gradmag:
+        assert (not args.use_wt_sharpening or args.use_sigmoid_mask), "Option to not use mask gradient magnitudes is currently only possible with soft-masking"
+        print("Using only the gradient's sign for training the masks. Discarding the magnitude")
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -393,8 +402,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
         else:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model

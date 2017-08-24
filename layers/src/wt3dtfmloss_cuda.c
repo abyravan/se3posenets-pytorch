@@ -85,7 +85,8 @@ void Weighted3DTransformLoss_backward_cuda(
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
             THCudaTensor *gradOutput,
-			int sizeAverage)
+			int sizeAverage,
+            int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -135,7 +136,7 @@ void Weighted3DTransformLoss_backward_cuda(
 	// Run the kernel
     Weighted3DTransformLoss_BackwardLauncher(
 		  points_data, masks_data, tfms_data, targetpts_data,
-		  gradPoints_data, gradMasks_data, gradTfms_data,
+		  gradPoints_data, gradMasks_data, gradTfms_data, useMaskGradMag,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  ps, ms, ts,
 		  stream);

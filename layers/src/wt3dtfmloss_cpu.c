@@ -2,6 +2,16 @@
 #include <assert.h>
 #include <stdbool.h>
 
+// Sign of a number
+inline int sgnf(float val) {
+    return (0.0f < val) - (val < 0.0f);
+}
+
+// Sign of a number
+inline int sgnd(double val) {
+    return (0.0 < val) - (val < 0.0);
+}
+
 // ===== FLOAT DATA
 
 float Weighted3DTransformLoss_forward_float(
@@ -102,7 +112,8 @@ void Weighted3DTransformLoss_backward_float(
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
             THFloatTensor *gradOutput,
-            int sizeAverage)
+            int sizeAverage,
+            int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -180,8 +191,9 @@ void Weighted3DTransformLoss_backward_float(
                     gy += w_k * (T[1] * xd + T[5] * yd + T[9]  * zd);
                     gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
-                    // === Gradient w.r.t mask (w_k) = 0.5 * err
-                    *(gradMasks_data + k*ms[1] + valm) = 0.5 * (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    // === Gradient w.r.t mask (w_k) = 0.5 * err [OR] 0.5 * sign(err)
+                    float err = 0.5 * (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    *(gradMasks_data + k*ms[1] + valm) = useMaskGradMag ? err : sgnf(err); // grad vs sign of grad
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
@@ -332,7 +344,8 @@ void Weighted3DTransformLoss_backward_double(
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
             THDoubleTensor *gradOutput,
-            int sizeAverage)
+            int sizeAverage,
+            int useMaskGradMag)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -410,8 +423,9 @@ void Weighted3DTransformLoss_backward_double(
                     gy += w_k * (T[1] * xd + T[5] * yd + T[9]  * zd);
                     gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
-                    // === Gradient w.r.t mask (w_k) = 0.5 * err
-                    *(gradMasks_data + k*ms[1] + valm) = 0.5 * (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    // === Gradient w.r.t mask (w_k) = 0.5 * err [OR] 0.5 * sign(err)
+                    double err = 0.5 * (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    *(gradMasks_data + k*ms[1] + valm) = useMaskGradMag ? err : sgnd(err); // grad vs sign of grad
 
                     // === Gradients w.r.t transforms (t_k)
                     double *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform

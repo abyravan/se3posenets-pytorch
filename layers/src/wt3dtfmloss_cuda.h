@@ -14,4 +14,5 @@ void Weighted3DTransformLoss_backward_cuda(
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
             THCudaTensor *gradOutput,
-			int sizeAverage);
+			int sizeAverage,
+            int useMaskGradMag);

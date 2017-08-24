@@ -36,6 +36,12 @@ __device__ void getCoordinates_2(const int tid, const int nrows, const int ncols
     batch = id;
 }
 
+// Sign of a number
+__inline__ __device__
+int sgn(float val) {
+    return (float(0) < val) - (val < float(0));
+}
+
 // =============== FWD PASS ================== //
 
 ///////////// Kernel
@@ -200,7 +206,7 @@ int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *ma
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
 __global__ void computeLossGradients(const float *inputpts, const float *masks,
                                      float *gradInputpts, float *gradMasks, float *gradTfms,
-                                     const float *targetpts,
+                                     const float *targetpts, int useMaskGradMag,
                                      int nrows, int ncols, int nSE3,
                                      int ps0, int ps1, int ps2, int ps3,
                                      int ms0, int ms1, int ms2, int ms3,
@@ -267,7 +273,11 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
             gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
             // === Gradient w.r.t mask (w_k) = (R_k^T * p + t_k) * gpt
-            *(gradMasks + k*ms1 + valm) = 0.5 * ( (xp-xt)*(xp-xt) + (yp-yt)*(yp-yt) + (zp-zt)*(zp-zt) );
+            float err = 0.5 * ( (xp-xt)*(xp-xt) + (yp-yt)*(yp-yt) + (zp-zt)*(zp-zt) );
+            if (useMaskGradMag)
+                *(gradMasks + k*ms1 + valm) = err;
+            else
+                *(gradMasks + k*ms1 + valm) = sgn(err);
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
             // Grads w.r.t rotation parameters (sum across all pts)
@@ -348,7 +358,7 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
 ////////////////////////////////////
 // == BWD pass code
 void Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts,
-                                              float *gradPoints, float *gradMasks, float *gradTfms,
+                                              float *gradPoints, float *gradMasks, float *gradTfms, int useMaskGradMag,
                                               int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                               const long *ps, const long *ms, const long *ts,
                                               cudaStream_t stream)
@@ -380,6 +390,7 @@ void Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *
                                                                         gradMasks,
                                                                         gradTfms,
                                                                         targetpts,
+                                                                        useMaskGradMag,
                                                                         nrows,
                                                                         ncols,
                                                                         nSE3,

@@ -15,7 +15,8 @@ void Weighted3DTransformLoss_backward_float(
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
             THFloatTensor *gradOutput,
-            int sizeAverage);
+            int sizeAverage,
+            int useMaskGradMag);
 
 // == Double
 double Weighted3DTransformLoss_forward_double(
@@ -34,4 +35,5 @@ void Weighted3DTransformLoss_backward_double(
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
             THDoubleTensor *gradOutput,
-            int sizeAverage);
+            int sizeAverage,
+            int useMaskGradMag);

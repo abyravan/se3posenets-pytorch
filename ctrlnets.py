@@ -87,9 +87,12 @@ def BiAbsLoss(input, target, size_average=True):
         return loss
 
 # NORMMSESQRT Loss that gives gradients w.r.t both input & target
-def BiNormMSESqrtLoss(input, target, size_average=True):
-    sigma = (0.5 * target.abs()).clamp(min=2e-3).view(-1) # scale * y, clamp for numerical stability (changed clamp to 2mm)
-    diff = (input - target).view(-1)
+def BiNormMSESqrtLoss(input, target, size_average=True, norm_per_pt=False):
+    if norm_per_pt:
+        sigma = (0.5 * target.pow(2).sum(1).sqrt()).clamp(min=2e-3).unsqueeze(1).expand_as(target) # scale * ||y||_2, clamp for numerical stability (changed clamp to 2mm)
+    else:
+        sigma = (0.5 * target.abs()).clamp(min=2e-3) # scale * y, clamp for numerical stability (changed clamp to 2mm)
+    diff = (input - target)
     loss = 0.5 * diff.pow(2).div(sigma).sum()  # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     if size_average:
         return loss / input.nelement()
@@ -104,6 +107,8 @@ def Loss3D(input, target, loss_type='mse'):
         return BiAbsLoss(input, target)
     elif loss_type == 'normmsesqrt':
         return BiNormMSESqrtLoss(input, target)
+    elif loss_type == 'normmsesqrtpt':
+        return BiNormMSESqrtLoss(input, target, norm_per_pt=True)
     else:
         assert False, "Unknown loss type: " + loss_type
 
@@ -121,11 +126,15 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
     elif loss_type == 'abs':
         diff = (input - target).view(bsz, -1)
         loss = diff.abs().sum(1).div(nummotionpts).mean()  # sum_i (err_i/N_i); err_i = sum_j |pred_ij - tar_ij|_1
-    elif loss_type == 'normmsesqrt':
+    elif loss_type.find('normmsesqrt') >= 0:
         # This loss is a scale invariant version of the mse loss
         # Scales the squared error by a variance term based on the target magnitude
         # TODO: DO we need args for the scale & default sigma?
-        sigma = (0.5 * target.abs()).clamp(min = 2e-3).view(bsz, -1) # scale * y, clamp for numerical stability (Changed clamp to 2mm)
+        if loss_type == 'normmsesqrtpt':
+            norm  = target.pow(2).sum(1).sqrt()
+            sigma = (0.5 * norm).clamp(min=2e-3).unsqueeze(1).expand_as(target).contiguous().view(bsz,-1)  # scale * ||y||_2, clamp for numerical stability (changed clamp to 2mm)
+        else:
+            sigma = (0.5 * target.abs()).clamp(min=2e-3).view(bsz,-1)  # scale * y, clamp for numerical stability (changed clamp to 2mm)
         diff  = (input - target).view(bsz, -1)
         loss  = diff.pow(2).div(sigma).sum(1).div(2*nummotionpts).mean() # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     else:

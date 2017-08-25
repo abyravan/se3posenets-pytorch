@@ -114,6 +114,14 @@ def main():
     if args.use_wt_sharpening or args.use_sigmoid_mask:
         norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
         print('3D loss type: ' + args.loss_type + norm_motion)
+    else:
+        assert(not args.loss_type == 'abs', "No abs loss available for soft-masking")
+        print('3D loss type: ' + args.loss_type)
+
+    # Normalize per pt
+    args.norm_per_pt = (args.loss_type == 'normmsesqrtpt')
+    if args.norm_per_pt:
+        print('Normalizing MSE error per 3D point instead of per dimension')
 
     # NTFM3D-Delta
     if args.use_ntfm_delta:
@@ -388,8 +396,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if args.use_wt_sharpening or args.use_sigmoid_mask:
             # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
-            inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type == 'normmsesqrt') else [predpts_1, tarpts_1]
-            inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type == 'normmsesqrt') else [predpts_2, tarpts_2]
+            inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_1, tarpts_1]
+            inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_2, tarpts_2]
             # We just measure error in flow space
             #inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
             #inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
@@ -402,8 +410,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                 ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
         else:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
-            ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-            ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            if (args.loss_type.find('normmsesqrt') >= 0):
+                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+            else:
+                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model

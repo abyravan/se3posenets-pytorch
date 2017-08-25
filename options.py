@@ -63,7 +63,8 @@ def setup_comon_options():
 
     # Loss options
     parser.add_argument('--loss-type', default='mse', type=str,
-                        metavar='STR', help='Type of loss to use for 3D point errors, only works if we are not using soft-masks (default: mse | abs, normmsesqrt )')
+                        metavar='STR', help='Type of loss to use for 3D point errors, only works if we are not using '
+                                            'soft-masks (default: mse | abs, normmsesqrt, normmsesqrtpt )')
     parser.add_argument('--motion-norm-loss', action='store_true', default=False,
                         help='normalize the losses by number of points that actually move instead of size average (default: False)')
     parser.add_argument('--consis-wt', default=0.1, type=float,

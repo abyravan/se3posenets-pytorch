@@ -66,6 +66,8 @@ parser.add_argument('--goal-horizon', default=1.5, type=float, metavar='SEC',
                     help='Planning goal horizon in seconds (default: 1.5)')
 parser.add_argument('--only-top4-jts', action='store_true', default=False,
                     help='Controlling only the first 4 joints (default: False)')
+parser.add_argument('--only-top6-jts', action='store_true', default=False,
+                    help='Controlling only the first 6 joints (default: False)')
 
 # Planner options
 parser.add_argument('--optimization', default='gn', type=str, metavar='OPTIM',
@@ -216,8 +218,13 @@ def main():
     start_angles = start_sample['actconfigs'][0]
     goal_angles  = goal_sample['actconfigs'][0]
     if pargs.only_top4_jts:
+        assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
         print('Controlling only top 4 joints')
         goal_angles[4:] = start_angles[4:]
+    elif pargs.only_top6_jts:
+        assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
+        print('Controlling only top 6 joints')
+        goal_angles[6:] = start_angles[6:]
 
     ########################
     ############ Get start & goal point clouds, predict poses & masks
@@ -313,6 +320,8 @@ def main():
         # Set last 3 joint's controls to zero
         if pargs.only_top4_jts:
             ctrl_grad[4:] = 0
+        elif pargs.only_top6_jts:
+            ctrl_grad[6:] = 0
 
         # Get the control direction and scale it by max control magnitude
         start = time.time()

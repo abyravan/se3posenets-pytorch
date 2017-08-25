@@ -36,7 +36,7 @@ motion-norm-loss: False
 #delta-flow-loss:  False
 fwd-wt:           1.0
 bwd-wt:           1.0
-consis-wt:        0.1
+consis-wt:        10.0
 poswtavg-wt:      0.0
 loss-scale:       10000.0
 
@@ -59,4 +59,4 @@ decay-epochs: 30
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/singlejt/normmsesqrt/jt6_4se3_soft_1seq_consis1e-4_scale1e6
+save-dir:  trained_nets/singlejt/normmsesqrt/jt6_4se3_soft_1seq

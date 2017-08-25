@@ -36,6 +36,8 @@ parser.add_argument('--poswtavg-wt', default=0, type=float,
                     metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
 parser.add_argument('--seg-wt', default=0, type=float,
                     metavar='WT', help='Segmentation mask error (default: 0)')
+parser.add_argument('--deltapose-reg-wt', default=0, type=float,
+                    metavar='WT', help='Weight for L1 regularization of the predicted change in pose (default: 0)')
 parser.add_argument('--no-mask-gradmag', action='store_true', default=False,
                     help='uses only the loss gradient sign for training the masks (default: False)')
 
@@ -115,7 +117,7 @@ def main():
         norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
         print('3D loss type: ' + args.loss_type + norm_motion)
     else:
-        assert(not args.loss_type == 'abs', "No abs loss available for soft-masking")
+        assert not (args.loss_type == 'abs'), "No abs loss available for soft-masking"
         print('3D loss type: ' + args.loss_type)
 
     # Normalize per pt
@@ -135,6 +137,10 @@ def main():
     if args.seg_wt > 0:
         assert args.num_se3==2, "Segmentation loss only works for 2 SE3s currently"
         print('Adding a segmentation loss based on flow magnitude. Loss weight: {}'.format(args.seg_wt))
+
+    # Seg loss
+    if args.deltapose_reg_wt > 0:
+        print('Adding an L1 penalty on the predicted delta pose. Loss weight: {}'.format(args.deltapose_reg_wt))
 
     # Mask gradient magnitude
     args.use_mask_gradmag = not args.no_mask_gradmag
@@ -326,7 +332,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     seglossm_f, seglossm_b = AverageMeter(), AverageMeter()
-    poswtavglossm  = AverageMeter()
+    poswtavglossm, deltareglossm  = AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
 
@@ -356,6 +362,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    iden = util.to_var(torch.eye(3).view(1,1,3,3).expand(args.batch_size, args.num_se3, 3, 3).type(deftype)) # Identity matrix for regularization
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -411,14 +418,22 @@ def iterate(data_loader, model, tblogger, num_iters,
         else:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
             if (args.loss_type.find('normmsesqrt') >= 0):
-                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, fwdflows)  # Predict pts in FWD dirn and compare to target @ t2
+                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, bwdflows)  # Predict pts in BWD dirn and compare to target @ t1
             else:
                 ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
                 ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+
+        # Delta-pose regularization (add a L1 regularization)
+        deltaregloss = 0
+        if args.deltapose_reg_wt:
+            deltareg_wt  = args.deltapose_reg_wt * args.loss_scale / deltapose_t_12.nelement() # Weight for regularization
+            deltarot, deltatrans = deltapose_t_12.narrow(3,0,3), deltapose_t_12.narrow(3,3,1)
+            deltaregloss = deltareg_wt * ((deltarot - iden).norm(1) + deltatrans.norm(1)) # Rotation close to identity, translation close to zero
+            deltareglossm.update(deltaregloss.data[0])
 
         # Compute loss between the predicted positions and the weighted avg of the masks & point clouds
         poswtavgloss = 0
@@ -446,7 +461,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             seglossm_f.update(segloss_1.data[0]); seglossm_b.update(segloss_2.data[0])
 
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss + segloss_1 + segloss_2
+        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss + segloss_1 + segloss_2 + deltaregloss
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
@@ -501,8 +516,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
             print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
-                  'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f})'.format(
-                fwd=seglossm_f, bwd=seglossm_b))
+                  'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
+                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f})'.format(
+                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening:
@@ -687,6 +703,14 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+### Convert continuous input into classes
+def digitize(tensor, minv=-0.075, maxv=0.075, nbins=150):
+    # Clamp tensor vals to min/max
+    ctensor = tensor.clamp(min=minv, max=maxv)
+    # Digitize it
+    return torch.ceil(((ctensor - minv) / (maxv - minv)) * nbins).long() # Get ceil instead of round -> matches result from np.digitize or np.searchsorted
+
 
 ################ RUN MAIN
 if __name__ == '__main__':

@@ -24,8 +24,7 @@ def setup_comon_options():
     parser.add_argument('--seq-len', default=1, type=int,
                         metavar='N', help='length of the training sequence (default: 1)')
     parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
-                        metavar='STR',
-                        help='Control type: actvel | actacc | comvel | comacc | comboth | [actdiffvel] | comdiffvel')
+                        metavar='STR', help='Control type: actvel | actacc | comvel | comacc | comboth | [actdiffvel] | comdiffvel')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

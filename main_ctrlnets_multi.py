@@ -371,7 +371,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Make next-pose predictions & corresponding 3D point predictions using the transition model
         # We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
-        deltaposes, compdeltaposes, transposes = [], [], []
+        deltaposes, transposes = [], []
+        # compdeltaposes = []
         for k in xrange(args.seq_len):
             # Get current pose
             if (k == 0):
@@ -385,10 +386,10 @@ def iterate(data_loader, model, tblogger, num_iters,
             transposes.append(trans)
 
             # Compose the deltas over time (T4 = T4 * T3^-1 * T3 * T2^-1 * T2 * T1^-1 * T1 = delta_4 * delta_3 * delta_2 * T1
-            if (k == 0):
-                compdeltaposes.append(delta)
-            else:
-                compdeltaposes.append(se3nn.ComposeRtPair()(delta, compdeltaposes[k-1])) # delta_full = delta_curr * delta_prev
+            #if (k == 0):
+            #    compdeltaposes.append(delta)
+            #else:
+            #    compdeltaposes.append(se3nn.ComposeRtPair()(delta, compdeltaposes[k-1])) # delta_full = delta_curr * delta_prev
 
         # Now compute the losses across the sequence
         # We use point loss in the FWD dirn and Consistency loss between poses
@@ -402,8 +403,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 currpts = predpts[k-1]  # Use previous predicted point cloud
 
-            # Predict transformed point cloud based on the total delta-transform so far
-            nextpts = ptpredlayer()(currpts, initmask, compdeltaposes[k])
+            # Predict transformed point cloud based on the initial cloud & total delta-transform so far
+            nextpts = ptpredlayer()(currpts, initmask, deltaposes[k])
             predpts.append(nextpts)
 
             # Compute 3D point loss
@@ -430,7 +431,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type)
             else:
                 # Use the weighted 3D transform loss, do not use explicitly predicted points
-                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, compdeltaposes[k], tarpts[:,k])  # Weighted point loss!
+                currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, initmask, deltaposes[k], tarpts[:,k])  # Weighted point loss!
 
             # Compute pose consistency loss
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model

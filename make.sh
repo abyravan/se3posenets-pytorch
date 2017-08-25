@@ -10,6 +10,7 @@ if [ -d "$CUDA_PATH" ]; then
     nvcc -c -o lib/ntfm3ddelta_kernel.cu.o ntfm3ddelta_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	nvcc -c -o lib/project3dpts_kernel.cu.o project3dpts_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
     nvcc -c -o lib/wt3dtfmloss_kernel.cu.o wt3dtfmloss_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
+	nvcc -c -o lib/wt3dtfmnormloss_kernel.cu.o wt3dtfmnormloss_kernel.cu -x cu -Xcompiler -fPIC -arch=sm_52
 	cd ../../
 	python build.py
 	cd ../

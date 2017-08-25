@@ -20,7 +20,7 @@ float warpReduceSum_1(float val) {
 }
 
 /// Get the (batch,row,col) indices corresponding to a given thread index (3D point index)
-__device__ void getCoordinates_3(const int tid, const int nrows, const int ncols,
+__device__ void getCoordinates_4(const int tid, const int nrows, const int ncols,
                                  int &batch, int &row, int &col)
 {
     // Get col id
@@ -41,12 +41,12 @@ __device__ void getCoordinates_3(const int tid, const int nrows, const int ncols
 ///////////// Kernel
 // Compute the loss by transforming each input point by all the "k" transforms, measuring the error
 // between the prediction and the target and weighing the corresponding error by the predicted mask weight
-__global__ void computeLoss(const float *inputpts, const float *masks, const float *targetflows,
-                            float *devLoss, int nrows, int ncols, int npoints, int nSE3,
-                            float normWt, int normPerPt,
-                            int ps0, int ps1, int ps2, int ps3,
-                            int ms0, int ms1, int ms2, int ms3,
-                            int ts0, int ts1, int ts2, int ts3)
+__global__ void computeLoss_f(const float *inputpts, const float *masks, const float *targetflows,
+                              float *devLoss, int nrows, int ncols, int npoints, int nSE3,
+                              float normWt, int normPerPt,
+                              int ps0, int ps1, int ps2, int ps3,
+                              int ms0, int ms1, int ms2, int ms3,
+                              int ts0, int ts1, int ts2, int ts3)
 {
     // Get the index of the point
     int id = blockIdx.x * blockDim.x + threadIdx.x; // Since they are 1D only
@@ -64,7 +64,7 @@ __global__ void computeLoss(const float *inputpts, const float *masks, const flo
     {
         // Get the batch, row and column indices
         int b,r,c;
-        getCoordinates_3(id, nrows, ncols, b, r, c);
+        getCoordinates_4(id, nrows, ncols, b, r, c);
 
         // Get 3D input point (p)
         int valp = b*ps0 + r*ps2 + c*ps3; // Don't add stride along 3D dim
@@ -81,7 +81,7 @@ __global__ void computeLoss(const float *inputpts, const float *masks, const flo
         float sx = 0, sy = 0, sz = 0, s = 0;
         if (normPerPt)
         {
-            s = fmaxf(normWt * pow(fxt*fxt + fyt*fyt + fzt*fzt, 0.5), 2e-3); // Scale by length of flow vector
+            s = fmaxf(normWt * powf(fxt*fxt + fyt*fyt + fzt*fzt, 0.5), 2e-3); // Scale by length of flow vector
         }
         else
         {
@@ -173,7 +173,7 @@ int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float
 //    cudaEventRecord(start);
 
     // Project the points and run the depth test first (parallelize across number of points)
-    computeLoss <<< blocks, threads, 256*sizeof(float), stream >>>(
+    computeLoss_f <<< blocks, threads, 256*sizeof(float), stream >>>(
                                                                      points,
                                                                      masks,
                                                                      targetflows,
@@ -225,14 +225,14 @@ int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float
 // ============= BWD PASS =================== //
 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
-__global__ void computeLossGradients(const float *inputpts, const float *masks,
-                                     float *gradInputpts, float *gradMasks, float *gradTfms,
-                                     const float *targetflows, int useMaskGradMag,
-                                     int nrows, int ncols, int nSE3,
-                                     float normWt, int normPerPt,
-                                     int ps0, int ps1, int ps2, int ps3,
-                                     int ms0, int ms1, int ms2, int ms3,
-                                     int ts0, int ts1, int ts2, int ts3)
+__global__ void computeLossGradients_f(const float *inputpts, const float *masks,
+                                       float *gradInputpts, float *gradMasks, float *gradTfms,
+                                       const float *targetflows,
+                                       int nrows, int ncols, int nSE3,
+                                       float normWt, int normPerPt,
+                                       int ps0, int ps1, int ps2, int ps3,
+                                       int ms0, int ms1, int ms2, int ms3,
+                                       int ts0, int ts1, int ts2, int ts3)
 {
     // Get the row, col, batch IDs & figure out if we are within limits
     int c = (blockIdx.x * blockDim.x) + threadIdx.x; // col ID (innermost dimension in our data for coalescing)
@@ -270,7 +270,7 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
         // Get normalizing constant (sigma), clamped to a min of 2e-3
         if (normPerPt)
         {
-            s = fmaxf(normWt * pow(fxt*fxt + fyt*fyt + fzt*fzt, 0.5), 2e-3); // Scale by length of flow vector
+            s = fmaxf(normWt * powf(fxt*fxt + fyt*fyt + fzt*fzt, 0.5), 2e-3); // Scale by length of flow vector
         }
         else
         {
@@ -401,7 +401,7 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
 ////////////////////////////////////
 // == BWD pass code
 void Weighted3DTransformNormLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows,
-                                              float *gradPoints, float *gradMasks, float *gradTfms, int useMaskGradMag,
+                                              float *gradPoints, float *gradMasks, float *gradTfms,
                                               int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                               float normWt, int normPerPt,
                                               const long *ps, const long *ms, const long *ts,
@@ -427,14 +427,13 @@ void Weighted3DTransformNormLoss_BackwardLauncher(const float *points, const flo
 //    cudaEventCreate(&stop);
 //    cudaEventRecord(start);
 
-    computeLossGradients<<< blocks, threads, sharedMemSize, stream >>>(
+    computeLossGradients_f<<< blocks, threads, sharedMemSize, stream >>>(
                                                                         points,
                                                                         masks,
                                                                         gradPoints,
                                                                         gradMasks,
                                                                         gradTfms,
                                                                         targetflows,
-                                                                        useMaskGradMag,
                                                                         nrows,
                                                                         ncols,
                                                                         nSE3,

@@ -140,7 +140,7 @@ void Weighted3DTransformNormLoss_backward_cuda(
 	// Run the kernel
     Weighted3DTransformNormLoss_BackwardLauncher(
 		  points_data, masks_data, tfms_data, targetflows_data,
-		  gradPoints_data, gradMasks_data, gradTfms_data, useMaskGradMag,
+		  gradPoints_data, gradMasks_data, gradTfms_data,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  normWt, normPerPt,
 		  ps, ms, ts,

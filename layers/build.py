@@ -23,11 +23,13 @@ if torch.cuda.is_available():
     sources += ['src/ntfm3d_cuda.c',
                 'src/ntfm3ddelta_cuda.c',
 				'src/project3dpts_cuda.c',
-                'src/wt3dtfmloss_cuda.c']
+                'src/wt3dtfmloss_cuda.c',
+		'src/wt3dtfmnormloss_cuda.c']
     headers += ['src/ntfm3d_cuda.h',
                 'src/ntfm3ddelta_cuda.h',
                 'src/project3dpts_cuda.h',
-                'src/wt3dtfmloss_cuda.h']
+                'src/wt3dtfmloss_cuda.h',
+		'src/wt3dtfmnormloss_cuda.h']
     defines += [('WITH_CUDA', None)]
     with_cuda = True
 
@@ -36,7 +38,8 @@ if torch.cuda.is_available():
     extra_objects = ['src/cuda/lib/ntfm3d_kernel.cu.o',
                      'src/cuda/lib/ntfm3ddelta_kernel.cu.o',
 					 'src/cuda/lib/project3dpts_kernel.cu.o',
-                     'src/cuda/lib/wt3dtfmloss_kernel.cu.o']
+                     'src/cuda/lib/wt3dtfmloss_kernel.cu.o',
+		     'src/cuda/lib/wt3dtfmnormloss_kernel.cu.o']
     extra_objects = [os.path.join(this_file, fname) for fname in extra_objects]
 
 # Setup the overall compilation

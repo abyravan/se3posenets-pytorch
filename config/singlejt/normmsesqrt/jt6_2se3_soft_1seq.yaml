@@ -36,9 +36,9 @@ motion-norm-loss: False
 #delta-flow-loss:  False
 fwd-wt:           1.0
 bwd-wt:           1.0
-consis-wt:        0.01
+consis-wt:        10.0
 poswtavg-wt:      0.0
-loss-scale:       100000.0
+loss-scale:       10000.0
 
 # Training options
 no-cuda:        False

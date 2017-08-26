@@ -558,8 +558,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm))
 
             ### Print stuff if we have weight sharpening enabled
-            if args.use_wt_sharpening:
-                noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+            if args.use_wt_sharpening and not args.use_gt_masks:
+                if args.use_gt_poses:
+                    noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                else:
+                    noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
                     num_train_iter, noise_std, pow))
 

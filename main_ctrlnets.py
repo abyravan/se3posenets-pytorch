@@ -37,7 +37,7 @@ parser.add_argument('--poswtavg-wt', default=0, type=float,
 parser.add_argument('--seg-wt', default=0, type=float,
                     metavar='WT', help='Segmentation mask error (default: 0)')
 parser.add_argument('--deltapose-reg-wt', default=0, type=float,
-                    metavar='WT', help='Weight for L1 regularization of the predicted change in pose (default: 0)')
+                    metavar='WT', help='Weight for L2 regularization of the predicted change in pose (default: 0)')
 parser.add_argument('--no-mask-gradmag', action='store_true', default=False,
                     help='uses only the loss gradient sign for training the masks (default: False)')
 
@@ -140,7 +140,7 @@ def main():
 
     # Seg loss
     if args.deltapose_reg_wt > 0:
-        print('Adding an L1 penalty on the predicted delta pose. Loss weight: {}'.format(args.deltapose_reg_wt))
+        print('Adding an L2 penalty on the predicted delta pose. Loss weight: {}'.format(args.deltapose_reg_wt))
 
     # Mask gradient magnitude
     args.use_mask_gradmag = not args.no_mask_gradmag
@@ -427,12 +427,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
 
-        # Delta-pose regularization (add a L1 regularization)
+        # Delta-pose regularization (add a L2 regularization)
         deltaregloss = 0
         if args.deltapose_reg_wt:
             deltareg_wt  = args.deltapose_reg_wt * args.loss_scale / deltapose_t_12.nelement() # Weight for regularization
             deltarot, deltatrans = deltapose_t_12.narrow(3,0,3), deltapose_t_12.narrow(3,3,1)
-            deltaregloss = deltareg_wt * ((deltarot - iden).norm(1) + deltatrans.norm(1)) # Rotation close to identity, translation close to zero
+            deltaregloss = deltareg_wt * ((deltarot - iden).norm(2) + deltatrans.norm(2)) # Rotation close to identity, translation close to zero
             deltareglossm.update(deltaregloss.data[0])
 
         # Compute loss between the predicted positions and the weighted avg of the masks & point clouds

@@ -1011,19 +1011,62 @@ print("TfG diff, Max: {}, Min: {}, Median: {}".format(tfmgdiff.max(), tfmgdiff.m
 
 ## CUDA
 w_c = Weighted3DTransformNormLoss(norm_per_pt=True)
-pts_c = Variable(pts.data.cuda(), requires_grad=True)
-masks_c = Variable(masks.data.cuda(), requires_grad=True)
-tfms_c = Variable(tfms.data.cuda(), requires_grad=True)
-targetflows_c = Variable(targetflows.data.cuda(), requires_grad=False)
+pts_c = Variable(pts.data.float().cuda(), requires_grad=True)
+masks_c = Variable(masks.data.float().cuda(), requires_grad=True)
+tfms_c = Variable(tfms.data.float().cuda(), requires_grad=True)
+targetflows_c = Variable(targetflows.data.float().cuda(), requires_grad=False)
 loss_c = w_c(pts_c,masks_c,tfms_c,targetflows_c)
 loss_c.backward()
 
 # Print errors
 print('DOUBLE - CUDA:')
 print("Loss diff: {}".format(loss.data[0] - loss_c.data[0]))
-ptgcdiff   = pts.grad.data - pts_c.grad.data.double()
-maskgcdiff = masks.grad.data - masks_c.grad.data.double()
-tfmgcdiff  = tfms.grad.data - tfms_c.grad.data.double()
+ptgcdiff   = pts.grad.data - pts_c.grad.data.cpu().double()
+maskgcdiff = masks.grad.data - masks_c.grad.data.cpu().double()
+tfmgcdiff  = tfms.grad.data - tfms_c.grad.data.cpu().double()
 print("PtG diff, Max: {}, Min: {}, Median: {}".format(ptgcdiff.max(), ptgcdiff.min(), ptgcdiff.abs().median()))
 print("MsG diff, Max: {}, Min: {}, Median: {}".format(maskgcdiff.max(), maskgcdiff.min(), maskgcdiff.abs().median()))
 print("TfG diff, Max: {}, Min: {}, Median: {}".format(tfmgcdiff.max(), tfmgcdiff.min(), tfmgcdiff.abs().median()))
+
+
+###############################################################
+# Weighted3DTransformLoss vs NormLoss
+
+# Grad-Check
+import torch
+import torch.nn as nn
+from layers.Weighted3DTransformNormLoss import Weighted3DTransformNormLoss
+from layers.NTfm3D import NTfm3D
+from torch.autograd import gradcheck, Variable
+
+# NORMMSESQRT Loss that gives gradients w.r.t both input & target
+def BiNormMSESqrtLoss(input, target, size_average=True, norm_per_pt=False):
+    if norm_per_pt:
+        sigma = (0.5 * target.pow(2).sum(1).sqrt()).clamp(min=2e-3).unsqueeze(1).expand_as(target) # scale * ||y||_2, clamp for numerical stability (changed clamp to 2mm)
+    else:
+        sigma = (0.5 * target.abs()).clamp(min=2e-3) # scale * y, clamp for numerical stability (changed clamp to 2mm)
+    diff = (input - target)
+    loss = 0.5 * diff.pow(2).div(sigma).sum()  # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
+    if size_average:
+        return loss / input.nelement()
+    else:
+        return loss
+
+# Get soft-loss
+w = Weighted3DTransformNormLoss(norm_per_pt=False)
+pts = Variable(torch.rand(2, 3, 12, 16), requires_grad=True)
+mdata = torch.rand(2, 4, 12, 16)
+masks = Variable(mdata.eq(mdata.max(1)[0].unsqueeze(1).expand_as(mdata)).float(), requires_grad=True)
+tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
+targetflows = Variable(torch.rand(2, 3, 12, 16)-0.5, requires_grad=False)
+loss = w(pts,masks,tfms,targetflows)
+loss.backward()
+
+# Get BiNormMseSqrt loss
+pts_b = Variable(pts.data.clone(), requires_grad=True)
+masks_b = Variable(masks.data.clone(), requires_grad=True)
+tfms_b = Variable(tfms.data.clone(), requires_grad=True)
+targetflows_b = Variable(targetflows.data.clone(), requires_grad=False)
+predpts_b = NTfm3D()(pts_b, masks_b, tfms_b)
+loss_b = BiNormMSESqrtLoss(predpts_b-pts_b,targetflows_b,norm_per_pt=False)
+loss_b.backward()

@@ -65,9 +65,9 @@ float Weighted3DTransformNormLoss_forward_float(
                 else
                 {
                     // Independent per dimension of the flow vector
-                    sx = fmaxf(normWt * abs(fxt), 2e-3);
-                    sy = fmaxf(normWt * abs(fyt), 2e-3);
-                    sz = fmaxf(normWt * abs(fzt), 2e-3);
+                    sx = fmaxf(normWt * fabsf(fxt), 2e-3);
+                    sy = fmaxf(normWt * fabsf(fyt), 2e-3);
+                    sz = fmaxf(normWt * fabsf(fzt), 2e-3);
                 }
 
                 // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
@@ -189,9 +189,9 @@ void Weighted3DTransformNormLoss_backward_float(
                 else
                 {
                     // Independent per dimension of the flow vector
-                    sx = fmaxf(normWt * abs(fxt), 2e-3);
-                    sy = fmaxf(normWt * abs(fyt), 2e-3);
-                    sz = fmaxf(normWt * abs(fzt), 2e-3);
+                    sx = fmaxf(normWt * fabsf(fxt), 2e-3);
+                    sy = fmaxf(normWt * fabsf(fyt), 2e-3);
+                    sz = fmaxf(normWt * fabsf(fzt), 2e-3);
                 }
 
                 // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
@@ -344,9 +344,9 @@ double Weighted3DTransformNormLoss_forward_double(
                 else
                 {
                     // Independent per dimension of the flow vector
-                    sx = fmax(normWt * abs(fxt), 2e-3);
-                    sy = fmax(normWt * abs(fyt), 2e-3);
-                    sz = fmax(normWt * abs(fzt), 2e-3);
+                    sx = fmax(normWt * fabs(fxt), 2e-3);
+                    sy = fmax(normWt * fabs(fyt), 2e-3);
+                    sz = fmax(normWt * fabs(fzt), 2e-3);
                 }
 
                 // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s
@@ -469,9 +469,9 @@ void Weighted3DTransformNormLoss_backward_double(
                 else
                 {
                     // Independent per dimension of the flow vector
-                    sx = fmax(normWt * abs(fxt), 2e-3);
-                    sy = fmax(normWt * abs(fyt), 2e-3);
-                    sz = fmax(normWt * abs(fzt), 2e-3);
+                    sx = fmax(normWt * fabs(fxt), 2e-3);
+                    sy = fmax(normWt * fabs(fyt), 2e-3);
+                    sz = fmax(normWt * fabs(fzt), 2e-3);
                 }
 
                 // Compute sum_k w_k * (R_k*p + t_k) across the different SE3s

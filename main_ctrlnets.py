@@ -40,6 +40,10 @@ parser.add_argument('--deltapose-reg-wt', default=0, type=float,
                     metavar='WT', help='Weight for L2 regularization of the predicted change in pose (default: 0)')
 parser.add_argument('--no-mask-gradmag', action='store_true', default=False,
                     help='uses only the loss gradient sign for training the masks (default: False)')
+parser.add_argument('--use-gt-masks', action='store_true', default=False,
+                    help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
+parser.add_argument('--use-gt-poses', action='store_true', default=False,
+                    help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 
 ################ MAIN
 #@profile
@@ -148,6 +152,17 @@ def main():
         assert (not args.use_sigmoid_mask or args.use_ntfm_delta), "Option to not use mask gradient magnitudes is not possible with sigmoid-masking/NTFM delta"
         print("Using only the gradient's sign for training the masks. Discarding the magnitude")
 
+    # Get IDs of joints we move (based on the data folders)
+    if args.use_gt_masks or args.use_gt_poses:
+        args.jt_ids = []
+        for dir in args.data:
+            if dir.find('joint') >= 0:
+                id = int(dir[dir.find('joint')+5]) # Find the ID of the joint
+                args.jt_ids.append(id)
+        assert(args.num_se3 == len(args.jt_ids)+1) # This has to match (only if using single joint data!)
+        args.jt_ids = np.sort(args.jt_ids) # Sort in ascending order
+        print('Using data where the following joints move: ', args.jt_ids)
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -183,7 +198,17 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    if args.use_gt_masks:
+        print('Using GT masks. Model predicts only poses & delta-poses')
+        assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
+        modelfn = ctrlnets.SE3OnlyPoseModel
+    elif args.use_gt_poses:
+        print('Using GT poses & delta poses. Model predicts only masks')
+        assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
+        modelfn = ctrlnets.SE3OnlyMaskModel
+    else:
+        modelfn = ctrlnets.SE3PoseModel
+    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                   se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
                                   input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                   init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
@@ -351,7 +376,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         def hook(self, input, result):
             predictions[name] = result
         return hook
-    model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
+    if not args.use_gt_poses:
+        model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
@@ -389,8 +415,19 @@ def iterate(data_loader, model, tblogger, num_iters,
         start = time.time()
 
         # Run the FWD pass through the network
-        [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
-                                                                               train_iter=num_train_iter)
+        # TODO: Choose only poses of links we move!
+        if args.use_gt_masks:
+            mask_1 = util.to_var(get_jt_masks(sample['masks'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False)
+            mask_2 = util.to_var(get_jt_masks(sample['masks'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False)
+            pose_1, pose_2, [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
+        elif args.use_gt_poses:
+            pose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1
+            pose_2 = util.to_var(get_jt_poses(sample['poses'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1
+            deltapose_t_12, pose_t_2 = se3nn.ComposeRtPair()(pose_2, se3nn.RtInverse()(pose_1)), pose_2  # Pose_t+1 * Pose_t^-1
+            mask_1, mask_2 = model([pts_1, pts_2], train_iter=num_train_iter)
+        else:
+            [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
+                                                                                   train_iter=num_train_iter)
         deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
 
         # Compute predicted points based on the masks
@@ -572,8 +609,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.image_summary(tag, images, iterct)
 
                 ## Print the predicted delta-SE3s
-                print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
-                                                                                             args.se3_dim).cpu()
+                if not args.use_gt_poses:
+                    print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
+                                                                                                 args.se3_dim).cpu()
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')
@@ -710,6 +748,29 @@ def digitize(tensor, minv=-0.075, maxv=0.075, nbins=150):
     ctensor = tensor.clamp(min=minv, max=maxv)
     # Digitize it
     return torch.ceil(((ctensor - minv) / (maxv - minv)) * nbins).long() # Get ceil instead of round -> matches result from np.digitize or np.searchsorted
+
+### Generate proper masks for the joints specified (all points between two joints have to belong the first joint & so on)
+# The first channel of the masks is BG
+# Masks is 4D: batchsz x 1+njts x ht x wd
+def get_jt_masks(masks, jt_ids):
+    jt_masks, jt_ids = [], np.sort(jt_ids)+1
+    for k in xrange(len(jt_ids)): # Add 1 as channel 0 is BG
+        curr_jt = jt_ids[k]
+        next_jt = masks.size(1) if (k == len(jt_ids)-1) else jt_ids[k+1] # Get next id (or go to end)
+        jtmask = masks[:,curr_jt:next_jt].sum(1).eq(1).unsqueeze(1) # Basically all masks from current jt to next jt-1
+        jt_masks.append(jtmask)
+    jt_masks = torch.cat(jt_masks, 1) # Concat
+    bg_mask  = jt_masks.sum(1).eq(0).unsqueeze(1) # Bg mask
+    return torch.cat([bg_mask, jt_masks], 1) # BG mask goes in front
+
+### Get poses for the joints specified (add BG too)
+# The first channel of the poses is BG
+# Poses is 4D: batchsz x 1+njts x 3 x 4
+def get_jt_poses(poses, jt_ids):
+    jt_poses = [poses[:,0].unsqueeze(1)]  # Init with BG
+    for id in np.sort(jt_ids)+1:
+        jt_poses.append(poses[:,id].unsqueeze(1))
+    return torch.cat(jt_poses, 1)
 
 
 ################ RUN MAIN

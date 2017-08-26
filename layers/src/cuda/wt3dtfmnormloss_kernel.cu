@@ -86,9 +86,9 @@ __global__ void computeLoss_f(const float *inputpts, const float *masks, const f
         else
         {
             // Independent per dimension of the flow vector
-            sx = fmaxf(normWt * abs(fxt), 2e-3);
-            sy = fmaxf(normWt * abs(fyt), 2e-3);
-            sz = fmaxf(normWt * abs(fzt), 2e-3);
+            sx = fmaxf(normWt * fabsf(fxt), 2e-3);
+            sy = fmaxf(normWt * fabsf(fyt), 2e-3);
+            sz = fmaxf(normWt * fabsf(fzt), 2e-3);
         }
 
         // Compute sum_k w_k * ||R_k*p + t_k - pt||^2 across the different SE3s
@@ -275,9 +275,9 @@ __global__ void computeLossGradients_f(const float *inputpts, const float *masks
         else
         {
             // Independent per dimension of the flow vector
-            sx = fmaxf(normWt * abs(fxt), 2e-3);
-            sy = fmaxf(normWt * abs(fyt), 2e-3);
-            sz = fmaxf(normWt * abs(fzt), 2e-3);
+            sx = fmaxf(normWt * fabsf(fxt), 2e-3);
+            sy = fmaxf(normWt * fabsf(fyt), 2e-3);
+            sz = fmaxf(normWt * fabsf(fzt), 2e-3);
         }
     }
 

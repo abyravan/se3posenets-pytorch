@@ -667,6 +667,72 @@ class SE3PoseModel(nn.Module):
         # Return outputs
         return [pose_1, mask_1], [pose_2, mask_2],  [deltapose_t_12, pose_t_2]
 
+####################################
+### SE3-OnlyPose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
+### pose_t, pose_t+1, [delta-pose, poset_t+1]
+class SE3OnlyPoseModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
+                 nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+        super(SE3OnlyPoseModel, self).__init__()
+
+        # Initialize the pose-mask model
+        self.posemodel = PoseEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                     use_kinchain=use_kinchain, input_channels=input_channels,
+                                     init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                     nonlinearity=nonlinearity, wide=wide)
+        # Initialize the transition model
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+                                               se3_type=se3_type, use_kinchain=use_kinchain,
+                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
+                                               local_delta_se3=local_delta_se3)
+
+    # Forward pass through the model
+    def forward(self, x):
+        # Get input vars
+        ptcloud_1, ptcloud_2, ctrl_1 = x
+
+        # Get pose & mask predictions @ t0 & t1
+        pose_1 = self.posemodel(ptcloud_1)  # ptcloud @ t1
+        pose_2 = self.posemodel(ptcloud_2)  # ptcloud @ t2
+
+        # Get transition model predicton of pose_1
+        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
+
+        # Return outputs
+        return pose_1, pose_2, [deltapose_t_12, pose_t_2]
+
+####################################
+### SE3-OnlyMask-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
+### mask_t, mask_t+1
+class SE3OnlyMaskModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
+                 nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+        super(SE3OnlyMaskModel, self).__init__()
+
+        # Initialize the pose-mask model
+        self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                     use_bn=use_bn, pre_conv=pre_conv,
+                                     nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                     sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+
+    # Forward pass through the model
+    def forward(self, x, train_iter=0):
+        # Get input vars
+        ptcloud_1, ptcloud_2 = x
+
+        # Get pose & mask predictions @ t0 & t1
+        mask_1 = self.maskmodel(ptcloud_1, train_iter=train_iter)  # ptcloud @ t1
+        mask_2 = self.maskmodel(ptcloud_2, train_iter=train_iter)  # ptcloud @ t2
+
+        # Return outputs
+        return mask_1, mask_2
 
 ####################################
 ### Multi-step version of the SE3-Pose-Model

@@ -421,8 +421,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Run the FWD pass through the network
         if args.use_gt_masks:
-            mask_1 = util.to_var(get_jt_masks(sample['masks'][:, 0].type(deftype), args.jt_ids), requires_grad=False)
-            mask_2 = util.to_var(get_jt_masks(sample['masks'][:, 1].type(deftype), args.jt_ids), requires_grad=False)
+            masks = get_jt_masks(sample['masks'].type(deftype), args.jt_ids)
+            mask_1 = util.to_var(masks[:,0].clone(), requires_grad=False)
+            mask_2 = util.to_var(masks[:,1].clone(), requires_grad=False)
             pose_1, pose_2, [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
         elif args.use_gt_poses:
             pose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1

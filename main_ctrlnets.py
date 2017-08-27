@@ -547,7 +547,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
         gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
         gtdeltapose_t_12 = data.ComposeRtPair(gtpose_2, data.RtInverse(gtpose_1))  # Pose_t+1 * Pose_t^-1
-        deltaposeerr = ctrlnets.BiMSELoss(gtdeltapose_t_12, deltapose_t_12.data.cpu()) # Error in pose space
+        deltaposeerr = ctrlnets.BiAbsLoss(gtdeltapose_t_12, deltapose_t_12.data.cpu()) # Abs error in pose space
         deltaposeerrm.update(deltaposeerr)
 
         # Display/Print frequency

@@ -639,8 +639,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-bwd3dloss': ptloss_2.data[0],
                 mode+'-consisloss': consisloss.data[0],
                 mode+'-poswtavgloss': poswtavglossm.val,
-                mode+'-deltarotloss': deltaroterr.data[0],
-                mode+'-deltatransloss': deltatranserr.data[0],
+                mode+'-deltarotloss': deltaroterrm.data[0],
+                mode+'-deltatransloss': deltatranserrm.data[0],
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)

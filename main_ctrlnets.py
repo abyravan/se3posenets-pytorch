@@ -572,12 +572,14 @@ def iterate(data_loader, model, tblogger, num_iters,
         gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
         gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
         gtdeltapose_t_12 = data.ComposeRtPair(gtpose_2, data.RtInverse(gtpose_1))  # Pose_t+1 * Pose_t^-1
-        deltaroterr, deltatranserr = compute_pose_errors(deltapose_t_12.data.cpu(), gtdeltapose_t_12)
+        deltaroterr, deltatranserr = compute_pose_errors(deltapose_t_12.data.unsqueeze(1).cpu(),
+                                                         gtdeltapose_t_12.unsqueeze(1))
         deltaroterrm.update(deltaroterr[0]); deltatranserrm.update(deltatranserr[0])
 
         # Compute rot & trans err per pose channel
         if args.disp_err_per_mask:
-            deltaroterr_mask, deltatranserr_mask = compute_pose_errors_per_mask(deltapose_t_12.data.cpu(), gtdeltapose_t_12)
+            deltaroterr_mask, deltatranserr_mask = compute_pose_errors_per_mask(deltapose_t_12.data.unsqueeze(1).cpu(),
+                                                                                gtdeltapose_t_12.unsqueeze(1))
             deltaroterrm_mask.update(deltaroterr_mask);  deltatranserrm_mask.update(deltatranserr_mask)
 
         ### Display/Print frequency

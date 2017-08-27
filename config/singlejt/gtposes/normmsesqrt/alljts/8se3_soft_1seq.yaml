@@ -1,6 +1,6 @@
 ---
 # Dataset options
-data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f]
+data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint0/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint1/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint2/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint3/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint4/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint6/postprocessmotions_f]
 batch-size:   32
 num-workers:  8
 train-per:    0.75
@@ -16,7 +16,7 @@ pre-conv:           False
 nonlin:             prelu
 se3-type:           se3aa
 pred-pivot:         False
-num-se3:            2
+num-se3:            8
 init-transse3-iden: True
 init-posese3-iden:  True
 #decomp-model:       False
@@ -27,7 +27,7 @@ use-gt-poses:		  True
 use-gt-masks:		  False
 
 # Mask options
-use-wt-sharpening: True
+use-wt-sharpening: False
 sharpen-start-iter: 0
 sharpen-rate: 1.0
 use-sigmoid-mask:  False
@@ -61,5 +61,5 @@ decay-epochs: 30
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/singlejt/gtposes/normmsesqrt/jt5_2se3_wtsharpenr1s0_1seq
+save-dir:  trained_nets/singlejt/gtposes/normmsesqrt/alljts/8se3_soft_1seq
 disp-err-per-mask: False

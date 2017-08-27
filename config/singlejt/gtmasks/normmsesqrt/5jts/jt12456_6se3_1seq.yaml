@@ -62,3 +62,4 @@ decay-epochs: 30
 # Display/Save options
 disp-freq: 25
 save-dir:  trained_nets/singlejt/gtmasks/normmsesqrt/5jts/jt12456_6se3_1seq
+disp-err-per-mask: True

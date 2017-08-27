@@ -779,7 +779,7 @@ def compute_flow_errors(predflows, gtflows):
     loss_sum_d = (predflows - gtflows).pow(2).view(batch,seq,-1).sum(2)  # Flow error for current step (B x seq)
     # Compute avg loss per example in the batch
     loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[loss_avg_d != loss_avg_d] = 0  # Clear out any NaNs
+    loss_avg_d[(loss_avg_d != loss_avg_d) and (loss_avg_d == np.inf)] = 0 # Clear out any Infs & NaNs
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
@@ -795,7 +795,7 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
     loss_sum_d = (err * gtmasks).view(batch, seq, nse3, -1).sum(3) # Flow error sum for all masks in entire sequence per dataset
     # Compute avg loss per example in the batch
     loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[loss_avg_d != loss_avg_d] = 0 # Clear out any NaNs
+    loss_avg_d[(loss_avg_d != loss_avg_d) and (loss_avg_d == np.inf)] = 0 # Clear out any Infs & NaNs
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
@@ -820,17 +820,16 @@ def digitize(tensor, minv=-0.075, maxv=0.075, nbins=150):
 
 ### Generate proper masks for the joints specified (all points between two joints have to belong the first joint & so on)
 # The first channel of the masks is BG
-# Masks is 4D: batchsz x 1+njts x ht x wd
+# Masks is 4D: batchsz x seq x 1+njts x ht x wd
 def get_jt_masks(masks, jt_ids):
-    jt_masks, jt_ids = [], np.sort(jt_ids)+1
+    batch, seq, num, ht, wd = masks.size()
+    jt_masks, jt_ids = torch.zeros(batch, seq, 1+len(jt_ids), ht, wd).type_as(masks), np.sort(jt_ids)+1
     for k in xrange(len(jt_ids)): # Add 1 as channel 0 is BG
         curr_jt = jt_ids[k]
-        next_jt = masks.size(1) if (k == len(jt_ids)-1) else jt_ids[k+1] # Get next id (or go to end)
-        jtmask = masks[:,curr_jt:next_jt].sum(1).eq(1).unsqueeze(1) # Basically all masks from current jt to next jt-1
-        jt_masks.append(jtmask)
-    jt_masks = torch.cat(jt_masks, 1) # Concat
-    bg_mask  = jt_masks.sum(1).eq(0).unsqueeze(1) # Bg mask
-    return torch.cat([bg_mask, jt_masks], 1).type_as(masks) # BG mask goes in front
+        next_jt = num if (k == len(jt_ids)-1) else jt_ids[k+1] # Get next id (or go to end)
+        jt_masks[:,:,k+1].copy_(masks[:,:,curr_jt:next_jt].sum(2)) # Basically all masks from current jt to next jt-1
+    jt_masks[:,:,0].copy_(jt_masks[:,:,1:].sum(2)).eq_(0) # Bg mask
+    return jt_masks # BG mask goes in front
 
 ### Get poses for the joints specified (add BG too)
 # The first channel of the poses is BG

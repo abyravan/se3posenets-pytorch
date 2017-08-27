@@ -780,7 +780,8 @@ def compute_flow_errors(predflows, gtflows):
     loss_sum_d = (predflows - gtflows).pow(2).view(batch,seq,-1).sum(2)  # Flow error for current step (B x seq)
     # Compute avg loss per example in the batch
     loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[(loss_avg_d != loss_avg_d) * (loss_avg_d == np.inf)] = 0 # Clear out any Infs & NaNs
+    loss_avg_d[loss_avg_d != loss_avg_d] = 0  # Clear out any Nans
+    loss_avg_d[loss_avg_d == np.inf] = 0  # Clear out any Infs
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
@@ -796,7 +797,8 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
     loss_sum_d = (err * gtmasks).view(batch, seq, nse3, -1).sum(3) # Flow error sum for all masks in entire sequence per dataset
     # Compute avg loss per example in the batch
     loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[(loss_avg_d != loss_avg_d) * (loss_avg_d == np.inf)] = 0 # Clear out any Infs & NaNs
+    loss_avg_d[loss_avg_d != loss_avg_d] = 0 # Clear out any Nans
+    loss_avg_d[loss_avg_d == np.inf]     = 0 # Clear out any Infs
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()

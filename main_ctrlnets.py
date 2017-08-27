@@ -572,16 +572,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
         gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
         gtdeltapose_t_12 = data.ComposeRtPair(gtpose_2, data.RtInverse(gtpose_1))  # Pose_t+1 * Pose_t^-1
-        deltaroterr   = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,:,:,0:3], deltapose_t_12.data[:,:,:,0:3].cpu()) # Abs error in rotation
-        deltatranserr = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,:,:,3], deltapose_t_12.data[:,:,:,3].cpu()) # Abs error in pose space
-        deltaroterrm.update(deltaroterr); deltatranserrm.update(deltatranserr)
+        deltaroterr, deltatranserr = compute_pose_errors(deltapose_t_12.data.cpu(), gtdeltapose_t_12)
+        deltaroterrm.update(deltaroterr[0]); deltatranserrm.update(deltatranserr[0])
 
         # Compute rot & trans err per pose channel
         if args.disp_err_per_mask:
-            deltaroterr_mask, deltatranserr_mask = torch.zeros(1,args.num_se3), torch.zeros(1,args.num_se3)
-            for k in xrange(args.num_se3):
-                deltaroterr_mask[0,k]   = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,k,:,0:3], deltapose_t_12.data[:,k,:,0:3].cpu()) # Abs error in rotation
-                deltatranserr_mask[0,k] = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,k,:,3], deltapose_t_12.data[:,k,:,3].cpu()) # Abs error in pose space
+            deltaroterr_mask, deltatranserr_mask = compute_pose_errors_per_mask(deltapose_t_12.data.cpu(), gtdeltapose_t_12)
             deltaroterrm_mask.update(deltaroterr_mask);  deltatranserrm_mask.update(deltatranserr_mask)
 
         ### Display/Print frequency
@@ -613,7 +609,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                             flowlossm_mask_sum_b.val[0,k] / bsz, flowlossm_mask_sum_b.avg[0,k] / bsz,
                             flowlossm_mask_avg_b.val[0,k] / bsz, flowlossm_mask_avg_b.avg[0,k] / bsz,
                                deltaroterrm_mask.val[0,k] / bsz,    deltaroterrm_mask.avg[0,k] / bsz,
-                            deltatranserrm_mask.val[0, k] / bsz, deltatranserrm_mask.avg[0, k] / bsz,))
+                             deltatranserrm_mask.val[0,k] / bsz,  deltatranserrm_mask.avg[0,k] / bsz,))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
@@ -714,9 +710,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
     print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
           'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
-          'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}),'
-          'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
-        fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
+          'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
+          'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+          'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
+        fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, delR=deltaroterrm, delt=deltatranserrm))
     print('========================================================')
 
     # Return the loss & flow loss
@@ -802,6 +799,24 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
+
+### Compute pose/deltapose errors
+# BOth inputs are tensors: B x S x K x 3 x 4, Output is a tensor: S (value is averaged over nSE3s and summed across the batch)
+def compute_pose_errors(predposes, gtposes):
+    batch, seq, nse3 = predposes.size(0), predposes.size(1), predposes.size(2)
+    # Compute error per rotation matrix & translation vector
+    roterr = (predposes.narrow(4,0,3) - gtposes.narrow(4,0,3)).pow(2).view(batch, seq, nse3, -1).sum(3).sqrt() # L2 of error in rotation (per matrix): B x S x K
+    traerr = (predposes.narrow(4,3,1) - gtposes.narrow(4,3,1)).pow(2).view(batch, seq, nse3, -1).sum(3).sqrt() # L2 of error in translation (per vector): B x S x K
+    return roterr.sum(2).sum(0) / nse3, traerr.sum(2).sum(0) / nse3
+
+### Compute pose/deltapose errors (separate over channels)
+# BOth inputs are tensors: B x S x K x 3 x 4, Output is a tensor: S x K
+def compute_pose_errors_per_mask(predposes, gtposes):
+    batch, seq, nse3 = predposes.size(0), predposes.size(1), predposes.size(2)
+    # Compute error per rotation matrix & translation vector
+    roterr = (predposes.narrow(4,0,3) - gtposes.narrow(4,0,3)).pow(2).view(batch, seq, nse3, -1).sum(3).sqrt() # L2 of error in rotation (per matrix): B x S x K
+    traerr = (predposes.narrow(4,3,1) - gtposes.narrow(4,3,1)).pow(2).view(batch, seq, nse3, -1).sum(3).sqrt() # L2 of error in translation (per vector): B x S x K
+    return roterr.sum(0), traerr.sum(0)
 
 ### Normalize image
 def normalize_img(img, min=-0.01, max=0.01):

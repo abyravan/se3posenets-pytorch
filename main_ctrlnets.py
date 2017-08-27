@@ -357,7 +357,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     seglossm_f, seglossm_b = AverageMeter(), AverageMeter()
-    poswtavglossm, deltareglossm  = AverageMeter(), AverageMeter()
+    poswtavglossm, deltareglossm, deltaposeerrm  = AverageMeter(), AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
 
@@ -543,6 +543,13 @@ def iterate(data_loader, model, tblogger, num_iters,
         #numptsm_f.update(numpts_fwd); numptsm_b.update(numpts_bwd)
         #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
 
+        # Compute error in delta pose space (not used for backprop)
+        gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
+        gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
+        gtdeltapose_t_12 = data.ComposeRtPair(gtpose_2, data.RtInverse(gtpose_1))  # Pose_t+1 * Pose_t^-1
+        deltaposeerr = ctrlnets.BiMSELoss(gtdeltapose_t_12, deltapose_t_12.data.cpu()) # Error in pose space
+        deltaposeerrm.update(deltaposeerr)
+
         # Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
@@ -554,8 +561,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
             print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
                   'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
-                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f})'.format(
-                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm))
+                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}),'
+                  'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
+                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
@@ -593,18 +601,33 @@ def iterate(data_loader, model, tblogger, num_iters,
                 ## Log the images (at a lower rate for now)
                 id = random.randint(0, sample['points'].size(0)-1)
 
-                # Concat the flows, depths and masks into one tensor
+                # Render the predicted and GT poses onto the depth
+                # TODO: Assumes that we are using single jt data
+                gtpose_1 = get_jt_poses(sample['poses'][id, 0], args.jt_ids).clone()
+                gtpose_2 = get_jt_poses(sample['poses'][id, 1], args.jt_ids).clone()
+                gtdepth_1 = normalize_img(sample['points'][id, 0, 2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
+                gtdepth_2 = normalize_img(sample['points'][id, 1, 2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
+                for k in xrange(args.num_se3):
+                    # Pose_1 (GT/Pred)
+                    util.draw_3d_frame(gtdepth_1, gtpose_1[k],  [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                    util.draw_3d_frame(gtdepth_1, pose_1[id,k], [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
+                    # Pose_1 (GT/Pred/Trans)
+                    util.draw_3d_frame(gtdepth_2, gtpose_2[k],  [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                    util.draw_3d_frame(gtdepth_2, pose_2[id,k], [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
+                    util.draw_3d_frame(gtdepth_2, pose_t_2[id,k], [0,0,1], args.cam_intrinsics, pixlength=15.0) # Transition model pred pose: Red
+                depthdisp = torch.cat([gtdepth_1, gtdepth_2], 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 640 image)
+
+                # Concat the flows and masks into one tensor
                 flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.data.narrow(0,id,1),
                                                                    bwdflows.data.narrow(0,id,1),
                                                                    predfwdflows.data.narrow(0,id,1),
                                                                    predbwdflows.data.narrow(0,id,1)], 0).cpu(),
                                                         nrow=2, normalize=True, range=(-0.01, 0.01))
-                depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),
                                                                    mask_2.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))
                 # Show as an image summary
-                info = { mode+'-depths': util.to_np(depthdisp.narrow(0,0,1)),
+                info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                          mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                 }
@@ -637,8 +660,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
     print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
-          'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f})'.format(
-        fwd=seglossm_f, bwd=seglossm_b))
+          'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
+          'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}),'
+          'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
+        fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
     print('========================================================')
 
     # Return the loss & flow loss

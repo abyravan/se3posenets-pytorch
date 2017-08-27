@@ -561,7 +561,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
             print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
                   'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
-                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}),'
+                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
                   'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
                 fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
 
@@ -603,18 +603,19 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Render the predicted and GT poses onto the depth
                 # TODO: Assumes that we are using single jt data
-                gtpose_1 = get_jt_poses(sample['poses'][id, 0], args.jt_ids).clone()
-                gtpose_2 = get_jt_poses(sample['poses'][id, 1], args.jt_ids).clone()
+                gtpose_1 = get_jt_poses(sample['poses'][id:id+1, 0], args.jt_ids).squeeze().clone()
+                gtpose_2 = get_jt_poses(sample['poses'][id:id+1, 1], args.jt_ids).squeeze().clone()
+		predpose_1, predpose_2, predpose_t_2 = pose_1[id].data.cpu(), pose_2[id].data.cpu(), pose_t_2[id].data.cpu()
                 gtdepth_1 = normalize_img(sample['points'][id, 0, 2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
                 gtdepth_2 = normalize_img(sample['points'][id, 1, 2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
                 for k in xrange(args.num_se3):
                     # Pose_1 (GT/Pred)
-                    util.draw_3d_frame(gtdepth_1, gtpose_1[k],  [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
-                    util.draw_3d_frame(gtdepth_1, pose_1[id,k], [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
+                    util.draw_3d_frame(gtdepth_1, gtpose_1[k],     [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                    util.draw_3d_frame(gtdepth_1, predpose_1[k],   [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
                     # Pose_1 (GT/Pred/Trans)
-                    util.draw_3d_frame(gtdepth_2, gtpose_2[k],  [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
-                    util.draw_3d_frame(gtdepth_2, pose_2[id,k], [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
-                    util.draw_3d_frame(gtdepth_2, pose_t_2[id,k], [0,0,1], args.cam_intrinsics, pixlength=15.0) # Transition model pred pose: Red
+                    util.draw_3d_frame(gtdepth_2, gtpose_2[k],     [1,0,0], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                    util.draw_3d_frame(gtdepth_2, predpose_2[k],   [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
+                    util.draw_3d_frame(gtdepth_2, predpose_t_2[k], [0,0,1], args.cam_intrinsics, pixlength=15.0) # Transition model pred pose: Red
                 depthdisp = torch.cat([gtdepth_1, gtdepth_2], 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 640 image)
 
                 # Concat the flows and masks into one tensor

@@ -44,7 +44,7 @@ parser.add_argument('--use-gt-masks', action='store_true', default=False,
                     help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
 parser.add_argument('--use-gt-poses', action='store_true', default=False,
                     help='Model predicts only masks. GT poses & deltas are given. (default: False)')
-parser.add_argument('--disp-flowerr-per-mask', action='store_true', default=False,
+parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
 ################ MAIN
 #@profile
@@ -358,11 +358,13 @@ def iterate(data_loader, model, tblogger, num_iters,
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     seglossm_f, seglossm_b = AverageMeter(), AverageMeter()
-    poswtavglossm, deltareglossm, deltaposeerrm  = AverageMeter(), AverageMeter(), AverageMeter()
+    poswtavglossm, deltareglossm  = AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
     flowlossm_mask_sum_f, flowlossm_mask_avg_f = AverageMeter(), AverageMeter()
     flowlossm_mask_sum_b, flowlossm_mask_avg_b = AverageMeter(), AverageMeter()
+    deltaroterrm, deltatranserrm = AverageMeter(), AverageMeter()
+    deltaroterrm_mask, deltatranserrm_mask = AverageMeter(), AverageMeter()
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -531,6 +533,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Start timer
         start = time.time()
 
+        ### Flow error
         # Compute flow predictions and errors
         # NOTE: I'm using CUDA here to speed up computation by ~4x
         predfwdflows = (predpts_1 - pts_1)
@@ -547,7 +550,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
 
         # Compute flow error per mask (if asked to)
-        if args.disp_flowerr_per_mask:
+        if args.disp_err_per_mask:
             gtmask_1 = get_jt_masks(sample['masks'][:, 0], args.jt_ids).type(deftype)
             gtmask_2 = get_jt_masks(sample['masks'][:, 1], args.jt_ids).type(deftype)
             flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1),
@@ -561,14 +564,24 @@ def iterate(data_loader, model, tblogger, num_iters,
             flowlossm_mask_sum_f.update(flowloss_mask_sum_fwd); flowlossm_mask_sum_b.update(flowloss_mask_sum_bwd)
             flowlossm_mask_avg_f.update(flowloss_mask_avg_fwd); flowlossm_mask_avg_b.update(flowloss_mask_avg_bwd)
 
+        ### Pose error
         # Compute error in delta pose space (not used for backprop)
         gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
         gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
         gtdeltapose_t_12 = data.ComposeRtPair(gtpose_2, data.RtInverse(gtpose_1))  # Pose_t+1 * Pose_t^-1
-        deltaposeerr = ctrlnets.BiAbsLoss(gtdeltapose_t_12, deltapose_t_12.data.cpu()) # Abs error in pose space
-        deltaposeerrm.update(deltaposeerr)
+        deltaroterr   = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,:,:,0:3], deltapose_t_12.data[:,:,:,0:3].cpu()) # Abs error in rotation
+        deltatranserr = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,:,:,3], deltapose_t_12.data[:,:,:,3].cpu()) # Abs error in pose space
+        deltaroterrm.update(deltaroterr); deltatranserrm.update(deltatranserr)
 
-        # Display/Print frequency
+        # Compute rot & trans err per pose channel
+        if args.disp_err_per_mask:
+            deltaroterr_mask, deltatranserr_mask = torch.zeros(1,args.num_se3), torch.zeros(1,args.num_se3)
+            for k in xrange(args.num_se3):
+                deltaroterr_mask[0,k]   = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,k,:,0:3], deltapose_t_12.data[:,k,:,0:3].cpu()) # Abs error in rotation
+                deltatranserr_mask[0,k] = ctrlnets.BiAbsLoss(gtdeltapose_t_12[:,k,:,3], deltapose_t_12.data[:,k,:,3].cpu()) # Abs error in pose space
+            deltaroterrm_mask.update(deltaroterr_mask);  deltatranserrm_mask.update(deltatranserr_mask)
+
+        ### Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
@@ -580,20 +593,24 @@ def iterate(data_loader, model, tblogger, num_iters,
             print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
                   'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
                   'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
-                  'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
-                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
+                  'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+                  'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
+                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, delR=deltaroterrm, delt=deltatranserrm))
 
-            # Print error per mask if enabled
-            if args.disp_flowerr_per_mask:
+            # Print (flow & pose) error per mask if enabled
+            if args.disp_err_per_mask:
                 bsz = args.batch_size
                 for k in xrange(args.num_se3):
-                    print('\tMask: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
-                          'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f})'.format(
+                    print('\tSE3/Mask: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
+                          'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
+                          'Delta-Rot: {:.5f} ({:.5f}), Delta-Trans: {:.5f} ({:.5f})'.format(
                             k,
                             flowlossm_mask_sum_f.val[0,k] / bsz, flowlossm_mask_sum_f.avg[0,k] / bsz,
                             flowlossm_mask_avg_f.val[0,k] / bsz, flowlossm_mask_avg_f.avg[0,k] / bsz,
                             flowlossm_mask_sum_b.val[0,k] / bsz, flowlossm_mask_sum_b.avg[0,k] / bsz,
-                            flowlossm_mask_avg_b.val[0,k] / bsz, flowlossm_mask_avg_b.avg[0,k] / bsz))
+                            flowlossm_mask_avg_b.val[0,k] / bsz, flowlossm_mask_avg_b.avg[0,k] / bsz,
+                               deltaroterrm_mask.val[0,k] / bsz,    deltaroterrm_mask.avg[0,k] / bsz,
+                            deltatranserrm_mask.val[0, k] / bsz, deltatranserrm_mask.avg[0, k] / bsz,))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:

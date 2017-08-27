@@ -550,6 +550,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
 
         # Compute flow error per mask (if asked to)
+        st = time.time()
         if args.disp_err_per_mask:
             gtmask_1 = get_jt_masks(sample['masks'][:, 0], args.jt_ids).type(deftype)
             gtmask_2 = get_jt_masks(sample['masks'][:, 1], args.jt_ids).type(deftype)
@@ -563,6 +564,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Update stats
             flowlossm_mask_sum_f.update(flowloss_mask_sum_fwd); flowlossm_mask_sum_b.update(flowloss_mask_sum_bwd)
             flowlossm_mask_avg_f.update(flowloss_mask_avg_fwd); flowlossm_mask_avg_b.update(flowloss_mask_avg_bwd)
+        print(time.time()-st)
 
         ### Pose error
         # Compute error in delta pose space (not used for backprop)
@@ -768,42 +770,32 @@ def save_checkpoint(state, is_best, savedir='.', filename='checkpoint.pth.tar'):
 def compute_flow_errors(predflows, gtflows):
     batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
     num_pts, loss_sum, loss_avg, nz = torch.zeros(seq), torch.zeros(seq), torch.zeros(seq), torch.zeros(seq)
-    for k in xrange(seq):
-        # Compute errors per dataset
-        # !!!!!!!!! :ge(1e-3) returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
-        num_pts_d  = torch.abs(gtflows[:,k]).sum(1).ge(1e-3).float().view(batch, -1).sum(1) # Num pts with flow per dataset
-        loss_sum_d = (predflows[:,k] - gtflows[:,k]).pow(2).view(batch, -1).sum(1).float()  # Sum of errors per dataset
-
-        # Sum up errors per batch
-        num_pts[k]  = num_pts_d.sum()               # Num pts that have non-zero flow
-        loss_sum[k] = loss_sum_d.sum()              # Sum of total flow loss across the batch
-        for j in xrange(batch):
-            if (num_pts_d[j] > 0):
-                loss_avg[k] += (loss_sum_d[j] / num_pts_d[j]) # Sum of per-point loss across the batch
-                nz[k]       += 1 # We have one more dataset with non-zero num pts that move
+    # Compute num pts not moving per mask
+    # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
+    num_pts_d = (gtflows.abs().sum(1) > 1e-3).float().view(batch,seq,-1).sum(2) # B x seq
+    num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).float().sum(0)
+    # Compute loss across batch
+    loss_sum_d = (predflows - gtflows).pow(2).view(batch,seq,-1).sum(2)  # Flow error for current step (B x seq)
+    # Compute avg loss per example in the batch
+    loss_avg_d = loss_sum_d / num_pts_d
+    loss_avg_d[loss_avg_d != loss_avg_d] = 0  # Clear out any NaNs
+    loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum, loss_avg, num_pts, nz
 
 ### Compute flow errors per mask (flows are size: B x S x 3 x H x W)
 def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
     batch, seq, nse3 = predflows.size(0), predflows.size(1), gtmasks.size(2)  # B x S x 3 x H x W
-    num_pts, loss_sum, loss_avg, nz = torch.zeros(seq,nse3), torch.zeros(seq,nse3), torch.zeros(seq,nse3), torch.zeros(seq,nse3)
-    for k in xrange(seq):
-        mask = torch.abs(gtflows[:,k]).sum(1).ge(1e-3).float()        # Set of points that move in the current scene
-        err  = (predflows[:,k] - gtflows[:,k]).pow(2).sum(1).float()  # Flow error for current step
-        for j in xrange(nse3):  # Iterate over the mask-channels
-            # Compute error per dataset
-            maskc       = gtmasks[:,k,j].clone().float() * mask   # Pts belonging to current link that move in scene
-            num_pts_d   = gtmasks[:,k,j].clone().view(batch, -1).sum(1).float() # Num pts per mask per dataset
-            loss_sum_d  = (err * maskc).view(batch, -1).sum(1)  # Flow error sum per mask per dataset
-
-            # Sum up errors actoss the batch
-            num_pts[k][j]   = num_pts_d.sum()   # Num pts that have non-zero flow
-            loss_sum[k][j]  = loss_sum_d.sum()  # Sum of total flow loss across batch
-            for i in xrange(batch):
-                if (num_pts_d[i] > 0):
-                    loss_avg[k][j]  += (loss_sum_d[i] / num_pts_d[i]) # Sum of per-point flow across batch
-                    nz[k][j]        += 1 # One more dataset
+    # Compute num pts not moving per mask
+    num_pts_d = gtmasks.float().sum(4).sum(3)
+    num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).float().sum(0)
+    # Compute loss across batch
+    err  = (predflows - gtflows).pow(2).sum(2).unsqueeze(2).expand_as(gtmasks) # Flow error for current step (B x S x K x H x W)
+    loss_sum_d = (err * gtmasks).view(batch, seq, nse3, -1).sum(3) # Flow error sum for all masks in entire sequence per dataset
+    # Compute avg loss per example in the batch
+    loss_avg_d = loss_sum_d / num_pts_d
+    loss_avg_d[loss_avg_d != loss_avg_d] = 0 # Clear out any NaNs
+    loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum, loss_avg, num_pts, nz
 

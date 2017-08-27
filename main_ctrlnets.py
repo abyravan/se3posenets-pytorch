@@ -44,7 +44,8 @@ parser.add_argument('--use-gt-masks', action='store_true', default=False,
                     help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
 parser.add_argument('--use-gt-poses', action='store_true', default=False,
                     help='Model predicts only masks. GT poses & deltas are given. (default: False)')
-
+parser.add_argument('--disp-flowerr-per-mask', action='store_true', default=False,
+                    help='Display flow error per mask channel. (default: False)')
 ################ MAIN
 #@profile
 def main():
@@ -360,6 +361,8 @@ def iterate(data_loader, model, tblogger, num_iters,
     poswtavglossm, deltareglossm, deltaposeerrm  = AverageMeter(), AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
+    flowlossm_mask_sum_f, flowlossm_mask_avg_f = AverageMeter(), AverageMeter()
+    flowlossm_mask_sum_b, flowlossm_mask_avg_b = AverageMeter(), AverageMeter()
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -543,6 +546,21 @@ def iterate(data_loader, model, tblogger, num_iters,
         #numptsm_f.update(numpts_fwd); numptsm_b.update(numpts_bwd)
         #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
 
+        # Compute flow error per mask (if asked to)
+        if args.disp_flowerr_per_mask:
+            gtmask_1 = get_jt_masks(sample['masks'][:, 0], args.jt_ids).type(deftype)
+            gtmask_2 = get_jt_masks(sample['masks'][:, 1], args.jt_ids).type(deftype)
+            flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1),
+                                                                                              fwdflows.data.unsqueeze(1),
+                                                                                              gtmask_1.unsqueeze(1))
+            flowloss_mask_sum_bwd, flowloss_mask_avg_bwd, _, _ = compute_flow_errors_per_mask(predbwdflows.data.unsqueeze(1),
+                                                                                              bwdflows.data.unsqueeze(1),
+                                                                                              gtmask_2.unsqueeze(1))
+
+            # Update stats
+            flowlossm_mask_sum_f.update(flowloss_mask_sum_fwd); flowlossm_mask_sum_b.update(flowloss_mask_sum_bwd)
+            flowlossm_mask_avg_f.update(flowloss_mask_avg_fwd); flowlossm_mask_avg_b.update(flowloss_mask_avg_bwd)
+
         # Compute error in delta pose space (not used for backprop)
         gtpose_1 = get_jt_poses(sample['poses'][:, 0], args.jt_ids)
         gtpose_2 = get_jt_poses(sample['poses'][:, 1], args.jt_ids)
@@ -564,6 +582,18 @@ def iterate(data_loader, model, tblogger, num_iters,
                   'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
                   'Delta-pose-Err: {dele.val:.5f} ({dele.avg:.5f})'.format(
                 fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, dele=deltaposeerrm))
+
+            # Print error per mask if enabled
+            if args.disp_flowerr_per_mask:
+                bsz = args.batch_size
+                for k in xrange(args.num_se3):
+                    print('\tMask: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
+                          'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f})'.format(
+                            k,
+                            flowlossm_mask_sum_f.val[0,k] / bsz, flowlossm_mask_sum_f.avg[0,k] / bsz,
+                            flowlossm_mask_avg_f.val[0,k] / bsz, flowlossm_mask_avg_f.avg[0,k] / bsz,
+                            flowlossm_mask_sum_b.val[0,k] / bsz, flowlossm_mask_sum_b.avg[0,k] / bsz,
+                            flowlossm_mask_avg_b.val[0,k] / bsz, flowlossm_mask_avg_b.avg[0,k] / bsz))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:

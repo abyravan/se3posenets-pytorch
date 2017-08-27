@@ -46,6 +46,8 @@ parser.add_argument('--use-gt-poses', action='store_true', default=False,
                     help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
+parser.add_argument('--use-kinchain', action='store_true', default=False,
+                    help='Model assumes that the SE3s are part of a kinematic chain (default: False)')
 ################ MAIN
 #@profile
 def main():
@@ -164,6 +166,10 @@ def main():
         args.jt_ids = np.sort(args.jt_ids) # Sort in ascending order
         print('Using data where the following joints move: ', args.jt_ids)
 
+    # Kinematic chain
+    if args.use_kinchain:
+        print('Kinematic chain assumption')
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -210,7 +216,7 @@ def main():
     else:
         modelfn = ctrlnets.SE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=args.use_kinchain,
                                   input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                   init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                                   use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,

@@ -422,8 +422,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Run the FWD pass through the network
         # TODO: Choose only poses of links we move!
         if args.use_gt_masks:
-            mask_1 = util.to_var(get_jt_masks(sample['masks'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False)
-            mask_2 = util.to_var(get_jt_masks(sample['masks'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False)
+            mask_1 = util.to_var(get_jt_masks(sample['masks'][:, 0].type(deftype), args.jt_ids).clone(), requires_grad=False)
+            mask_2 = util.to_var(get_jt_masks(sample['masks'][:, 1].type(deftype), args.jt_ids).clone(), requires_grad=False)
             pose_1, pose_2, [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
         elif args.use_gt_poses:
             pose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1
@@ -550,10 +550,13 @@ def iterate(data_loader, model, tblogger, num_iters,
         #nzm_f.update(nz_fwd); nzm_b.update(nz_bwd)
 
         # Compute flow error per mask (if asked to)
-        st = time.time()
+        st1 = time.time()
         if args.disp_err_per_mask:
-            gtmask_1 = get_jt_masks(sample['masks'][:, 0], args.jt_ids).type(deftype)
-            gtmask_2 = get_jt_masks(sample['masks'][:, 1], args.jt_ids).type(deftype)
+            if args.use_gt_masks: # If we have all joints
+                gtmask_1, gtmask_2 = mask_1.data, mask_2.data # Already computed
+            else:
+                gtmask_1 = get_jt_masks(sample['masks'][:, 0].type(deftype), args.jt_ids)
+                gtmask_2 = get_jt_masks(sample['masks'][:, 1].type(deftype), args.jt_ids)
             flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1),
                                                                                               fwdflows.data.unsqueeze(1),
                                                                                               gtmask_1.unsqueeze(1))
@@ -564,7 +567,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Update stats
             flowlossm_mask_sum_f.update(flowloss_mask_sum_fwd); flowlossm_mask_sum_b.update(flowloss_mask_sum_bwd)
             flowlossm_mask_avg_f.update(flowloss_mask_avg_fwd); flowlossm_mask_avg_b.update(flowloss_mask_avg_bwd)
-        print(time.time()-st)
+        print(time.time()-st1)
 
         ### Pose error
         # Compute error in delta pose space (not used for backprop)

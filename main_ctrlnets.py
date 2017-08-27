@@ -669,11 +669,13 @@ def iterate(data_loader, model, tblogger, num_iters,
                 depthdisp = torch.cat([gtdepth_1, gtdepth_2], 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 640 image)
 
                 # Concat the flows and masks into one tensor
+                minf, maxf = min(fwdflows.data[id].min(), bwdflows.data[id].min()), \
+                             max(fwdflows.data[id].max(), bwdflows.data[id].max())
                 flowdisp  = torchvision.utils.make_grid(torch.cat([fwdflows.data.narrow(0,id,1),
                                                                    bwdflows.data.narrow(0,id,1),
                                                                    predfwdflows.data.narrow(0,id,1),
                                                                    predbwdflows.data.narrow(0,id,1)], 0).cpu(),
-                                                        nrow=2, normalize=True, range=(-0.01, 0.01))
+                                                        nrow=2, normalize=True, range=(minf, maxf))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([mask_1.data.narrow(0,id,1),
                                                                    mask_2.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))

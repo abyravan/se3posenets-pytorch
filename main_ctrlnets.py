@@ -776,8 +776,8 @@ def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
         err  = (predflows[:,k] - gtflows[:,k]).pow(2).sum(1).float()  # Flow error for current step
         for j in xrange(nse3):  # Iterate over the mask-channels
             # Compute error per dataset
-            maskc       = gtmasks[:,j].clone().float() * mask   # Pts belonging to current link that move in scene
-            num_pts_d   = gtmasks[:,j].clone().view(batch, -1).sum(1).float() # Num pts per mask per dataset
+            maskc       = gtmasks[:,k,j].clone().float() * mask   # Pts belonging to current link that move in scene
+            num_pts_d   = gtmasks[:,k,j].clone().view(batch, -1).sum(1).float() # Num pts per mask per dataset
             loss_sum_d  = (err * maskc).view(batch, -1).sum(1)  # Flow error sum per mask per dataset
 
             # Sum up errors actoss the batch

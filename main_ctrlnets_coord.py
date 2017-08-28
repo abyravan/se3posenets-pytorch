@@ -36,6 +36,10 @@ parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
 parser.add_argument('--use-kinchain', action='store_true', default=False,
                     help='Model assumes that the SE3s are part of a kinematic chain (default: False)')
+parser.add_argument('--use-gt-masks', action='store_true', default=False,
+                    help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
+parser.add_argument('--use-gt-poses', action='store_true', default=False,
+                    help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 
 # Params for coord training
 parser.add_argument('--coord-iter', default=0, type=int,
@@ -365,7 +369,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    ncoord = int(num_iters*(0.5/args.coord_iter))
+    ncoord = int(num_iters*(0.5/args.coord_iter)) if args.coord_iter > 0 else 0
     for i in xrange(num_iters):
         # ===== Setup network training ===== #
         # Alternate between training the mask net & the pose/transition net

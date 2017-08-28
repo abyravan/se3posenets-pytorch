@@ -766,8 +766,22 @@ class SE3DecompModel(nn.Module):
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
-        print('Forward pass for SE3-Decomp-Model is not yet implemented')
-        raise NotImplementedError
+        # Get input vars
+        ptcloud_1, ptcloud_2, ctrl_1 = x
+
+        # Get pose predictions @ t0 & t1
+        pose_1 = self.posemodel(ptcloud_1)  # ptcloud @ t1
+        pose_2 = self.posemodel(ptcloud_2)  # ptcloud @ t2
+
+        # Get mask predictions @ t0 & t1
+        mask_1 = self.maskmodel(ptcloud_1)  # ptcloud @ t1
+        mask_2 = self.maskmodel(ptcloud_2)  # ptcloud @ t2
+
+        # Get transition model predicton of pose_1
+        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
+
+        # Return outputs
+        return [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2]
 
 ####################################
 ### Multi-step version of the SE3-Pose-Model

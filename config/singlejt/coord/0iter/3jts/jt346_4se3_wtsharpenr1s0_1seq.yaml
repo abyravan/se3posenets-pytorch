@@ -16,7 +16,7 @@ pre-conv:           False
 nonlin:             prelu
 se3-type:           se3aa
 pred-pivot:         False
-num-se3:            2
+num-se3:            4
 init-transse3-iden: True
 init-posese3-iden:  True
 local-delta-se3:    False
@@ -59,5 +59,5 @@ decay-epochs: 30
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/singlejt/coord/0iter/3jts/jt346_2se3_wtsharpenr1s0_1seq
+save-dir:  trained_nets/singlejt/coord/0iter/3jts/jt346_4se3_wtsharpenr1s0_1seq
 disp-err-per-mask: False

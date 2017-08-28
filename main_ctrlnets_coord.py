@@ -359,6 +359,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         def hook(self, input, result):
             predictions[name] = result
         return hook
+    model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
@@ -379,7 +380,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             if j < args.coord_iter:
                 iterprint = ('Iter: {}/{}, Co-ord iter: {}/{}, Step: {}/{}, Training pose/transition model'.format(
                     i+1, num_iters, int((i-j) * (0.5/args.coord_iter))+1, ncoord, j+1, 2*args.coord_iter))
-                print('Training pose/transition model. Disabling training of mask model')
+                #print('Training pose/transition model. Disabling training of mask model')
                 enable_training(model.posemodel)        # Train pose model
                 enable_training(model.transitionmodel)  # Train transition model
                 disable_training(model.maskmodel)       # Don't train mask model
@@ -387,7 +388,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 iterprint = ('Iter: {}/{}, Co-ord iter: {}/{}, Step: {}/{}, Training mask model'.format(
                     i+1, num_iters, int((i-j) * (0.5/args.coord_iter))+1, ncoord, j+1, 2*args.coord_iter))
-                print('Training mask model. Disabling training of pose/transition model')
+                #print('Training mask model. Disabling training of pose/transition model')
                 disable_training(model.posemodel)       # Don't train pose model
                 disable_training(model.transitionmodel) # Don't train transition model
                 enable_training(model.maskmodel)        # Train mask model
@@ -565,7 +566,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening:
-                noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
                     num_train_iter, noise_std, pow))
 

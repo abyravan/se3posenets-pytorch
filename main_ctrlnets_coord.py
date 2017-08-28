@@ -384,7 +384,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                 enable_training(model.posemodel)        # Train pose model
                 enable_training(model.transitionmodel)  # Train transition model
                 disable_training(model.maskmodel)       # Don't train mask model
-                model.maskmodel.eval() # Set in eval mode (for BN & wt-sharpening noise)
             else:
                 iterprint = ('Iter: {}/{}, Co-ord iter: {}/{}, Step: {}/{}, Training mask model'.format(
                     i+1, num_iters, int((i-j) * (0.5/args.coord_iter))+1, ncoord, j+1, 2*args.coord_iter))
@@ -392,8 +391,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                 disable_training(model.posemodel)       # Don't train pose model
                 disable_training(model.transitionmodel) # Don't train transition model
                 enable_training(model.maskmodel)        # Train mask model
-                model.posemodel.eval()        # Set in eval mode (for BN)
-                model.transitionmodel.eval()  # Set in eval mode (for BN)
 
         # ============ Load data ============#
         # Start timer
@@ -804,11 +801,13 @@ def get_jt_poses(poses, jt_ids):
 
 ### Enable training for all layers of a model
 def enable_training(model):
+    model.train() # Set in training mode
     for param in model.parameters():
         param.requires_grad = True
 
 ### Disable training for all layers of a model
 def disable_training(model):
+    model.eval() # Set in eval mode
     for param in model.parameters():
         param.requires_grad = False
 

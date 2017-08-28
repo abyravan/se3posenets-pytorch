@@ -476,8 +476,9 @@ def iterate(data_loader, model, tblogger, num_iters,
             loss.backward()       # Compute gradients - BWD pass
             optimizer.step()      # Run update step
 
-            # Increment number of training iterations by 1
-            num_train_iter += 1
+            # Increment number of training iterations by 1 (only if we train mask)
+            if model.maskmodel.training:
+                num_train_iter += 1
 
             # Measure BWD time
             bwd_time.update(time.time() - start)

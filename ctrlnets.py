@@ -774,10 +774,10 @@ class SE3DecompModel(nn.Module):
         pose_2 = self.posemodel(ptcloud_2)  # ptcloud @ t2
 
         # Get mask predictions @ t0 & t1
-        mask_1 = self.maskmodel(ptcloud_1)  # ptcloud @ t1
-        mask_2 = self.maskmodel(ptcloud_2)  # ptcloud @ t2
+        mask_1 = self.maskmodel(ptcloud_1, train_iter=train_iter)  # ptcloud @ t1
+        mask_2 = self.maskmodel(ptcloud_2, train_iter=train_iter)  # ptcloud @ t2
 
-        # Get transition model predicton of pose_1
+        # Get transition model predicton ofCUDA_VISIBLE_DEVICES=2 python main_ctrlnets_coord.py -c config/singlejt/coord/10iter/3jts/jt246_4se3_wtsharpenr1s0_1seq.yaml --batch-size 16 pose_1
         deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
 
         # Return outputs

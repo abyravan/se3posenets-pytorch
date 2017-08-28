@@ -735,6 +735,41 @@ class SE3OnlyMaskModel(nn.Module):
         return mask_1, mask_2
 
 ####################################
+### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
+### [pose_t, mask_t], [pose_t+1, mask_t+1], [delta-pose, poset_t+1]
+class SE3DecompModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
+                 nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+        super(SE3DecompModel, self).__init__()
+
+        # Initialize the pose model
+        self.posemodel = PoseEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                     use_kinchain=use_kinchain, input_channels=input_channels,
+                                     init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                     nonlinearity=nonlinearity, wide=wide)
+
+        # Initialize the mask model
+        self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                     use_bn=use_bn, pre_conv=pre_conv,
+                                     nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                     sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+
+        # Initialize the transition model
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+                                               se3_type=se3_type, use_kinchain=use_kinchain,
+                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
+                                               local_delta_se3=local_delta_se3)
+
+    # Forward pass through the model
+    def forward(self, x, train_iter=0):
+        print('Forward pass for SE3-Decomp-Model is not yet implemented')
+        raise NotImplementedError
+
+####################################
 ### Multi-step version of the SE3-Pose-Model
 ### Currently, this has a separate pose & mask predictor as well as a transition model
 ### NOTE: The forward pass is not currently implemented, this needs to be done outside

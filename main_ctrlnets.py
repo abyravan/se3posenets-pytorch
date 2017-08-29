@@ -48,6 +48,9 @@ parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
 parser.add_argument('--use-kinchain', action='store_true', default=False,
                     help='Model assumes that the SE3s are part of a kinematic chain (default: False)')
+parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,
+                    help='Uses soft loss + weight sharpening (default: False)')
+
 ################ MAIN
 #@profile
 def main():
@@ -107,6 +110,11 @@ def main():
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
     if args.poswtavg_wt > 0:
         print('Loss weight for position error w.r.t mask wt. avg positions: {}'.format(args.poswtavg_wt))
+
+    # Soft-weight sharpening
+    if args.soft_wt_sharpening:
+        assert not args.use_sigmoid_mask, "Cannot set both soft weight sharpening and sigmoid mask options together"
+        args.use_wt_sharpening = True # We do weight sharpening!
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
@@ -450,19 +458,28 @@ def iterate(data_loader, model, tblogger, num_iters,
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
         if args.use_wt_sharpening or args.use_sigmoid_mask:
-            # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
-            inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_1, tarpts_1]
-            inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_2, tarpts_2]
-            # We just measure error in flow space
-            #inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
-            #inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
-            # If motion-normalized loss, pass in GT flows
-            if args.motion_norm_loss:
-                ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows, loss_type=args.loss_type)
-                ptloss_2 = bwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_2, targets_2, bwdflows, loss_type=args.loss_type)
+            if args.soft_wt_sharpening:
+                # Use the weighted 3D transform loss, do not use explicitly predicted points
+                if (args.loss_type.find('normmsesqrt') >= 0):
+                    ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, fwdflows)  # Predict pts in FWD dirn and compare to target @ t2
+                    ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, bwdflows)  # Predict pts in BWD dirn and compare to target @ t1
+                else:
+                    ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+                    ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
             else:
-                ptloss_1 = fwd_wt * ctrlnets.Loss3D(inputs_1, targets_1, loss_type=args.loss_type)
-                ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
+                # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
+                inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_1, tarpts_1]
+                inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_2, tarpts_2]
+                # We just measure error in flow space
+                #inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
+                #inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
+                # If motion-normalized loss, pass in GT flows
+                if args.motion_norm_loss:
+                    ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows, loss_type=args.loss_type)
+                    ptloss_2 = bwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_2, targets_2, bwdflows, loss_type=args.loss_type)
+                else:
+                    ptloss_1 = fwd_wt * ctrlnets.Loss3D(inputs_1, targets_1, loss_type=args.loss_type)
+                    ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
         else:
             # Use the weighted 3D transform loss, do not use explicitly predicted points
             if (args.loss_type.find('normmsesqrt') >= 0):

@@ -1,0 +1,19 @@
+
+in baxter workspace
+
+source devel/setup.bash
+
+simulation:
+
+terminal 1
+./baxter.sh sim 
+roslaunch baxter_gazebo baxter_world.launch
+
+terminal 2
+./baxter.sh sim
+ipython or
+run python run_baxter_se3_ctrl.py -l right
+
+real system
+./baxter.sh (for real system)
+

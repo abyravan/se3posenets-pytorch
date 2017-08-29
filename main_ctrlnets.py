@@ -113,6 +113,7 @@ def main():
 
     # Soft-weight sharpening
     if args.soft_wt_sharpening:
+        print('Using weight sharpening with soft-masking loss')
         assert not args.use_sigmoid_mask, "Cannot set both soft weight sharpening and sigmoid mask options together"
         args.use_wt_sharpening = True # We do weight sharpening!
 

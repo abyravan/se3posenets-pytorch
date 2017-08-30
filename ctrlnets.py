@@ -67,64 +67,72 @@ def init_sigmoidmask_bg(layer, num_se3=8):
 '''
     NN Modules / Loss functions
 '''
+# TODO: The weights are only supposed to be binary here. Non binary weights will do weird things
 
 # MSE Loss that gives gradients w.r.t both input & target
 # NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
-def BiMSELoss(input, target, size_average=True):
-    diff = (input - target).view(-1)
+def BiMSELoss(input, target, size_average=True, wts=None):
+    weights = wts.expand_as(input).view(-1) if wts is not None else 1 # Per-pixel scalar
+    diff = (input - target).view(-1) * weights
     loss = 0.5 * diff.dot(diff)
     if size_average:
-        return loss / input.nelement()
+        npts = weights.sum() if wts is not None else input.nelement() # Normalize by visibility mask
+        return loss / npts
     else:
         return loss
 
 # ABS Loss that gives gradients w.r.t both input & target
-def BiAbsLoss(input, target, size_average=True):
-    loss = (input - target).abs().view(-1).sum()
+def BiAbsLoss(input, target, size_average=True, wts=None):
+    weights = wts.expand_as(input).view(-1) if wts is not None else 1 # Per-pixel scalar
+    loss = ((input - target).abs().view(-1) * weights).sum()
     if size_average:
-        return loss / input.nelement()
+        npts = weights.sum() if wts is not None else input.nelement() # Normalize by visibility mask
+        return loss / npts
     else:
         return loss
 
 # NORMMSESQRT Loss that gives gradients w.r.t both input & target
-def BiNormMSESqrtLoss(input, target, size_average=True, norm_per_pt=False):
+def BiNormMSESqrtLoss(input, target, size_average=True, norm_per_pt=False, wts=None):
+    weights = wts.expand_as(input) if wts is not None else 1 # Per-pixel scalar
     if norm_per_pt:
         sigma = (0.5 * target.pow(2).sum(1).sqrt()).clamp(min=2e-3).unsqueeze(1).expand_as(target) # scale * ||y||_2, clamp for numerical stability (changed clamp to 2mm)
     else:
         sigma = (0.5 * target.abs()).clamp(min=2e-3) # scale * y, clamp for numerical stability (changed clamp to 2mm)
-    diff = (input - target)
+    diff = (input - target) * weights
     loss = 0.5 * diff.pow(2).div(sigma).sum()  # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     if size_average:
-        return loss / input.nelement()
+        npts = weights.sum() if wts is not None else input.nelement() # Normalize by visibility mask
+        return loss / npts
     else:
         return loss
 
 # Loss for 3D point errors
-def Loss3D(input, target, loss_type='mse'):
+def Loss3D(input, target, loss_type='mse', wts=None):
     if loss_type == 'mse':
-        return BiMSELoss(input, target)
+        return BiMSELoss(input, target, wts=wts)
     elif loss_type == 'abs':
-        return BiAbsLoss(input, target)
+        return BiAbsLoss(input, target, wts=wts)
     elif loss_type == 'normmsesqrt':
-        return BiNormMSESqrtLoss(input, target)
+        return BiNormMSESqrtLoss(input, target, wts=wts)
     elif loss_type == 'normmsesqrtpt':
-        return BiNormMSESqrtLoss(input, target, norm_per_pt=True)
+        return BiNormMSESqrtLoss(input, target, norm_per_pt=True, wts=wts)
     else:
         assert False, "Unknown loss type: " + loss_type
 
 # Loss normalized by the number of points that move in the GT flow
 def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
-                           thresh=2.5e-3):
+                           thresh=2.5e-3, wts=None):
     # Get number of points that move in each example of the batch
     bsz = input.size(0) # batch size
     assert input.is_same_size(target), "Input and Target sizes need to match"
     nummotionpts = (motion.abs().sum(1) > thresh).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
     # Compute loss
+    weights = wts.expand_as(input).view(bsz, -1) if wts is not None else 1 # Per-pixel scalar
     if loss_type == 'mse':
-        diff = (input - target).view(bsz, -1)
+        diff = (input - target).view(bsz, -1) * weights
         loss = diff.pow(2).sum(1).div(2*nummotionpts).mean() # 0.5 * sum_i (err_i/N_i); err_i = sum_j (pred_ij - tar_ij)^2
     elif loss_type == 'abs':
-        diff = (input - target).view(bsz, -1)
+        diff = (input - target).view(bsz, -1) * weights
         loss = diff.abs().sum(1).div(nummotionpts).mean()  # sum_i (err_i/N_i); err_i = sum_j |pred_ij - tar_ij|_1
     elif loss_type.find('normmsesqrt') >= 0:
         # This loss is a scale invariant version of the mse loss
@@ -135,7 +143,7 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
             sigma = (0.5 * norm).clamp(min=2e-3).unsqueeze(1).expand_as(target).contiguous().view(bsz,-1)  # scale * ||y||_2, clamp for numerical stability (changed clamp to 2mm)
         else:
             sigma = (0.5 * target.abs()).clamp(min=2e-3).view(bsz,-1)  # scale * y, clamp for numerical stability (changed clamp to 2mm)
-        diff  = (input - target).view(bsz, -1)
+        diff  = (input - target).view(bsz, -1) * weights
         loss  = diff.pow(2).div(sigma).sum(1).div(2*nummotionpts).mean() # (x - y)^2 / 2*s^2 where s^2 = sigma, the variance
     else:
         assert False, "Unknown loss type: " + loss_type

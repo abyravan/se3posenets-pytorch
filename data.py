@@ -182,6 +182,67 @@ def NTfm3D(points, masks, transforms, output=None):
     # Return
     return output
 
+### Compute fwd/bwd visibility (for points in time t, which are visible in time t+1 & vice-versa)
+# Expects 4D inputs: seq x ndim x ht x wd (or seq x ndim x 3 x 4)
+def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
+                             poses_1, poses_2, intrinsics,
+                             dathreshold=0.01, dawinsize=5):
+    # Create memory
+    seq, dim, ht, wd = cloud_1.size()
+    fwdflows      = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_1)
+    bwdflows      = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_2)
+    fwdvisibility = torch.ByteTensor(seq, 1, ht, wd).cuda() if cloud_1.is_cuda else torch.ByteTensor(seq, 1, ht, wd)
+    bwdvisibility = torch.ByteTensor(seq, 1, ht, wd).cuda() if cloud_2.is_cuda else torch.ByteTensor(seq, 1, ht, wd)
+
+    # Compute inverse of poses
+    poseinvs_1 = RtInverse(poses_1.clone())
+    poseinvs_2 = RtInverse(poses_2.clone())
+
+    # Call cpp/CUDA functions
+    if cloud_1.is_cuda:
+        assert NotImplementedError, "Only Float version implemented!"
+        se3layers.ComputeFlowAndVisibility_cuda(cloud_1,
+                                                cloud_2,
+                                                label_1,
+                                                label_2,
+                                                poses_1,
+                                                poses_2,
+                                                poseinvs_1,
+                                                poseinvs_2,
+                                                fwdflows,
+                                                bwdflows,
+                                                fwdvisibility,
+                                                bwdvisibility,
+                                                intrinsics['fx'],
+                                                intrinsics['fy'],
+                                                intrinsics['cx'],
+                                                intrinsics['cy'],
+                                                dathreshold,
+                                                dawinsize)
+    else:
+        assert(cloud_1.type() == 'torch.FloatTensor')
+        se3layers.ComputeFlowAndVisibility_float(cloud_1,
+                                                 cloud_2,
+                                                 label_1,
+                                                 label_2,
+                                                 poses_1,
+                                                 poses_2,
+                                                 poseinvs_1,
+                                                 poseinvs_2,
+                                                 fwdflows,
+                                                 bwdflows,
+                                                 fwdvisibility,
+                                                 bwdvisibility,
+                                                 intrinsics['fx'],
+                                                 intrinsics['fy'],
+                                                 intrinsics['cx'],
+                                                 intrinsics['cy'],
+                                                 dathreshold,
+                                                 dawinsize)
+
+    # Return
+    return fwdflows, bwdflows, fwdvisibility, bwdvisibility
+
 ############
 ###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
 
@@ -320,21 +381,22 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
-    points      = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    fwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
-    actconfigs  = torch.FloatTensor(seq_len + 1, 7)
-    comconfigs  = torch.FloatTensor(seq_len + 1, 7)
-    controls    = torch.FloatTensor(seq_len, num_ctrl)
-    poses       = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
+    points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
+    actconfigs = torch.FloatTensor(seq_len + 1, 7)
+    comconfigs = torch.FloatTensor(seq_len + 1, 7)
+    controls   = torch.FloatTensor(seq_len, num_ctrl)
+    poses      = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
+
+    # For computing FWD/BWD visibilities and FWD/BWD flows
+    allposes   = torch.FloatTensor()
+    labels     = torch.ByteTensor(seq_len + 1, 1, img_ht, img_wd)  # intially save labels in channel 0 of masks
 
     # Setup temp var for depth
     depths = points.narrow(1,2,1)  # Last channel in points is the depth
 
     # Setup vars for BWD flow computation
     if compute_bwdflows:
-        bwdflows    = torch.FloatTensor(seq_len,     3, img_ht, img_wd)
-        masks       = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
-        labels      = masks.narrow(1,0,1) # intially save labels in channel 0 of masks
+        masks = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
 
     # Load sequence
     dt = step_len * (1.0 / 30.0)
@@ -346,27 +408,30 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale) # Third channel is depth (x,y,z)
 
         # Load label
-        if compute_bwdflows:
-            labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
+        labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
 
         # Load configs
         state = read_baxter_state_file(s['state1'])
         actconfigs[k] = state['actjtpos']
         comconfigs[k] = state['comjtpos']
 
-        # Load SE3 state
+        # Load SE3 state & get all poses
         se3state = read_baxter_se3state_file(s['se3state1'])
+        if allposes.nelement() == 0:
+            allposes.resize_(seq_len + 1, len(se3state)+1, 3, 4).fill_(0) # Setup size
+        allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        for id, tfm in se3state.iteritems():
+            se3tfm = torch.mm(camera_extrinsics['modelView'], tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
+            allposes[k][id] = se3tfm[0:3, :] # 3 x 4 transform (id is 1-indexed already, 0 is BG)
+
+        # Get poses of meshes we are moving
         poses[k,0,:,0:3] = torch.eye(3).float()  # Identity transform for BG
         for j in xrange(num_meshes):
             meshid = mesh_ids[j]
-            se3tfm = torch.mm(camera_extrinsics['modelView'], se3state[meshid])  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
-            poses[k][j+1] = se3tfm[0:3,:]  # 3 x 4 transform
+            poses[k][j+1] = allposes[k][meshid][0:3,:]  # 3 x 4 transform
 
         # Load controls and FWD flows (for the first "N" items)
         if k < seq_len:
-            # Load flow
-            fwdflows[k] = read_flow_image_xyz(s['flow'], img_ht, img_wd,
-                                                img_scale)
             # Load controls
             if ctrl_type == 'comvel':  # Right arm joint velocities
                 controls[k] = state['comjtvel']
@@ -389,6 +454,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     xy.copy_(camera_intrinsics['xygrid'].expand_as(xy)) # = xygrid
     xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd)) # = xygrid * depths
 
+    # Compute masks
     if compute_bwdflows:
         # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
         # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
@@ -398,21 +464,26 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                 masks[:, j+1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
         masks[:,0] = masks.narrow(1,1,num_meshes).sum(1).eq(0)  # All other masks are BG
 
-        # Compute BWD flows (from t+1 -> t)
-        for k in xrange(seq_len):
-            points_2, masks_2 = points.narrow(0, k+1, 1), masks.narrow(0, k+1, 1).float() # Pts & Masks @ t+1
-            pose_1, pose_2    = poses.narrow(0, k, 1), poses.narrow(0, k+1, 1)     # Poses @ t & t+1
-            poses_2_to_1      = ComposeRtPair(pose_1, RtInverse(pose_2))           # Pose_t * Pose_t+1^-1
-            NTfm3D(points_2, masks_2, poses_2_to_1, output=bwdflows.narrow(0,k,1)) # Predict pts @ t (save in BWD flows)
-            bwdflows.narrow(0,k,1).add_(-1.0, points_2)                            # Flows that take pts @ t+1 to pts @ t
+    # Compute the flows and visibility
+    tarpts    = points[1:]    # t+1, t+2, t+3, ....
+    initpt    = points[0:1].expand_as(tarpts)
+    tarlabels = labels[1:]    # t+1, t+2, t+3, ....
+    initlabel = labels[0:1].expand_as(tarlabels)
+    tarposes  = allposes[1:]  # t+1, t+2, t+3, ....
+    initpose  = allposes[0:1].expand_as(tarposes)
+
+    # Compute flow and visibility
+    fwdflows, bwdflows, \
+    fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
+                                                                initpose, tarposes, camera_intrinsics)
 
     # Return loaded data
-    # NOTE: Removed returning masks
-    data = {'points': points, 'fwdflows': fwdflows,
+    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
             'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
     if compute_bwdflows:
-        data['masks']    = masks
-        data['bwdflows'] = bwdflows
+        data['masks']           = masks
+        data['bwdflows']        = bwdflows
+        data['bwdvisibilities'] = bwdvisibilities
 
     return data
 

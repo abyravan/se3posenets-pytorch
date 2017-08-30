@@ -50,6 +50,8 @@ def setup_comon_options():
                         help='Uses the variant of the NTFM3D layer that computes the weighted avg. delta')
     parser.add_argument('--wide-model', action='store_true', default=False,
                         help='Wider network')
+    parser.add_argument('--decomp-model', action='store_true', default=False,
+                        help='Use a separate encoder for predicting the pose and masks')
 
     # Mask options
     parser.add_argument('--use-wt-sharpening', action='store_true', default=False,

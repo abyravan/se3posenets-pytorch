@@ -32,22 +32,12 @@ parser.add_argument('--fwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
 parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
-parser.add_argument('--poswtavg-wt', default=0, type=float,
-                    metavar='WT', help='Weight for the error between predicted position and mask weighted avg positions (default: 0)')
-parser.add_argument('--seg-wt', default=0, type=float,
-                    metavar='WT', help='Segmentation mask error (default: 0)')
-parser.add_argument('--deltapose-reg-wt', default=0, type=float,
-                    metavar='WT', help='Weight for L2 regularization of the predicted change in pose (default: 0)')
-parser.add_argument('--no-mask-gradmag', action='store_true', default=False,
-                    help='uses only the loss gradient sign for training the masks (default: False)')
 parser.add_argument('--use-gt-masks', action='store_true', default=False,
                     help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
 parser.add_argument('--use-gt-poses', action='store_true', default=False,
                     help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
-parser.add_argument('--use-kinchain', action='store_true', default=False,
-                    help='Model assumes that the SE3s are part of a kinematic chain (default: False)')
 parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,
                     help='Uses soft loss + weight sharpening (default: False)')
 
@@ -108,8 +98,6 @@ def main():
     # Loss parameters
     print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
-    if args.poswtavg_wt > 0:
-        print('Loss weight for position error w.r.t mask wt. avg positions: {}'.format(args.poswtavg_wt))
 
     # Soft-weight sharpening
     if args.soft_wt_sharpening:
@@ -142,42 +130,27 @@ def main():
         print('Normalizing MSE error per 3D point instead of per dimension')
 
     # NTFM3D-Delta
+    mex_loss = (args.use_wt_sharpening or args.use_sigmoid_mask) and (not args.soft_wt_sharpening)
     if args.use_ntfm_delta:
+        assert mex_loss, "Cannot do NTFM3D + Delta for the Soft-Losses"
         print('Using the variant of NTFM3D that computes a weighted avg. flow per point using the SE3 transforms')
 
     # Wide model
     if args.wide_model:
         print('Using a wider network!')
 
-    # Seg loss
-    if args.seg_wt > 0:
-        assert args.num_se3==2, "Segmentation loss only works for 2 SE3s currently"
-        print('Adding a segmentation loss based on flow magnitude. Loss weight: {}'.format(args.seg_wt))
-
-    # Seg loss
-    if args.deltapose_reg_wt > 0:
-        print('Adding an L2 penalty on the predicted delta pose. Loss weight: {}'.format(args.deltapose_reg_wt))
-
-    # Mask gradient magnitude
-    args.use_mask_gradmag = not args.no_mask_gradmag
-    if args.no_mask_gradmag:
-        assert (not args.use_sigmoid_mask or args.use_ntfm_delta), "Option to not use mask gradient magnitudes is not possible with sigmoid-masking/NTFM delta"
-        print("Using only the gradient's sign for training the masks. Discarding the magnitude")
-
     # Get IDs of joints we move (based on the data folders)
-    if args.use_gt_masks or args.use_gt_poses:
-        args.jt_ids = []
+    args.jt_ids = []
+    if args.num_se3 == 8:
+        args.jt_ids = [0,1,2,3,4,5,6] # All joints
+    else:
         for dir in args.data:
             if dir.find('joint') >= 0:
                 id = int(dir[dir.find('joint')+5]) # Find the ID of the joint
                 args.jt_ids.append(id)
-        assert(args.num_se3 == len(args.jt_ids)+1) # This has to match (only if using single joint data!)
-        args.jt_ids = np.sort(args.jt_ids) # Sort in ascending order
-        print('Using data where the following joints move: ', args.jt_ids)
-
-    # Kinematic chain
-    if args.use_kinchain:
-        print('Kinematic chain assumption')
+    assert(args.num_se3 == len(args.jt_ids)+1) # This has to match (only if using single joint data!)
+    args.jt_ids = np.sort(args.jt_ids) # Sort in ascending order
+    print('Using data where the following joints move: ', args.jt_ids)
 
     # TODO: Add option for using encoder pose for tfm t2
 
@@ -223,15 +196,20 @@ def main():
         assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
         modelfn = ctrlnets.SE3OnlyMaskModel
     else:
-        modelfn = ctrlnets.SE3PoseModel
+        if args.decomp_model:
+            print('Decomp model. Training separate networks for pose & mask prediction')
+            modelfn = ctrlnets.SE3DecompModel
+        else:
+            print('Networks for pose & mask prediction share conv parameters')
+            modelfn = ctrlnets.SE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                  se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=args.use_kinchain,
-                                  input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                  init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
-                                  use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                  sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                                  use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
-                                  wide=args.wide_model)
+                    se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                    input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                    init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
+                    use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                    sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                    use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
+                    wide=args.wide_model)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -275,8 +253,24 @@ def main():
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                         num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                         collate_fn=test_dataset.collate_batch))
-        iterate(test_loader, model, tblogger, len(test_loader), mode='test')
-        return # Finish
+        te_loss, te_fwdloss, te_bwdloss, te_consisloss, \
+            te_flowsum_f, te_flowavg_f, \
+            te_flowsum_b, te_flowavg_b = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
+
+        # Save final test error
+        save_checkpoint({
+            'args': args,
+            'test_stats': {'loss': te_loss, 'fwdloss': te_fwdloss, 'bwdloss': te_bwdloss, 'consisloss': te_consisloss,
+                           'flowsum_f': te_flowsum_f, 'flowavg_f': te_flowavg_f,
+                           'flowsum_b': te_flowsum_b, 'flowavg_b': te_flowavg_b,
+                           'niters': test_loader.niters, 'nruns': test_loader.nruns,
+                           'totaliters': test_loader.iteration_count()
+                           },
+        }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
+
+        # Close log file & return
+        logfile.close()
+        return
 
     ########################
     ############ Train / Validate
@@ -287,7 +281,7 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
 
         # Train for one epoch
-        tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss, tr_poswtavgloss, \
+        tr_loss, tr_fwdloss, tr_bwdloss, tr_consisloss, \
             tr_flowsum_f, tr_flowavg_f, \
             tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
                                                  mode='train', optimizer=optimizer, epoch=epoch+1)
@@ -300,7 +294,7 @@ def main():
             tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
-        val_loss, val_fwdloss, val_bwdloss, val_consisloss, val_poswtavgloss, \
+        val_loss, val_fwdloss, val_bwdloss, val_consisloss, \
             val_flowsum_f, val_flowavg_f, \
             val_flowsum_b, val_flowavg_b = iterate(val_loader, model, tblogger, args.val_ipe,
                                                    mode='val', epoch=epoch+1)
@@ -323,15 +317,13 @@ def main():
             'epoch': epoch+1,
             'args' : args,
             'best_loss'  : best_val_loss,
-            'train_stats': {'loss': tr_loss, 'fwdloss': tr_fwdloss, 'bwdloss': tr_bwdloss,
-                            'consisloss': tr_consisloss, 'poswtavgloss': tr_poswtavgloss,
+            'train_stats': {'loss': tr_loss, 'fwdloss': tr_fwdloss, 'bwdloss': tr_bwdloss, 'consisloss': tr_consisloss,
                             'flowsum_f': tr_flowsum_f, 'flowavg_f': tr_flowavg_f,
                             'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
                             'totaliters': train_loader.iteration_count()
                             },
-            'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss, 'bwdloss': val_bwdloss,
-                            'consisloss': val_consisloss, 'poswtavgloss': val_poswtavgloss,
+            'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss, 'bwdloss': val_bwdloss, 'consisloss': val_consisloss,
                             'flowsum_f': val_flowsum_f, 'flowavg_f': val_flowavg_f,
                             'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b,
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
@@ -354,12 +346,27 @@ def main():
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                     collate_fn=test_dataset.collate_batch))
-    iterate(test_loader, model, tblogger, len(test_loader), mode='test', epoch=args.epochs)
+    te_loss, te_fwdloss, te_bwdloss, te_consisloss, \
+        te_flowsum_f, te_flowavg_f, \
+        te_flowsum_b, te_flowavg_b = iterate(test_loader, model, tblogger, len(test_loader),
+                                             mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
 
+    # Save final test error
+    save_checkpoint({
+        'args': args,
+        'best_loss': best_val_loss,
+        'test_stats': {'loss': te_loss, 'fwdloss': te_fwdloss, 'bwdloss': te_bwdloss, 'consisloss': te_consisloss,
+                        'flowsum_f': te_flowsum_f, 'flowavg_f': te_flowavg_f,
+                        'flowsum_b': te_flowsum_b, 'flowavg_b': te_flowavg_b,
+                        'niters': test_loader.niters, 'nruns': test_loader.nruns,
+                        'totaliters': test_loader.iteration_count()
+                      },
+    }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
+
     # Close log file
-    #logfile.close()
+    logfile.close()
 
 ################# HELPER FUNCTIONS
 
@@ -372,8 +379,6 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    seglossm_f, seglossm_b = AverageMeter(), AverageMeter()
-    poswtavglossm, deltareglossm  = AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
     flowlossm_mask_sum_f, flowlossm_mask_avg_f = AverageMeter(), AverageMeter()
@@ -404,11 +409,13 @@ def iterate(data_loader, model, tblogger, num_iters,
     # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
     ptpredlayer = se3nn.NTfm3DDelta if args.use_ntfm_delta else se3nn.NTfm3D
 
+    # Type of loss (mixture of experts = wt sharpening or sigmoid)
+    mex_loss = (args.use_wt_sharpening or args.use_sigmoid_mask) and (not args.soft_wt_sharpening)
+
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    iden = util.to_var(torch.eye(3).view(1,1,3,3).expand(args.batch_size, args.num_se3, 3, 3).type(deftype)) # Identity matrix for regularization
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -419,11 +426,13 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts_1    = util.to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=True)
-        pts_2    = util.to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=True)
-        ctrls_1  = util.to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=True)
+        pts_1    = util.to_var(sample['points'][:, 0].clone().type(deftype), requires_grad=train)
+        pts_2    = util.to_var(sample['points'][:, 1].clone().type(deftype), requires_grad=train)
+        ctrls_1  = util.to_var(sample['controls'][:, 0].clone().type(deftype), requires_grad=train)
         fwdflows = util.to_var(sample['fwdflows'][:, 0].clone().type(deftype), requires_grad=False)
         bwdflows = util.to_var(sample['bwdflows'][:, 0].clone().type(deftype), requires_grad=False)
+        fwdvis   = util.to_var(sample['fwdvisibilities'][:, 0].clone().type(deftype), requires_grad=False)
+        bwdvis   = util.to_var(sample['bwdvisibilities'][:, 0].clone().type(deftype), requires_grad=False)
         tarpts_1 = util.to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
         tarpts_2 = util.to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
 
@@ -452,82 +461,45 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Compute predicted points based on the masks
         # TODO: Add option for using encoder pose for tfm t2
-        predpts_1 = ptpredlayer(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12)
-        predpts_2 = ptpredlayer(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21)
+        predpts_1 = ptpredlayer()(pts_1, mask_1, deltapose_t_12)
+        predpts_2 = ptpredlayer()(pts_2, mask_2, deltapose_t_21)
 
         # Compute 3D point loss (3D losses @ t & t+1)
         # For soft mask model, compute losses without predicting points. Otherwise use predicted pts
         fwd_wt, bwd_wt, consis_wt = args.fwd_wt * args.loss_scale, args.bwd_wt * args.loss_scale, args.consis_wt * args.loss_scale
-        if args.use_wt_sharpening or args.use_sigmoid_mask:
-            if args.soft_wt_sharpening:
-                # Use the weighted 3D transform loss, do not use explicitly predicted points
-                if (args.loss_type.find('normmsesqrt') >= 0):
-                    ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, fwdflows)  # Predict pts in FWD dirn and compare to target @ t2
-                    ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, bwdflows)  # Predict pts in BWD dirn and compare to target @ t1
-                else:
-                    ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-                    ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
-            else:
-                # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
-                inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_1, tarpts_1]
-                inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_2, tarpts_2]
-                # We just measure error in flow space
-                #inputs_1, targets_1 = (predpts_1 - pts_1), fwdflows
-                #inputs_2, targets_2 = (predpts_2 - pts_2), bwdflows
-                # If motion-normalized loss, pass in GT flows
-                if args.motion_norm_loss:
-                    ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows, loss_type=args.loss_type)
-                    ptloss_2 = bwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_2, targets_2, bwdflows, loss_type=args.loss_type)
-                else:
-                    ptloss_1 = fwd_wt * ctrlnets.Loss3D(inputs_1, targets_1, loss_type=args.loss_type)
-                    ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type)
-        else:
+        if not mex_loss:
+            # For weighted 3D transform loss, it is enough to set the mask values of not-visible pixels to all zeros
+            # These pixels will end up having zero loss then
+            vismask_1 = mask_1 * fwdvis # Should be broadcasted properly
+            vismask_2 = mask_2 * bwdvis # Should be broadcasted properly
+
             # Use the weighted 3D transform loss, do not use explicitly predicted points
             if (args.loss_type.find('normmsesqrt') >= 0):
-                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, mask_1, deltapose_t_12, fwdflows)  # Predict pts in FWD dirn and compare to target @ t2
-                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, mask_2, deltapose_t_21, bwdflows)  # Predict pts in BWD dirn and compare to target @ t1
+                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_1, vismask_1, deltapose_t_12, fwdflows)  # Predict pts in FWD dirn and compare to target @ t2
+                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformNormLoss(norm_per_pt=args.norm_per_pt)(pts_2, vismask_2, deltapose_t_21, bwdflows)  # Predict pts in BWD dirn and compare to target @ t1
             else:
-                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_1, mask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
-                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss(use_mask_gradmag=args.use_mask_gradmag)(pts_2, mask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+                ptloss_1 = fwd_wt * se3nn.Weighted3DTransformLoss()(pts_1, vismask_1, deltapose_t_12, tarpts_1)  # Predict pts in FWD dirn and compare to target @ t2
+                ptloss_2 = bwd_wt * se3nn.Weighted3DTransformLoss()(pts_2, vismask_2, deltapose_t_21, tarpts_2)  # Predict pts in BWD dirn and compare to target @ t1
+        else:
+            # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
+            inputs_1, targets_1 = [predpts_1-pts_1, tarpts_1-pts_1] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_1, tarpts_1]
+            inputs_2, targets_2 = [predpts_2-pts_2, tarpts_2-pts_2] if (args.loss_type.find('normmsesqrt') >= 0) else [predpts_2, tarpts_2]
+            # If motion-normalized loss, pass in GT flows
+            # We weight each pixel's loss by it's visibility, so not-visible pixels will get zero loss
+            if args.motion_norm_loss:
+                ptloss_1 = fwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_1, targets_1, fwdflows,
+                                                                    loss_type=args.loss_type, wts=fwdvis)
+                ptloss_2 = bwd_wt * ctrlnets.MotionNormalizedLoss3D(inputs_2, targets_2, bwdflows,
+                                                                    loss_type=args.loss_type, wts=bwdvis)
+            else:
+                ptloss_1 = fwd_wt * ctrlnets.Loss3D(inputs_1, targets_1, loss_type=args.loss_type, wts=fwdvis)
+                ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type, wts=bwdvis)
 
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
 
-        # Delta-pose regularization (add a L2 regularization)
-        deltaregloss = 0
-        if args.deltapose_reg_wt:
-            deltareg_wt  = args.deltapose_reg_wt * args.loss_scale / deltapose_t_12.nelement() # Weight for regularization
-            deltarot, deltatrans = deltapose_t_12.narrow(3,0,3), deltapose_t_12.narrow(3,3,1)
-            deltaregloss = deltareg_wt * ((deltarot - iden).norm(2) + deltatrans.norm(2)) # Rotation close to identity, translation close to zero
-            deltareglossm.update(deltaregloss.data[0])
-
-        # Compute loss between the predicted positions and the weighted avg of the masks & point clouds
-        poswtavgloss = 0
-        if args.poswtavg_wt > 0:
-            # Compute the weighted average position @ t & t+1 based on the predicted masks & the point clouds
-            wtavgpos_1 = se3nn.WeightedAveragePoints()(pts_1, mask_1)
-            wtavgpos_2 = se3nn.WeightedAveragePoints()(pts_2, mask_2)
-
-            # Compute the loss as a sum of the position error @ t & t+1
-            # Compute error between the predicted position & the weighted average position based on the masks & pt clouds
-            # Pred poses are: B x nSE3 x 3 x 4, Wt avg poses are: B x nSE3 x 3 x 1
-            poswtavgloss_1 = ctrlnets.BiMSELoss(pose_1.narrow(3, 3, 1), wtavgpos_1)
-            poswtavgloss_2 = ctrlnets.BiMSELoss(pose_2.narrow(3, 3, 1), wtavgpos_2)
-            poswtavgloss = 0.5 * args.poswtavg_wt * args.loss_scale * (poswtavgloss_1 + poswtavgloss_2) # Sum up losses
-            poswtavglossm.update(poswtavgloss.data[0]) # Update avg. meter
-
-        # Use a segmentation loss to encourage better segmentation
-        # Pts that have flow > 0 are bunched into a single mask & rest in another mask
-        segloss_1, segloss_2 = 0, 0
-        if args.seg_wt > 0:
-            seg_wt = args.seg_wt * args.loss_scale
-            masktargs_1, masktargs_2 = fwdflows.abs().sum(1).gt(0).squeeze().long(), bwdflows.abs().sum(1).gt(0).squeeze().long()
-            segloss_1 = seg_wt * nn.CrossEntropyLoss(size_average=True)(mask_1, masktargs_1)
-            segloss_2 = seg_wt * nn.CrossEntropyLoss(size_average=True)(mask_2, masktargs_2)
-            seglossm_f.update(segloss_1.data[0]); seglossm_b.update(segloss_2.data[0])
-
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss + poswtavgloss + segloss_1 + segloss_2 + deltaregloss
+        loss = ptloss_1 + ptloss_2 + consisloss
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
@@ -611,16 +583,12 @@ def iterate(data_loader, model, tblogger, num_iters,
             ### Print statistics
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
-                        loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b,
-                        consisloss=consislossm, poswtavgloss=poswtavglossm,
+                        loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b, consisloss=consislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
-            print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
-                  'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
-                  'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
-                  'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+            print('\tDelta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
                   'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
-                fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, delR=deltaroterrm, delt=deltatranserrm))
+                  delR=deltaroterrm, delt=deltatranserrm))
 
             # Print (flow & pose) error per mask if enabled
             if args.disp_err_per_mask:
@@ -639,7 +607,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
-                if args.use_gt_poses:
+                if args.use_gt_poses or args.decomp_model:
                     noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 else:
                     noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
@@ -661,7 +629,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-fwd3dloss': ptloss_1.data[0],
                 mode+'-bwd3dloss': ptloss_2.data[0],
                 mode+'-consisloss': consisloss.data[0],
-                mode+'-poswtavgloss': poswtavglossm.val,
                 mode+'-deltarotloss': deltaroterrm.val,
                 mode+'-deltatransloss': deltatranserrm.val,
             }
@@ -732,26 +699,22 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
     print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
                 samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
-                loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b,
-                consisloss=consislossm, poswtavgloss=poswtavglossm,
+                loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b, consisloss=consislossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
-    print('\tSegLoss-Fwd: {fwd.val:.5f} ({fwd.avg:.5f}), '
-          'SegLoss-Bwd: {bwd.val:.5f} ({bwd.avg:.5f}), '
-          'Delta-Pose-Reg: {delr.val:.5f} ({delr.avg:.5f}), '
-          'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+    print('\tDelta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
           'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
-        fwd=seglossm_f, bwd=seglossm_b, delr=deltareglossm, delR=deltaroterrm, delt=deltatranserrm))
+        delR=deltaroterrm, delt=deltatranserrm))
     print('========================================================')
 
     # Return the loss & flow loss
-    return lossm, ptlossm_f, ptlossm_b, consislossm, poswtavglossm, \
+    return lossm, ptlossm_f, ptlossm_b, consislossm, \
            flowlossm_sum_f, flowlossm_avg_f, \
            flowlossm_sum_b, flowlossm_avg_b
 
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
-                loss, fwdloss, bwdloss, consisloss, poswtavgloss,
+                loss, fwdloss, bwdloss, consisloss,
                 flowloss_sum_f, flowloss_avg_f,
                 flowloss_sum_b, flowloss_avg_b):
     # Print loss
@@ -759,11 +722,10 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
           'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
           'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
           'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
-          'Consis: {consis.val:.3f} ({consis.avg:.3f}), '
-          'PosWtAvg: {poswtavg.val:.3f} ({poswtavg.avg:.3f})'.format(
+          'Consis: {consis.val:.3f} ({consis.avg:.3f})'.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
         sampletotal, loss=loss, fwd=fwdloss, bwd=bwdloss,
-        consis=consisloss, poswtavg=poswtavgloss))
+        consis=consisloss))
 
     # Print flow loss per timestep
     bsz = args.batch_size

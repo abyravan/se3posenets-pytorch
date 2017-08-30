@@ -674,13 +674,12 @@ def save_checkpoint(state, is_best, savedir='.', filename='checkpoint.pth.tar'):
     if is_best:
         shutil.copyfile(savefile, savedir + '/model_best.pth.tar')
 
-
 ### Compute flow errors (flows are size: B x S x 3 x H x W)
 def compute_flow_errors(predflows, gtflows):
     batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
     # Compute num pts not moving per mask
     # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
-    num_pts_d = (gtflows.abs().sum(1) > 1e-3).type_as(gtflows).view(batch,seq,-1).sum(2) # B x seq
+    num_pts_d = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows).view(batch,seq,-1).sum(2) # B x seq
     num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).type_as(gtflows).sum(0)
     # Compute loss across batch
     loss_sum_d = (predflows - gtflows).pow(2).view(batch,seq,-1).sum(2)  # Flow error for current step (B x seq)

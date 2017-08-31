@@ -126,7 +126,7 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
     bsz = input.size(0) # batch size
     assert input.is_same_size(target), "Input and Target sizes need to match"
     wtmask = wts if wts is not None else 1
-    nummotionpts = ((motion.abs().sum(1) > thresh) * wtmask).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
+    nummotionpts = ((motion.abs().sum(1) > thresh).type_as(wts) * wtmask).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
     # Compute loss
     weights = wts.expand_as(input).clone().view(bsz, -1) if wts is not None else 1 # Per-pixel scalar
     if loss_type == 'mse':

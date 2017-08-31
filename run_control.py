@@ -68,6 +68,9 @@ parser.add_argument('--only-top4-jts', action='store_true', default=False,
                     help='Controlling only the first 4 joints (default: False)')
 parser.add_argument('--only-top6-jts', action='store_true', default=False,
                     help='Controlling only the first 6 joints (default: False)')
+parser.add_argument('--ctrl-specific-jts', type=str, default='', metavar='JTS',
+                    help='Comma separated list of joints to control. All other jts will have 0 error '
+                         'but the system can move those (default: '' => all joints are controlled)')
 
 # Planner options
 parser.add_argument('--optimization', default='gn', type=str, metavar='OPTIM',
@@ -225,6 +228,13 @@ def main():
         assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
         print('Controlling only top 6 joints')
         goal_angles[6:] = start_angles[6:]
+    elif pargs.ctrl_specific_jts is not '':
+        print('Setting targets only for joints: {}. All other joints have zero error'
+              ' but can be controlled'.format(pargs.ctrl_specific_jts))
+        ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
+        for k in xrange(7):
+            if k not in ctrl_jts:
+                goal_angles[k] = start_angles[k]
 
     ########################
     ############ Get start & goal point clouds, predict poses & masks

@@ -122,10 +122,11 @@ def Loss3D(input, target, loss_type='mse', wts=None):
 # Loss normalized by the number of points that move in the GT flow
 def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
                            thresh=2.5e-3, wts=None):
-    # Get number of points that move in each example of the batch
+    # Get number of "visible" points that move in each example of the batch
     bsz = input.size(0) # batch size
     assert input.is_same_size(target), "Input and Target sizes need to match"
-    nummotionpts = (motion.abs().sum(1) > thresh).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
+    wtmask = wts if wts is not None else 1
+    nummotionpts = ((motion.abs().sum(1) > thresh) * wtmask).float().view(bsz, -1).sum(1).clamp(min=100) # Takes care of numerical instabilities & acts as margin
     # Compute loss
     weights = wts.expand_as(input).view(bsz, -1) if wts is not None else 1 # Per-pixel scalar
     if loss_type == 'mse':

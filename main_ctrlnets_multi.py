@@ -586,7 +586,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                     gtdepth   = normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
                     for n in xrange(args.num_se3):
                         # Pose_1 (GT/Pred)
-                        util.draw_3d_frame(gtdepth, gtpose[n],     [0,0,1], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                        if n < gtpose.size(0):
+                            util.draw_3d_frame(gtdepth, gtpose[n],     [0,0,1], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
                         util.draw_3d_frame(gtdepth, predpose[n],   [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
                         if predposet is not None:
                             util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics, pixlength=15.0)  # Transition model pred pose: Red

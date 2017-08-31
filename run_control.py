@@ -12,7 +12,7 @@ import random
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
 img_ht, img_wd, img_scale = 240, 320, 1e-4
 seq_len = 1 # For now, only single step
-num_se3 = 8 # TODO: Especially this parameter!
+num_se3 = 8 #20 # TODO: Especially this parameter!
 dt = 1.0/30.0
 oldgrippermodel = False # TODO: When are we actually going to use the new ones?
 cam_intrinsics = {'fx': 589.3664541825391 / 2,
@@ -416,7 +416,7 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
         loss.backward()  # Compute gradients - BWD pass
 
         # Return
-        return ctrl_1.grad.data.cpu().view(-1,1).clone(), loss.data[0]
+        return ctrl_1.grad.data.cpu().view(-1).clone(), loss.data[0]
     else:
         # No backprops here
         model.eval()

@@ -40,6 +40,10 @@ parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                     help='Display flow error per mask channel. (default: False)')
 parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,
                     help='Uses soft loss + weight sharpening (default: False)')
+parser.add_argument('--pose-dissim-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the dissimilarity loss in the pose space (default: 0)')
+parser.add_argument('--delta-dissim-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the loss that regularizes the predicted delta away from zero (default: 0)')
 
 ################ MAIN
 #@profile
@@ -98,6 +102,8 @@ def main():
     # Loss parameters
     print('Loss scale: {}, Loss weights => FWD: {}, BWD: {}, CONSIS: {}'.format(
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
+    print('Dissimilarity loss weights => POSE: {}, DELTA: {}'.format(
+        args.pose_dissim_wt, args.delta_dissim_wt))
 
     # Soft-weight sharpening
     if args.soft_wt_sharpening:
@@ -379,6 +385,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     lossm, ptlossm_f, ptlossm_b, consislossm = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    dissimposelossm, dissimdeltalossm = AverageMeter(), AverageMeter()
     flowlossm_sum_f, flowlossm_avg_f = AverageMeter(), AverageMeter()
     flowlossm_sum_b, flowlossm_avg_b = AverageMeter(), AverageMeter()
     flowlossm_mask_sum_f, flowlossm_mask_avg_f = AverageMeter(), AverageMeter()
@@ -416,6 +423,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    zerovar = util.to_var(torch.zeros(0).type(deftype), requires_grad=False)
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -498,12 +506,18 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Compute pose consistency loss
         consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
 
+        # Add a loss for pose dis-similarity & delta dis-similarity
+        dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
+        dissimposeloss  = dissimpose_wt  * ctrlnets.DisSimilarityLoss(pose_1, pose_2) # Enforce dis-similarity in pose space
+        dissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltapose_t_12, zerovar) # Change in pose > 0
+
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss
+        loss = ptloss_1 + ptloss_2 + consisloss + dissimposeloss + dissimdeltaloss
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
         consislossm.update(consisloss.data[0]); lossm.update(loss.data[0])
+        dissimposelossm.update(dissimposeloss.data[0]); dissimdeltalossm.update(dissimdeltaloss.data[0])
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -586,9 +600,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                         loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b, consisloss=consislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                         flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
-            print('\tDelta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+            print('\tPose-Dissim loss: {disP.val:.5f} ({disP.avg:.5f}), '
+                  'Delta-Dissim loss: {disD.val:.5f} ({disD.avg:.5f}), '
+                  'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
                   'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
-                  delR=deltaroterrm, delt=deltatranserrm))
+                  disP=dissimposelossm, disD=dissimdeltalossm, delR=deltaroterrm, delt=deltatranserrm))
 
             # Print (flow & pose) error per mask if enabled
             if args.disp_err_per_mask:
@@ -629,6 +645,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-fwd3dloss': ptloss_1.data[0],
                 mode+'-bwd3dloss': ptloss_2.data[0],
                 mode+'-consisloss': consisloss.data[0],
+                mode+'-dissimposeloss': dissimposeloss.data[0],
+                mode+'-dissimdeltaloss': dissimdeltaloss.data[0],
                 mode+'-deltarotloss': deltaroterrm.val,
                 mode+'-deltatransloss': deltatranserrm.val,
             }
@@ -702,9 +720,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b, consisloss=consislossm,
                 flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
                 flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
-    print('\tDelta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
+    print('\tPose-Dissim loss: {disP.val:.5f} ({disP.avg:.5f}), '
+          'Delta-Dissim loss: {disD.val:.5f} ({disD.avg:.5f}), '
+          'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
           'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
-        delR=deltaroterrm, delt=deltatranserrm))
+        disP=dissimposelossm, disD=dissimdeltalossm, delR=deltaroterrm, delt=deltatranserrm))
     print('========================================================')
 
     # Return the loss & flow loss

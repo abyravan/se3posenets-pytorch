@@ -28,7 +28,8 @@ cdef extern from "pangoviz.hpp":
                         const float *jtangles_pred);
 
         void render_arm(const float *config,
-                        float *rendered_ptcloud);
+                        float *rendered_ptcloud,
+                        float *rendered_labels);
 
         void update_da(const float *init_pts,
                        const float *current_pts,
@@ -110,10 +111,12 @@ cdef class PyPangolinViz:
                                  &jtangles_pred[0])
 
     def render_arm(self, np.ndarray[np.float32_t, ndim=1] config,
-                         np.ndarray[np.float32_t, ndim=3] ptcloud):
+                         np.ndarray[np.float32_t, ndim=3] ptcloud,
+                         np.ndarray[np.float32_t, ndim=3] labels):
         # Run CPP code
         self.pangoviz.render_arm(&config[0],
-                                 &ptcloud[0,0,0])
+                                 &ptcloud[0,0,0],
+                                 &labels[0,0,0])
 
     def update_da(self, np.ndarray[np.float32_t, ndim=3] init_pts,
                         np.ndarray[np.float32_t, ndim=3] current_pts,

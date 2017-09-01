@@ -18,7 +18,8 @@ class PangolinViz
                         const float *jtangles_pred);
 
         void render_arm(const float *config,
-                        float *rendered_ptcloud);
+                        float *rendered_ptcloud,
+                        float *rendered_labels);
 
         void update_da(const float *init_pts,
                        const float *current_pts,

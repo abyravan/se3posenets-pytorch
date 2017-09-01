@@ -1368,7 +1368,8 @@ void PangolinViz::update_viz(const float *inputpts, const float *outputpts_gt,
 /// === HELPER FUNCTIONS FOR RENDERING DATA
 
 void PangolinViz::render_arm(const float *config,
-                             float *rendered_ptcloud)
+                             float *rendered_ptcloud,
+                             float *rendered_labels)
 {
     // Copy over the data and render
     boost::mutex::scoped_lock render_lock(data->renderMutex);
@@ -1392,9 +1393,10 @@ void PangolinViz::render_arm(const float *config,
     // Compute current 3D point cloud & update current jt angles
     int npts = data->imgHeight*data->imgWidth;
     memset(data->currinput_cloud, 0, 3*npts*sizeof(float));
+    int ct = 0;
     for(int r = 0; r < data->imgHeight; r++)
     {
-        for(int c = 0; c < data->imgWidth; c++)
+        for(int c = 0; c < data->imgWidth; c++, ct+=4)
         {
             // Get X & Y value
             int id = r * data->imgWidth + c;
@@ -1406,6 +1408,9 @@ void PangolinViz::render_arm(const float *config,
             data->currinput_cloud[id + 0*npts] = x*zi;
             data->currinput_cloud[id + 1*npts] = y*zi;
             data->currinput_cloud[id + 2*npts] = zi;
+
+            // Setup current mask
+            data->currlabel_img[id] = data->rendered_vertmap_sub[ct+3];
         }
     }
 
@@ -1414,7 +1419,7 @@ void PangolinViz::render_arm(const float *config,
 
     // Copy to output
     memcpy(rendered_ptcloud, data->currinput_cloud, 3*npts*sizeof(float));
-    //memcpy(rendered_vertmap, data->rendered_vertmap_sub, 4*npts*sizeof(float));
+    memcpy(rendered_labels,  data->currlabel_img, npts*sizeof(float));
 
     // Unlock
     update_lock.unlock();

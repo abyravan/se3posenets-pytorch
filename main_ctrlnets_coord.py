@@ -182,7 +182,7 @@ def main():
                                                          step_len = args.step_len, seq_len = args.seq_len,
                                                          train_per = args.train_per, val_per = args.val_per)
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
-                                                                       img_scale = args.img_scale, ctrl_type = 'actdiffvel',
+                                                                       img_scale = args.img_scale, ctrl_type = args.ctrl_type,
                                                                        num_ctrl=args.num_ctrl, num_state=args.num_state,
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,

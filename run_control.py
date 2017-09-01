@@ -149,15 +149,37 @@ def main():
         print("=> no checkpoint found at '{}'".format(pargs.checkpoint))
         raise RuntimeError
 
+    # BWDs compatibility
+    if not hasattr(args, "use_gt_masks"):
+        args.use_gt_masks, args.use_gt_poses = False, False
+    if not hasattr(args, "num_state"):
+        args.num_state = args.num_ctrl
+
+    ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
+    ## TODO: Or allow pangolin to change the args later
+
     # Create a model
     if args.seq_len == 1:
-        model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                      se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                      input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                      init_posese3_iden=False, init_transse3_iden=False,
-                                      use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                      sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model) # TODO: pre-conv
-        posemaskpredfn = model.posemaskmodel.forward
+        if args.use_gt_masks:
+            model = ctrlnets.SE3OnlyPoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                              se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                              input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                              init_posese3_iden=False, init_transse3_iden=False,
+                                              use_wt_sharpening=args.use_wt_sharpening,
+                                              sharpen_start_iter=args.sharpen_start_iter,
+                                              sharpen_rate=args.sharpen_rate, pre_conv=False,
+                                              wide=args.wide_model)  # TODO: pre-conv
+            posemaskpredfn = model.posemodel.forward
+        elif args.use_gt_poses:
+            assert False, "No need to run tests with GT poses provided"
+        else:
+            model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                          se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                          input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                          init_posese3_iden=False, init_transse3_iden=False,
+                                          use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                                          sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model) # TODO: pre-conv
+            posemaskpredfn = model.posemaskmodel.forward
     else:
         model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                                se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
@@ -204,6 +226,7 @@ def main():
     disk_read_func = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=args.img_ht, img_wd=args.img_wd,
                                                                       img_scale=args.img_scale,
                                                                       ctrl_type='actdiffvel',
+                                                                      num_ctrl=args.num_ctrl, num_state=args.num_state,
                                                                       mesh_ids=args.mesh_ids,
                                                                       camera_extrinsics=args.cam_extrinsics,
                                                                       camera_intrinsics=args.cam_intrinsics)
@@ -243,12 +266,21 @@ def main():
     pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
 
     # Get full goal point cloud
-    goal_pts  = generate_ptcloud(goal_angles)
+    goal_pts, _  = generate_ptcloud(goal_angles)
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
-    start_poses, start_masks = posemaskpredfn(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
-    goal_poses, goal_masks   = posemaskpredfn(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
+    if args.use_gt_masks: # GT masks are provided!
+        _, start_rlabels = generate_ptcloud(start_angles)
+        _, goal_rlabels  = generate_ptcloud(goal_angles)
+        start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
+        goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
+
+        start_poses = posemaskpredfn(util.to_var(start_pts.type(deftype)))
+        goal_poses  = posemaskpredfn(util.to_var(goal_pts.type(deftype)))
+    else:
+        start_poses, start_masks = posemaskpredfn(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
+        goal_poses, goal_masks   = posemaskpredfn(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
 
     # Display the masks as an image summary
     maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
@@ -294,12 +326,17 @@ def main():
         # Get current point cloud
         start = time.time()
         curr_angles = angles[it]
-        curr_pts = generate_ptcloud(curr_angles).type(deftype)
+        curr_pts, curr_rlabels = generate_ptcloud(curr_angles)
+        curr_pts = curr_pts.type(deftype)
         gen_time.update(time.time() - start)
 
         # Predict poses and masks
         start = time.time()
-        curr_poses, curr_masks = posemaskpredfn(util.to_var(curr_pts), train_iter=num_train_iter)
+        if args.use_gt_masks:
+            curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
+            curr_poses = posemaskpredfn(util.to_var(curr_pts))
+        else:
+            curr_poses, curr_masks = posemaskpredfn(util.to_var(curr_pts), train_iter=num_train_iter)
         curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
         posemask_time.update(time.time() - start)
 
@@ -312,11 +349,10 @@ def main():
         # Show masks using tensor flow
         if (it % args.disp_freq) == 0:
             maskdisp = torchvision.utils.make_grid(curr_masks.data.cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                                   nrow=args.num_se3, normalize=True, range=(0, 1))
+                                                       nrow=args.num_se3, normalize=True, range=(0, 1))
             info = {'curr masks': util.to_np(maskdisp.narrow(0, 0, 1))}
             for tag, images in info.items():
                 tblogger.image_summary(tag, images, it)
-
         viz_time.update(time.time() - start)
 
         # Run one step of the optimization (controls are always zeros, poses change)
@@ -510,8 +546,9 @@ def generate_ptcloud(config):
     assert(not util.is_var(config))
     config_f = config.view(-1).clone().float()
     pts      = torch.FloatTensor(1, 3, args.img_ht, args.img_wd)
-    pangolin.render_arm(config_f.numpy(), pts[0].numpy())
-    return pts.type_as(config)
+    labels   = torch.FloatTensor(1, 1, args.img_ht, args.img_wd)
+    pangolin.render_arm(config_f.numpy(), pts[0].numpy(), labels[0].numpy())
+    return pts.type_as(config), labels.type_as(config)
 
 ### Compute numerical jacobian via multiple back-props
 def compute_jacobian(inputs, output):
@@ -532,6 +569,20 @@ def compute_jacobian(inputs, output):
         jacobian[i] = inputs.grad.data
 
     return jacobian
+
+### Compute masks
+def compute_masks_from_labels(labels, mesh_ids):
+    masks = torch.FloatTensor(1, mesh_ids.nelement()+1, args.img_ht, args.img_wd).type_as(labels)
+    labels.round_() # Round off the labels
+    # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
+    # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
+    num_meshes = mesh_ids.nelement()
+    for j in xrange(num_meshes):
+        masks[:, j+1] = labels.eq(mesh_ids[j])  # Mask out that mesh ID
+        if (j == num_meshes - 1):
+            masks[:, j+1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
+    masks[:, 0] = masks.narrow(1, 1, num_meshes).sum(1).eq(0)  # All other masks are BG
+    return masks
 
 ################ RUN MAIN
 if __name__ == '__main__':

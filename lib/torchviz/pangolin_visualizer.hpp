@@ -75,7 +75,7 @@ public:
     float *currpred_cloud, *currpredgrad_cloud;
     float *currpreduw_cloud, *currpredgraduw_cloud;
     float *init_jts, *final_jts, *current_jts;
-    float *currmask_img;
+    float *currmask_img, *currlabel_img;
     float *init_poses, *tar_poses, *curr_poses;
     int nSE3;
     std::string savedir;
@@ -168,6 +168,7 @@ public:
         // Init predicted masks & poses
         nSE3 = _nSE3;
         currmask_img = new float [imgHeight * imgWidth];
+        currlabel_img = new float [imgHeight * imgWidth];
         init_poses   = new float [nSE3 * 12];
         tar_poses    = new float [nSE3 * 12];
         curr_poses   = new float [nSE3 * 12];
@@ -245,6 +246,7 @@ public:
         free(currpreduwnorm_cloud);
 
         free(currmask_img);
+        free(currlabel_img);
         free(init_poses);
         free(tar_poses);
         free(curr_poses);
@@ -280,7 +282,8 @@ class PangolinViz
                         const float *jtangles_pred);
 
         void render_arm(const float *config,
-                        float *rendered_ptcloud);
+                        float *rendered_ptcloud,
+                        float *rendered_labels);
 
         void update_da(const float *init_pts,
                        const float *current_pts,

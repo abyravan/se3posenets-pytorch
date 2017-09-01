@@ -423,7 +423,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    zerovar = util.to_var(torch.zeros(0).type(deftype), requires_grad=False)
+    identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -508,8 +508,12 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Add a loss for pose dis-similarity & delta dis-similarity
         dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
-        dissimposeloss  = dissimpose_wt  * ctrlnets.DisSimilarityLoss(pose_1, pose_2) # Enforce dis-similarity in pose space
-        dissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltapose_t_12, zerovar) # Change in pose > 0
+        dissimposeloss  = dissimpose_wt  * ctrlnets.DisSimilarityLoss(pose_1[:,1:],
+                                                                      pose_2[:,1:],
+                                                                      size_average=True) # Enforce dis-similarity in pose space
+        dissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltapose_t_12[:,1:],
+                                                                      identfm.expand_as(deltapose_t_12[:,1:]),
+                                                                      size_average=True) # Change in pose > 0
 
         # Compute total loss as sum of all losses
         loss = ptloss_1 + ptloss_2 + consisloss + dissimposeloss + dissimdeltaloss

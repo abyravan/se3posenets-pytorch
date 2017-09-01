@@ -153,11 +153,15 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
 
 ### Pose dis-similarity loss
 # Measures: exp(- 1/N || i - t||_2 ), goes from 0->1
-def DisSimilarityLoss(input, target, size_average=True):
-    norm = (input - target).norm(2)
+def DisSimilarityLoss(input, target=None, size_average=True):
+    if target is not None:
+        norm = (input - target).norm(2) # Error between input and target
+    else:
+        norm = input.norm(2) # Error between input & zero
+    loss = norm.mul(-1).exp() # e^-(norm)
     if size_average:
-        norm = norm / input.nelement()
-    return norm.mul(-1).exp()
+        loss = loss / input.nelement()
+    return loss
 
 ### Basic Conv + Pool + BN + Non-linearity structure
 class BasicConv2D(nn.Module):

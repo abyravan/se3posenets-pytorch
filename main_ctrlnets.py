@@ -423,7 +423,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
+    identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer

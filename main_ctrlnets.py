@@ -19,6 +19,7 @@ import torchvision
 import se3layers as se3nn
 import data
 import ctrlnets
+import se2nets
 import util
 from util import AverageMeter, Tee, DataEnumerator
 
@@ -36,14 +37,6 @@ parser.add_argument('--use-gt-masks', action='store_true', default=False,
                     help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
 parser.add_argument('--use-gt-poses', action='store_true', default=False,
                     help='Model predicts only masks. GT poses & deltas are given. (default: False)')
-parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
-                    help='Display flow error per mask channel. (default: False)')
-parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,
-                    help='Uses soft loss + weight sharpening (default: False)')
-parser.add_argument('--pose-dissim-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for the dissimilarity loss in the pose space (default: 0)')
-parser.add_argument('--delta-dissim-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for the loss that regularizes the predicted delta away from zero (default: 0)')
 
 ################ MAIN
 #@profile
@@ -72,13 +65,33 @@ def main():
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
-    # Setup extra options
-    args.img_ht, args.img_wd, args.img_suffix = 240, 320, 'sub'
-    args.num_ctrl = 14 if (args.ctrl_type.find('both') >= 0) else 7 # Number of control dimensions
+    # Get default options & camera intrinsics
+    load_dir = args.data[0] #args.data.split(',,')[0]
+    try:
+        intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
+        print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
+        args.img_ht, args.img_wd, args.img_scale = int(intrinsics['ht']), int(intrinsics['wd']), 1.0/intrinsics['s']
+        args.cam_intrinsics = {'fx': intrinsics['fx'],
+                               'fy': intrinsics['fy'],
+                               'cx': intrinsics['cx'],
+                               'cy': intrinsics['cy']}
+    except:
+        print("Could not read intrinsics file, reverting to default settings")
+        args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
+        args.cam_intrinsics = {'fx': 589.3664541825391 / 2,
+                               'fy': 589.3664541825391 / 2,
+                               'cx': 320.5 / 2,
+                               'cy': 240.5 / 2}
+
+    # Compute intrinsic grid
+    args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
+                                                                               args.cam_intrinsics)
+    # Image suffix
+    args.num_state = args.num_ctrl # Assume this
+    args.img_suffix = '' if (args.img_suffix == 'None') else args.img_suffix # Workaround since we can't specify empty string in the yaml
     print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
 
     # Read mesh ids and camera data
-    load_dir = args.data[0] #args.data.split(',,')[0]
     args.baxter_labels = data.read_baxter_labels_file(load_dir + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
     args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
@@ -87,14 +100,6 @@ def main():
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
     args.se3_dim = ctrlnets.get_se3_dimension(args.se3_type, args.pred_pivot)
     print('Predicting {} SE3s of type: {}. Dim: {}'.format(args.num_se3, args.se3_type, args.se3_dim))
-
-    # Camera parameters
-    args.cam_intrinsics = {'fx': 589.3664541825391/2,
-                           'fy': 589.3664541825391/2,
-                           'cx': 320.5/2,
-                           'cy': 240.5/2}
-    args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-                                                                               args.cam_intrinsics)
 
     # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
@@ -147,7 +152,9 @@ def main():
 
     # Get IDs of joints we move (based on the data folders)
     args.jt_ids = []
-    if args.num_se3 == 8:
+    if args.se2_data:
+        args.jt_ids = [x for x in xrange(args.num_se3-1)]
+    elif args.num_se3 == 8:
         args.jt_ids = [0,1,2,3,4,5,6] # All joints
     else:
         for dir in args.data:
@@ -167,7 +174,8 @@ def main():
                                                          step_len = args.step_len, seq_len = args.seq_len,
                                                          train_per = args.train_per, val_per = args.val_per)
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
-                                                                       img_scale = args.img_scale, ctrl_type = 'actdiffvel',
+                                                                       img_scale = args.img_scale, ctrl_type = args.ctrl_type,
+                                                                       num_ctrl=args.num_ctrl, num_state=args.num_state,
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
@@ -191,23 +199,26 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
+    if args.se2_data:
+        print('Using the smaller SE2 models')
+
     ### Load the model
     num_train_iter = 0
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
         assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
-        modelfn = ctrlnets.SE3OnlyPoseModel
+        modelfn = se2nets.SE2OnlyPoseModel if args.se2_data else ctrlnets.SE3OnlyPoseModel
     elif args.use_gt_poses:
         print('Using GT poses & delta poses. Model predicts only masks')
         assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
-        modelfn = ctrlnets.SE3OnlyMaskModel
+        modelfn = se2nets.SE2OnlyMaskModel if args.se2_data else ctrlnets.SE3OnlyMaskModel
     else:
         if args.decomp_model:
             print('Decomp model. Training separate networks for pose & mask prediction')
-            modelfn = ctrlnets.SE3DecompModel
+            modelfn = se2nets.SE2DecompModel if args.se2_data else ctrlnets.SE3DecompModel
         else:
             print('Networks for pose & mask prediction share conv parameters')
-            modelfn = ctrlnets.SE3PoseModel
+            modelfn = se2nets.SE2PoseModel if args.se2_data else ctrlnets.SE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
                     input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,

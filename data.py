@@ -77,6 +77,19 @@ def read_cameradata_file(filename):
     ret['camParam']  = torch.Tensor([float(x) for x in lines[6] + lines[7] + lines[8] + lines[9]]).view(4, 4).clone()
     return ret
 
+# Read baxter camera data file
+def read_intrinsics_file(filename):
+    # Read lines in the file
+    ret = {}
+    with open(filename, 'rb') as csvfile:
+        spamreader = csv.reader(csvfile, delimiter=' ')
+        label = spamreader.next()
+        data = spamreader.next()
+        assert(len(label) == len(data))
+        for k in xrange(len(label)):
+            ret[label[k]] = float(data[k])
+    return ret
+
 
 ############
 ### Helper functions for reading image data
@@ -371,19 +384,19 @@ def generate_baxter_sequence(dataset, idx):
 
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                   ctrl_type='actdiffvel', mesh_ids=torch.Tensor(),
+                                   ctrl_type='actdiffvel', num_ctrl=7, num_state=7,
+                                   mesh_ids=torch.Tensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
                                    compute_bwdflows=True):
     # Setup vars
-    num_ctrl = 14 if ctrl_type.find('both') else 7      # Num ctrl dimensions
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
 
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    actconfigs = torch.FloatTensor(seq_len + 1, 7)
-    comconfigs = torch.FloatTensor(seq_len + 1, 7)
+    actconfigs = torch.FloatTensor(seq_len + 1, num_state)
+    comconfigs = torch.FloatTensor(seq_len + 1, num_state)
     controls   = torch.FloatTensor(seq_len, num_ctrl)
     poses      = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 
@@ -439,9 +452,6 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                 controls[k] = state['actjtvel']
             elif ctrl_type == 'comacc':  # Right arm joint accelerations
                 controls[k] = state['comjtacc']
-            elif ctrl_type == 'comboth':
-                controls[k][0:7] = state['comjtvel']  # 0-6  = Joint velocities
-                controls[k][7:14] = state['comjtacc']  # 7-13 = Joint accelerations
 
     # Different control types
     if ctrl_type == 'actdiffvel':

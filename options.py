@@ -19,12 +19,18 @@ def setup_comon_options():
                         metavar='FRAC', help='fraction of data for the validation set (default: 0.15)')
     parser.add_argument('--img-scale', default=1e-4, type=float,
                         metavar='IS', help='conversion scalar from depth resolution to meters (default: 1e-4)')
+    parser.add_argument('--img-suffix', default='sub', type=str,
+                        metavar='SUF', help='image suffix for getting file names of images on disk (default: "sub")')
     parser.add_argument('--step-len', default=1, type=int,
                         metavar='N', help='number of frames separating each example in the training sequence (default: 1)')
     parser.add_argument('--seq-len', default=1, type=int,
                         metavar='N', help='length of the training sequence (default: 1)')
     parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
-                        metavar='STR', help='Control type: actvel | actacc | comvel | comacc | comboth | [actdiffvel] | comdiffvel')
+                        metavar='STR', help='Control type: actvel | actacc | comvel | comacc | [actdiffvel] | comdiffvel')
+    parser.add_argument('--num-ctrl', default=7, type=int, metavar='N',
+                        help='dimensionality of the control space (default: 7)')
+    parser.add_argument('--se2-data', action='store_true', default=False,
+                        help='SE2 data. (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,
@@ -62,6 +68,8 @@ def setup_comon_options():
                         metavar='W', help='Slope of the weight sharpening (default: 1.0)')
     parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
                         help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
+    parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,
+                        help='Uses soft loss + weight sharpening (default: False)')
 
     # Loss options
     parser.add_argument('--loss-type', default='mse', type=str,
@@ -73,6 +81,10 @@ def setup_comon_options():
                         metavar='WT', help='Weight for the pose consistency loss (default: 0.1)')
     parser.add_argument('--loss-scale', default=10000, type=float,
                         metavar='WT', help='Default scale factor for all the losses (default: 1000)')
+    parser.add_argument('--pose-dissim-wt', default=0.0, type=float,
+                        metavar='WT', help='Weight for the dissimilarity loss in the pose space (default: 0)')
+    parser.add_argument('--delta-dissim-wt', default=0.0, type=float,
+                        metavar='WT', help='Weight for the loss that regularizes the predicted delta away from zero (default: 0)')
 
     # Training options
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -113,6 +125,8 @@ def setup_comon_options():
                         help='path to latest checkpoint (default: none)')
     parser.add_argument('-s', '--save-dir', default='results', type=str,
                         metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
+    parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
+                        help='Display flow error per mask channel. (default: False)')
 
     # Return
     return parser

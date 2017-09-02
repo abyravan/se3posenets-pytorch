@@ -76,7 +76,7 @@ args.cuda = True
 
 # Read mesh ids and camera data
 load_dir = args.data.split(',,')[0]
-args.baxter_labels = data.read_baxter_labels_file(load_dir + '/statelabels.txt')
+args.baxter_labels = data.read_statelabels_file(load_dir + '/statelabels.txt')
 args.mesh_ids      = args.baxter_labels['meshIds']
 args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
 args.cam_intrinsics = {'fx': 589.3664541825391/2,

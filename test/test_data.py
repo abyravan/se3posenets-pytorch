@@ -12,7 +12,7 @@ options = {'imgHeight': 240, 'imgWidth': 320, 'imgScale': 1e-4, 'imgSuffix': 'su
            'baxterCtrlType': 'actdiffvel', 'nCtrl': 7}
 options['loadDir'] = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/,,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_wfixjts_5hrs_Feb10_17/postprocessmotionshalf/'
 
-baxterlabels = data.read_baxter_labels_file(
+baxterlabels = data.read_statelabels_file(
     '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/statelabels.txt')
 options['meshIds'] = baxterlabels['meshIds']
 options['cameraData'] = data.read_cameradata_file(

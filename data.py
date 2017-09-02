@@ -53,13 +53,12 @@ def read_baxter_se3state_file(filename):
 
 
 # Read baxter joint labels and their corresponding mesh index value
-def read_baxter_labels_file(filename):
+def read_statelabels_file(filename):
     ret = {}
     with open(filename, 'rb') as csvfile:
         spamreader      = csv.reader(csvfile, delimiter=' ')
         ret['frames']   = spamreader.next()[0:-1]
         ret['meshIds']  = torch.IntTensor([int(x) for x in spamreader.next()[0:-1]])
-
     return ret
 
 
@@ -90,17 +89,25 @@ def read_intrinsics_file(filename):
             ret[label[k]] = float(data[k])
     return ret
 
+# Read baxter camera data file
+# TODO: Make this more general, can actually also store the mesh ids here - could be an alternative to statelabels
+def read_statectrllabels_file(filename):
+    # Read lines in the file
+    ret = {}
+    with open(filename, 'rb') as csvfile:
+        spamreader = csv.reader(csvfile, delimiter=' ')
+        statenames = spamreader.next()[:-1]
+        ctrlnames  = spamreader.next()[:-1]
+    return statenames, ctrlnames
 
 ############
 ### Helper functions for reading image data
 
 # Read depth image from disk
 def read_depth_image(filename, ht=240, wd=320, scale=1e-4):
-    imgf = cv2.imread(filename, -1).astype(
-        np.int16) * scale  # Read image (unsigned short), convert to short & scale to get float
+    imgf = cv2.imread(filename, -1).astype(np.int16) * scale  # Read image (unsigned short), convert to short & scale to get float
     if (imgf.shape[0] != int(ht) or imgf.shape[1] != int(wd)):
-        imgscale = cv2.resize(imgf, (int(wd), int(ht)),
-                              interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
+        imgscale = cv2.resize(imgf, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
     else:
         imgscale = imgf
     return torch.Tensor(imgscale).unsqueeze(0)  # Add extra dimension
@@ -108,14 +115,24 @@ def read_depth_image(filename, ht=240, wd=320, scale=1e-4):
 
 # Read flow image from disk
 def read_flow_image_xyz(filename, ht=240, wd=320, scale=1e-4):
-    imgf = cv2.imread(filename, -1).astype(
-        np.int16) * scale  # Read image (unsigned short), convert to short & scale to get float
+    imgf = cv2.imread(filename, -1).astype(np.int16) * scale  # Read image (unsigned short), convert to short & scale to get float
     if (imgf.shape[0] != int(ht) or imgf.shape[1] != int(wd)):
         imgscale = cv2.resize(imgf, (int(wd), int(ht)),
                               interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
     else:
         imgscale = imgf
     return torch.Tensor(imgscale.transpose((2, 0, 1)))  # NOTE: OpenCV reads BGR so it's already xyz when it is read
+
+# Read label image from disk
+def read_label_image(filename, ht=240, wd=320):
+    imgl = cv2.imread(filename, -1) # This can be an image with 1 or 3 channels. If 3 channel image, choose 2nd channel
+    if (imgl.ndim == 3 and imgl.shape[2] == 3):
+        imgl = imgl[:,:,1] # Get only 2nd channel (real data)
+    if (imgl.shape[0] != int(ht) or imgl.shape[1] != int(wd)):
+        imgscale = cv2.resize(imgl, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
+    else:
+        imgscale = imgl
+    return torch.ByteTensor(imgscale).unsqueeze(0)  # Add extra dimension
 
 #############
 ### Helper functions for perspective projection stuff
@@ -385,7 +402,7 @@ def generate_baxter_sequence(dataset, idx):
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
                                    ctrl_type='actdiffvel', num_ctrl=7, num_state=7,
-                                   mesh_ids=torch.Tensor(),
+                                   mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
                                    compute_bwdflows=True):
     # Setup vars
@@ -395,9 +412,9 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    actconfigs = torch.FloatTensor(seq_len + 1, num_state)
-    comconfigs = torch.FloatTensor(seq_len + 1, num_state)
-    controls   = torch.FloatTensor(seq_len, num_ctrl)
+    actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
+    comconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Commanded data is same as control dimension
+    controls   = torch.FloatTensor(seq_len, num_ctrl)      # Commanded data is same as control dimension
     poses      = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 
     # For computing FWD/BWD visibilities and FWD/BWD flows
@@ -421,12 +438,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale) # Third channel is depth (x,y,z)
 
         # Load label
-        labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
+        #labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
+        labels[k] = read_label_image(s['label'], img_ht, img_wd)
 
         # Load configs
         state = read_baxter_state_file(s['state1'])
-        actconfigs[k] = state['actjtpos']
-        comconfigs[k] = state['comjtpos']
+        actconfigs[k] = state['actjtpos'] # state dimension
+        comconfigs[k] = state['comjtpos'] # ctrl dimension
 
         # Load SE3 state & get all poses
         se3state = read_baxter_se3state_file(s['se3state1'])
@@ -447,17 +465,17 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         if k < seq_len:
             # Load controls
             if ctrl_type == 'comvel':  # Right arm joint velocities
-                controls[k] = state['comjtvel']
+                controls[k] = state['comjtvel'] # ctrl dimension
             elif ctrl_type == 'actvel':
-                controls[k] = state['actjtvel']
+                controls[k] = state['actjtvel'][ctrl_ids] # state -> ctrl dimension
             elif ctrl_type == 'comacc':  # Right arm joint accelerations
-                controls[k] = state['comjtacc']
+                controls[k] = state['comjtacc'] # ctrl dimension
 
     # Different control types
     if ctrl_type == 'actdiffvel':
-        controls = (actconfigs[1:seq_len + 1, :] - actconfigs[0:seq_len, :]) / dt
+        controls = (actconfigs[1:seq_len+1][:, ctrl_ids] - actconfigs[0:seq_len][:, ctrl_ids]) / dt # state -> ctrl dimension
     elif ctrl_type == 'comdiffvel':
-        controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt
+        controls = (comconfigs[1:seq_len+1, :] - comconfigs[0:seq_len, :]) / dt # ctrl dimension
 
     # Compute x & y values for the 3D points (= xygrid * depths)
     xy = points[:,0:2]

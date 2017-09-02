@@ -64,13 +64,22 @@ def main():
     # Get default options & camera intrinsics
     load_dir = args.data[0] #args.data.split(',,')[0]
     try:
+        # Read from file
         intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
         print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-        args.img_ht, args.img_wd, args.img_scale = int(intrinsics['ht']), int(intrinsics['wd']), 1.0/intrinsics['s']
-        args.cam_intrinsics = {'fx': intrinsics['fx'],
-                               'fy': intrinsics['fy'],
-                               'cx': intrinsics['cx'],
-                               'cy': intrinsics['cy']}
+        if args.se2_data:
+            args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
+        else:
+            args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
+        args.img_scale = 1.0 / intrinsics['s']  # Scale of the image (use directly from the data)
+
+        # Setup camera intrinsics
+        sc = float(args.img_ht) / intrinsics['ht']  # Scale factor for the intrinsics
+        args.cam_intrinsics = {'fx': intrinsics['fx'] * sc,
+                               'fy': intrinsics['fy'] * sc,
+                               'cx': intrinsics['cx'] * sc,
+                               'cy': intrinsics['cy'] * sc}
+        print("Scale factor for the intrinsics: {}".format(sc))
     except:
         print("Could not read intrinsics file, reverting to default settings")
         args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
@@ -79,16 +88,33 @@ def main():
                                'cx': 320.5 / 2,
                                'cy': 240.5 / 2}
 
+    # Get dimensions of ctrl & state
+    try:
+        statelabels, ctrllabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+        print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
+    except:
+        statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
+        ctrllabels = statelabels  # Just use the labels
+        print("Could not read statectrllabels file. Reverting to labels in statelabels file")
+    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
+
+    # Find the IDs of the controlled joints in the state vector
+    # We need this if we have state dimension > ctrl dimension and
+    # if we need to choose the vals in the state vector for the control
+    ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+    print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+
     # Compute intrinsic grid
     args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-                                                                               args.cam_intrinsics)
+                                                                                args.cam_intrinsics)
+
     # Image suffix
-    args.num_state = args.num_ctrl # Assume this
     args.img_suffix = '' if (args.img_suffix == 'None') else args.img_suffix # Workaround since we can't specify empty string in the yaml
     print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
 
     # Read mesh ids and camera data
-    args.baxter_labels = data.read_baxter_labels_file(load_dir + '/statelabels.txt')
+    args.baxter_labels = data.read_statelabels_file(load_dir + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
     args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
 
@@ -172,7 +198,7 @@ def main():
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
                                                                        img_scale = args.img_scale, ctrl_type = args.ctrl_type,
                                                                        num_ctrl=args.num_ctrl, num_state=args.num_state,
-                                                                       mesh_ids = args.mesh_ids,
+                                                                       mesh_ids = args.mesh_ids, ctrl_ids=ctrlids_in_state,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=True)

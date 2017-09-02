@@ -72,8 +72,8 @@ def init_sigmoidmask_bg(layer, num_se3=8):
 # MSE Loss that gives gradients w.r.t both input & target
 # NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
 def BiMSELoss(input, target, size_average=True, wts=None):
-    weights = wts.expand_as(input).view(-1) if wts is not None else 1 # Per-pixel scalar
-    diff = (input - target).view(-1) * weights
+    weights = wts.expand_as(input) if wts is not None else 1 # Per-pixel scalar
+    diff = ((input - target) * weights).view(-1)
     loss = 0.5 * diff.dot(diff)
     if size_average:
         npts = weights.sum() if wts is not None else input.nelement() # Normalize by visibility mask
@@ -83,8 +83,8 @@ def BiMSELoss(input, target, size_average=True, wts=None):
 
 # ABS Loss that gives gradients w.r.t both input & target
 def BiAbsLoss(input, target, size_average=True, wts=None):
-    weights = wts.expand_as(input).view(-1) if wts is not None else 1 # Per-pixel scalar
-    loss = ((input - target).abs().view(-1) * weights).sum()
+    weights = wts.expand_as(input) if wts is not None else 1 # Per-pixel scalar
+    loss = ((input - target).abs() * weights).view(-1).sum()
     if size_average:
         npts = weights.sum() if wts is not None else input.nelement() # Normalize by visibility mask
         return loss / npts

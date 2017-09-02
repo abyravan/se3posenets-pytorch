@@ -27,7 +27,7 @@ use-gt-poses:		  False
 use-gt-masks:		  True
 
 # Mask options
-use-wt-sharpening: False
+use-wt-sharpening: True
 sharpen-start-iter: 0
 sharpen-rate: 1.0
 use-sigmoid-mask:  False

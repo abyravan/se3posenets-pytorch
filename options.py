@@ -58,6 +58,10 @@ def setup_comon_options():
                         help='Wider network')
     parser.add_argument('--decomp-model', action='store_true', default=False,
                         help='Use a separate encoder for predicting the pose and masks')
+    parser.add_argument('--use-gt-masks', action='store_true', default=False,
+                        help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
+    parser.add_argument('--use-gt-poses', action='store_true', default=False,
+                        help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 
     # Mask options
     parser.add_argument('--use-wt-sharpening', action='store_true', default=False,

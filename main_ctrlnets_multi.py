@@ -157,7 +157,7 @@ def main():
                                                                        mesh_ids = args.mesh_ids,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=False) # No need for BWD flows
+                                                                       compute_bwdflows=args.use_gt_masks) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -184,7 +184,17 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
+    if args.use_gt_masks:
+        print('Using GT masks. Model predicts only poses & delta-poses')
+        assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
+        modelfn = se2nets.MultiStepSE2OnlyPoseModel if args.se2_data else ctrlnets.MultiStepSE3OnlyPoseModel
+    elif args.use_gt_poses:
+        assert NotImplementedError # We don't have stuff for this
+        print('Using GT poses & delta poses. Model predicts only masks')
+        assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
+        modelfn = se2nets.MultiStepSE2OnlyMaskModel if args.se2_data else ctrlnets.MultiStepSE3OnlyMaskModel
+    else:
+        modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
                     input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
@@ -422,7 +432,11 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Predict the pose and mask at time t = 0
             # For all subsequent timesteps, predict only the poses
             if(k == 0):
-                p, initmask = model.forward_pose_mask(pts[:,k], train_iter=num_train_iter)
+                if args.use_gt_masks:
+                    p = model.forward_only_pose(pts[:,k]) # We can only predict poses
+                    initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
+                else:
+                    p, initmask = model.forward_pose_mask(pts[:,k], train_iter=num_train_iter)
             else:
                 p = model.forward_only_pose(pts[:,k])
             poses.append(p)
@@ -578,7 +592,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg)
 
             ### Print stuff if we have weight sharpening enabled
-            if args.use_wt_sharpening:
+            if args.use_wt_sharpening and not args.use_gt_masks:
                 try:
                     noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 except:
@@ -646,8 +660,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.image_summary(tag, images, iterct)
 
                 ## Print the predicted delta-SE3s
-                print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
-                                                                                             args.se3_dim).cpu()
+                if not args.use_gt_poses:
+                    print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
+                                                                                                 args.se3_dim).cpu()
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

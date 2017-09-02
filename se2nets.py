@@ -600,3 +600,84 @@ class MultiStepSE2PoseModel(nn.Module):
     def forward(self, x):
         print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
         raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-OnlyPose-Model
+### Predicts only poses, uses GT masks
+### NOTE: The forward pass is not currently implemented, this needs to be done outside
+class MultiStepSE2OnlyPoseModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+        super(MultiStepSE2OnlyPoseModel, self).__init__()
+
+        # Initialize the pose & mask model
+        self.posemodel = SE2PoseEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                        use_kinchain=use_kinchain, input_channels=input_channels,
+                                        init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                        nonlinearity=nonlinearity, wide=wide)
+
+
+        # Initialize the transition model
+        self.transitionmodel = SE2TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+                                                  se3_type=se3_type, use_kinchain=use_kinchain,
+                                                  nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
+                                                  local_delta_se3=local_delta_se3)
+    # Predict pose only
+    def forward_only_pose(self, x):
+        return self.posemodel(x)
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        print('Only pose model does not predict masks')
+        raise NotImplementedError
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl):
+        return self.transitionmodel([pose, ctrl])
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
+        raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-OnlyMask-Model (Only predicts mask)
+class MultiStepSE2OnlyMaskModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+        super(MultiStepSE2OnlyMaskModel, self).__init__()
+
+        # Initialize the mask model
+        self.maskmodel = SE2MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                         use_bn=use_bn, pre_conv=pre_conv,
+                                         nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+
+    # Predict mask only
+    def forward_only_mask(self, x, train_iter=0):
+        mask = self.maskmodel(x, train_iter=train_iter)
+        return mask
+
+    # Predict pose only
+    def forward_only_pose(self, x):
+        raise NotImplementedError
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        raise NotImplementedError
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl):
+        raise NotImplementedError
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE2-Pose-Model is not yet implemented')
+        raise NotImplementedError

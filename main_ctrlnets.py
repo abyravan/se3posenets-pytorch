@@ -33,10 +33,6 @@ parser.add_argument('--fwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
 parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
-parser.add_argument('--use-gt-masks', action='store_true', default=False,
-                    help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
-parser.add_argument('--use-gt-poses', action='store_true', default=False,
-                    help='Model predicts only masks. GT poses & deltas are given. (default: False)')
 
 ################ MAIN
 #@profile

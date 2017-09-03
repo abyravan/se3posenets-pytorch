@@ -181,16 +181,22 @@ def main():
                                           sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model) # TODO: pre-conv
             posemaskpredfn = model.posemaskmodel.forward
     else:
-        model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                               se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                               input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                               init_posese3_iden=args.init_posese3_iden,
-                                               init_transse3_iden=args.init_transse3_iden,
-                                               use_wt_sharpening=args.use_wt_sharpening,
-                                               sharpen_start_iter=args.sharpen_start_iter,
-                                               sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                                               decomp_model=args.decomp_model, wide=args.wide_model)
-        posemaskpredfn = model.forward_pose_mask
+        if args.use_gt_masks:
+            modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
+        elif args.use_gt_poses:
+            assert False, "No need to run tests with GT poses provided"
+        else:
+            modelfn = ctrlnets.MultiStepSE3PoseModel
+        model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                        init_posese3_iden=args.init_posese3_iden,
+                        init_transse3_iden=args.init_transse3_iden,
+                        use_wt_sharpening=args.use_wt_sharpening,
+                        sharpen_start_iter=args.sharpen_start_iter,
+                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                        decomp_model=args.decomp_model, wide=args.wide_model)
+        posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -217,17 +223,36 @@ def main():
     ############ Get the data
     # Get datasets (TODO: Make this path variable)
     data_path = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/'
+
+    # Get dimensions of ctrl & state
+    try:
+        statelabels, ctrllabels = data.read_statectrllabels_file(data_path + "/statectrllabels.txt")
+        print("Reading state/ctrl joint labels from: " + data_path + "/statectrllabels.txt")
+    except:
+        statelabels = data.read_statelabels_file(data_path + '/statelabels.txt')['frames']
+        ctrllabels = statelabels  # Just use the labels
+        print("Could not read statectrllabels file. Reverting to labels in statelabels file")
+    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
+
+    # Find the IDs of the controlled joints in the state vector
+    # We need this if we have state dimension > ctrl dimension and
+    # if we need to choose the vals in the state vector for the control
+    ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+    print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+
+    # Get cam data
     args.cam_extrinsics = data.read_cameradata_file(data_path + '/cameradata.txt') # TODO: BWDs compatibility
     args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
                                                                                args.cam_intrinsics) # TODO: BWDs compatibility
     baxter_data = data.read_recurrent_baxter_dataset(data_path, args.img_suffix,
                                                      step_len=1, seq_len=1,
-                                                     train_per=args.train_per, val_per=args.val_per)
+                                                     train_per=0.6, val_per=0.15)
     disk_read_func = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=args.img_ht, img_wd=args.img_wd,
                                                                       img_scale=args.img_scale,
                                                                       ctrl_type='actdiffvel',
                                                                       num_ctrl=args.num_ctrl, num_state=args.num_state,
-                                                                      mesh_ids=args.mesh_ids,
+                                                                      mesh_ids=args.mesh_ids, ctrl_ids=ctrlids_in_state,
                                                                       camera_extrinsics=args.cam_extrinsics,
                                                                       camera_intrinsics=args.cam_intrinsics)
     test_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

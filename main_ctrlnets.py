@@ -33,6 +33,8 @@ parser.add_argument('--fwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the FWD direction (default: 1)')
 parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
+parser.add_argument('--poseloss-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the pose loss (default: 0)')
 
 ################ MAIN
 #@profile
@@ -131,6 +133,7 @@ def main():
         args.loss_scale, args.fwd_wt, args.bwd_wt, args.consis_wt))
     print('Dissimilarity loss weights => POSE: {}, DELTA: {}'.format(
         args.pose_dissim_wt, args.delta_dissim_wt))
+    print('Pose loss weight: {}'.format(args.poseloss_wt))
 
     # Soft-weight sharpening
     if args.soft_wt_sharpening:
@@ -426,6 +429,8 @@ def iterate(data_loader, model, tblogger, num_iters,
     deltaroterrm, deltatranserrm = AverageMeter(), AverageMeter()
     deltaroterrm_mask, deltatranserrm_mask = AverageMeter(), AverageMeter()
 
+    poselossm_1, poselossm_2 = AverageMeter(), AverageMeter()
+
     # Switch model modes
     train = True if (mode == 'train') else False
     if train:
@@ -476,6 +481,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         bwdvis   = util.to_var(sample['bwdvisibilities'][:, 0].clone().type(deftype), requires_grad=False)
         tarpts_1 = util.to_var((sample['points'][:, 0] + sample['fwdflows'][:, 0]).type(deftype), requires_grad=False)
         tarpts_2 = util.to_var((sample['points'][:, 1] + sample['bwdflows'][:, 0]).type(deftype), requires_grad=False)
+
+        # GT poses
+        tarpose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False)  # 0 is BG, so we add 1
+        tarpose_2 = util.to_var(get_jt_poses(sample['poses'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -548,13 +557,19 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                       identfm.expand_as(deltapose_t_12[:,1:]),
                                                                       size_average=True) # Change in pose > 0
 
+        ### Pose error
+        poseloss_wt = args.poseloss_wt * args.loss_scale
+        poseloss_1 = poseloss_wt * ctrlnets.BiMSELoss(pose_1, tarpose_1)
+        poseloss_2 = poseloss_wt * ctrlnets.BiMSELoss(pose_2, tarpose_2)
+
         # Compute total loss as sum of all losses
-        loss = ptloss_1 + ptloss_2 + consisloss + dissimposeloss + dissimdeltaloss
+        loss = ptloss_1 + ptloss_2 + consisloss + dissimposeloss + dissimdeltaloss + poseloss_1 + poseloss_2
 
         # Update stats
         ptlossm_f.update(ptloss_1.data[0]); ptlossm_b.update(ptloss_2.data[0])
         consislossm.update(consisloss.data[0]); lossm.update(loss.data[0])
         dissimposelossm.update(dissimposeloss.data[0]); dissimdeltalossm.update(dissimdeltaloss.data[0])
+        poselossm_1.update(poseloss_1.data[0]); poselossm_2.update(poseloss_2.data[0])
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -642,6 +657,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                   'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
                   'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
                   disP=dissimposelossm, disD=dissimdeltalossm, delR=deltaroterrm, delt=deltatranserrm))
+            print('\tPose-Loss-1: {pos1.val:.5f} ({pos1.avg:.5f}), '
+                    'Pose-Loss-2: {pos2.val:.5f} ({pos2.avg:.5f})'.format(
+                    pos1=poselossm_1, pos2=poselossm_2))
 
             # Print (flow & pose) error per mask if enabled
             if args.disp_err_per_mask:
@@ -686,6 +704,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-dissimdeltaloss': dissimdeltaloss.data[0],
                 mode+'-deltarotloss': deltaroterrm.val,
                 mode+'-deltatransloss': deltatranserrm.val,
+                mode+'-poseloss1': poselossm_1.val,
+                mode+'-poseloss2': poselossm_2.val,
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)

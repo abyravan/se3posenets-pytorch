@@ -3,9 +3,10 @@
 data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-2_182257/]
 batch-size:   16
 num-workers:  8
-train-per:    0.6
-val-per:      0.15
-img-scale:    1e-4
+train-per:    0.7
+val-per:      0.1
+img-scale:    1e-3
+img-suffix:	  None
 step-len:     2
 seq-len:      5
 ctrl-type:    actdiffvel

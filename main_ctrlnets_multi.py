@@ -502,7 +502,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 currpts = predpts[k-1]  # Use previous predicted point cloud
 
             # Predict transformed point cloud based on the previous point cloud & new delta-transform
-            nextpts = ptpredlayer()(currpts, initmask, deltaposes[k])
+            if args.delta_flow_loss:
+                nextpts = ptpredlayer()(currpts, initmask, deltaposes[k])
+            else:
+                nextpts = ptpredlayer()(pts[:,0], initmask, compdeltaposes[k])
             predpts.append(nextpts)
 
             # Compute 3D point loss

@@ -37,6 +37,8 @@ parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
 parser.add_argument('--use-jt-angles', action='store_true', default=False,
                     help='Model uses GT jt angles as inputs to the pose net. (default: False)')
+parser.add_argument('--use-jt-angles-trans', action='store_true', default=False,
+                    help='Model uses GT jt angles as inputs to the transition net. (default: False)')
 
 ################ MAIN
 #@profile
@@ -196,6 +198,10 @@ def main():
         print("Using Jt angles as input to the pose encoder")
         assert args.use_gt_masks, "Jt angles only enabled for nets that use GT masks"
 
+    if args.use_jt_angles_trans:
+        print("Using Jt angles as input to the transition model")
+        assert args.use_gt_masks, "Jt angles only enabled for nets that use GT masks"
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -257,7 +263,8 @@ def main():
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
-                    wide=args.wide_model, use_jt_angles=args.use_jt_angles, num_state=args.num_state)
+                    wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

@@ -587,7 +587,7 @@ class PoseMaskEncoder(nn.Module):
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, use_pivot=False, se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7):
         super(TransitionModel, self).__init__()
         self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
         self.num_se3 = num_se3
@@ -610,9 +610,21 @@ class TransitionModel(nn.Module):
                                 get_nonlinearity(nonlinearity)
                             )
 
+        # Jt angle encoder
+        jdim = [0, 0]
+        self.use_jt_angles = use_jt_angles
+        if use_jt_angles:
+            jdim = [128, 256]  # [64, 128]
+            self.jtangleencoder = nn.Sequential(
+                nn.Linear(num_state, jdim[0]),
+                get_nonlinearity(nonlinearity),
+                nn.Linear(jdim[0], jdim[1]),
+                get_nonlinearity(nonlinearity)
+            )
+
         # SE3 decoder
         self.deltase3decoder = nn.Sequential(
-            nn.Linear(pdim[1]+cdim[1], 256),
+            nn.Linear(pdim[1]+cdim[1]+jdim[1], 256),
             get_nonlinearity(nonlinearity),
             nn.Linear(256, 128),
             get_nonlinearity(nonlinearity),
@@ -650,11 +662,18 @@ class TransitionModel(nn.Module):
 
     def forward(self, x):
         # Run the forward pass
-        p, c = x # Pose, Control
+        if self.use_jt_angles:
+            p, j, c = x # Pose, Jtangles, Control
+        else:
+            p, c = x # Pose, Control
         pv = p.view(-1, self.num_se3*12) # Reshape pose
         pe = self.poseencoder(pv)    # Encode pose
         ce = self.ctrlencoder(c)     # Encode ctrl
-        x = torch.cat([pe,ce], 1)    # Concatenate encoded vectors
+        if self.use_jt_angles:
+            je = self.jtangleencoder(j)  # Encode jt angles
+            x = torch.cat([pe,je,ce], 1) # Concatenate encoded vectors
+        else:
+            x = torch.cat([pe,ce], 1)    # Concatenate encoded vectors
         x = self.deltase3decoder(x)  # Predict delta-SE3
         x = x.view(-1, self.num_se3, self.se3_dim)
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
@@ -718,7 +737,7 @@ class SE3OnlyPoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(SE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -731,8 +750,10 @@ class SE3OnlyPoseModel(nn.Module):
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
-                                               local_delta_se3=local_delta_se3)
-        self.use_jt_angles = use_jt_angles
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+        self.use_jt_angles       = use_jt_angles
+        self.use_jt_angles_trans = use_jt_angles_trans
 
     # Forward pass through the model
     def forward(self, x):
@@ -746,7 +767,8 @@ class SE3OnlyPoseModel(nn.Module):
         pose_2 = self.posemodel(inp2)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
-        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
+        inpp = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        deltapose_t_12, pose_t_2 = self.transitionmodel(inpp)  # Predicts [delta-pose, pose]
 
         # Return outputs
         return pose_1, pose_2, [deltapose_t_12, pose_t_2]

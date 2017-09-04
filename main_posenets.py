@@ -11,6 +11,7 @@ import torch.optim
 import torch.utils.data
 
 # Local imports
+import se3layers as se3nn
 import data
 import ctrlnets
 import se2nets
@@ -400,8 +401,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         ### Pose error
         # Compute error in delta pose space (not used for backprop)
-        deltapose_t_12   = data.ComposeRtPair(pose_2,    data.RtInverse(pose_1))     # Pose_t+1 * Pose_t^-1
-        gtdeltapose_t_12 = data.ComposeRtPair(tarpose_2, data.RtInverse(tarpose_1))  # Pose_t+1 * Pose_t^-1
+        deltapose_t_12   = se3nn.ComposeRtPair()(pose_2,    se3nn.RtInverse()(pose_1))     # Pose_t+1 * Pose_t^-1
+        gtdeltapose_t_12 = se3nn.ComposeRtPair()(tarpose_2, se3nn.RtInverse()(tarpose_1))  # Pose_t+1 * Pose_t^-1
         deltaroterr, deltatranserr = compute_pose_errors(deltapose_t_12.data.unsqueeze(1).cpu(),
                                                          gtdeltapose_t_12.data.unsqueeze(1).cpu())
         deltaroterrm.update(deltaroterr[0]); deltatranserrm.update(deltatranserr[0])
@@ -415,10 +416,13 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Display/Print frequency
         if (i % args.disp_freq == 0) or (i == num_iters-1):
             # Print loss
+            deltadiff = (deltapose_t_12 - gtdeltapose_t_12).data.abs()
+            sumdeltadiff, maxdeltadiff = deltadiff.sum(), deltadiff.max()
             print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
-                  'Loss: {loss.val:.4f} ({loss.avg:.4f}))'.format(
+                  'Sum/Max delta diff: {}/{}, Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
                 mode, epoch, args.epochs, i, num_iters,
-                data_loader.niters + 1, len(data_loader), loss=lossm))
+                data_loader.niters + 1, len(data_loader),
+                sumdeltadiff, maxdeltadiff, loss=lossm))
 
             ### Print statistics
             print('\tPose-Loss-1: {pos1.val:.5f} ({pos1.avg:.5f}), '
@@ -444,6 +448,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-deltatransloss': deltatranserrm.val,
                 mode+'-poseloss1': poselossm_1.val,
                 mode+'-poseloss2': poselossm_2.val,
+                mode+'-sumdeltadiff': sumdeltadiff,
+                mode+'-maxdeltadiff': maxdeltadiff,
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)

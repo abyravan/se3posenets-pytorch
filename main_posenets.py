@@ -238,7 +238,7 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
 
         # Train for one epoch
-        tr_loss = iterate(train_loader, model, tblogger, args.train_ipe,
+        tr_loss, _, _, _, _ = iterate(train_loader, model, tblogger, args.train_ipe,
                           mode='train', optimizer=optimizer, epoch=epoch+1)
 
         # Log values and gradients of the parameters (histogram)
@@ -249,7 +249,7 @@ def main():
             tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
-        val_loss = iterate(val_loader, model, tblogger, args.val_ipe,
+        val_loss, _, _, _, _ = iterate(val_loader, model, tblogger, args.val_ipe,
                            mode='val', epoch=epoch+1)
 
         # Find best loss
@@ -295,7 +295,7 @@ def main():
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                     collate_fn=test_dataset.collate_batch))
-    te_loss= iterate(test_loader, model, tblogger, len(test_loader),
+    te_loss, _, _, _, _ = iterate(test_loader, model, tblogger, len(test_loader),
                      mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))

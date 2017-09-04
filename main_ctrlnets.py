@@ -35,6 +35,8 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
+parser.add_argument('--use-jt-angles', action='store_true', default=False,
+                    help='Model uses GT jt angles as inputs to the pose net. (default: False)')
 
 ################ MAIN
 #@profile
@@ -190,6 +192,10 @@ def main():
     args.jt_ids = np.sort(args.jt_ids) # Sort in ascending order
     print('Using data where the following joints move: ', args.jt_ids)
 
+    if args.use_jt_angles:
+        print("Using Jt angles as input to the pose encoder")
+        assert args.use_gt_masks, "Jt angles only enabled for nets that use GT masks"
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -251,7 +257,7 @@ def main():
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
-                    wide=args.wide_model)
+                    wide=args.wide_model, use_jt_angles=args.use_jt_angles, num_state=args.num_state)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -486,6 +492,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False)  # 0 is BG, so we add 1
         tarpose_2 = util.to_var(get_jt_poses(sample['poses'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False)
 
+        # Jt configs
+        jtangles_1  = util.to_var(sample['actconfigs'][:, 0].clone().type(deftype), requires_grad=train)
+        jtangles_2  = util.to_var(sample['actconfigs'][:, 1].clone().type(deftype), requires_grad=train)
+
         # Measure data loading time
         data_time.update(time.time() - start)
 
@@ -498,14 +508,16 @@ def iterate(data_loader, model, tblogger, num_iters,
             masks = get_jt_masks(sample['masks'].type(deftype), args.jt_ids)
             mask_1 = util.to_var(masks[:,0].clone(), requires_grad=False)
             mask_2 = util.to_var(masks[:,1].clone(), requires_grad=False)
-            pose_1, pose_2, [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1])
+            pose_1, pose_2, [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1,
+                                                                jtangles_1, jtangles_2])
         elif args.use_gt_poses:
             pose_1 = util.to_var(get_jt_poses(sample['poses'][:, 0], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1
             pose_2 = util.to_var(get_jt_poses(sample['poses'][:, 1], args.jt_ids).clone().type(deftype), requires_grad=False) # 0 is BG, so we add 1
             deltapose_t_12, pose_t_2 = se3nn.ComposeRtPair()(pose_2, se3nn.RtInverse()(pose_1)), pose_2  # Pose_t+1 * Pose_t^-1
             mask_1, mask_2 = model([pts_1, pts_2], train_iter=num_train_iter)
         else:
-            [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1],
+            [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2] = model([pts_1, pts_2, ctrls_1,
+                                                                                    jtangles_1, jtangles_2],
                                                                                    train_iter=num_train_iter)
         deltapose_t_21 = se3nn.RtInverse()(deltapose_t_12)  # Invert the delta-pose
 

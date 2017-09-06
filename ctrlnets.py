@@ -285,9 +285,10 @@ class PoseEncoder(nn.Module):
         self.celem = chn[4]*7*10
 
         ###### Encode jt angles
-        self.jdim = 0
-        if use_jt_angles:
-            self.jdim = 256
+        self.use_jt_angles = use_jt_angles
+        jdim = 0
+        if self.use_jt_angles:
+            jdim = 256
             self.jtencoder = nn.Sequential(
                 nn.Linear(num_state, 128),
                 get_nonlinearity(nonlinearity),
@@ -301,7 +302,7 @@ class PoseEncoder(nn.Module):
         self.num_se3 = num_se3
         sdim = 256 if wide else 128
         self.se3decoder  = nn.Sequential(
-                                nn.Linear(self.celem + self.jdim, sdim),
+                                nn.Linear(self.celem + jdim, sdim),
                                 get_nonlinearity(nonlinearity),
                                 nn.Linear(sdim, self.num_se3 * self.se3_dim) # Predict the SE3s from the conv-output
                            )
@@ -321,7 +322,7 @@ class PoseEncoder(nn.Module):
             self.posedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False)) # Kinematic chain
 
     def forward(self, z):
-        if self.jdim > 0:
+        if self.use_jt_angles:
             x,j = z # Pts, Jt angles
         else:
             x = z
@@ -334,12 +335,13 @@ class PoseEncoder(nn.Module):
         x = self.conv5(x)
 
         # Run jt-encoder & concatenate the embeddings
-        if self.jdim > 0:
+        if self.use_jt_angles:
             j = self.jtencoder(j)
-            x = torch.cat([x.view(-1, self.celem), j], 1)
+            p = torch.cat([x.view(-1, self.celem), j], 1)
+        else:
+            p = x.view(-1, self.celem)
 
         # Run pose-decoder to predict poses
-        p = x.view(-1, self.celem + self.jdim)
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
@@ -454,7 +456,7 @@ class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False, pre_conv=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, wide=False):
+                 use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -477,6 +479,18 @@ class PoseMaskEncoder(nn.Module):
         self.conv5 = ConvType(chn[3], chn[4], kernel_size=3, stride=1, padding=1,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
         self.celem = chn[4] * 7 * 10
+
+        ###### Encode jt angles
+        self.use_jt_angles = use_jt_angles
+        jdim = 0
+        if self.use_jt_angles:
+            jdim = 256
+            self.jtencoder = nn.Sequential(
+                nn.Linear(num_state, 128),
+                get_nonlinearity(nonlinearity),
+                nn.Linear(128, 256),
+                get_nonlinearity(nonlinearity),
+            )
 
         ###### Mask Decoder
         # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
@@ -516,7 +530,7 @@ class PoseMaskEncoder(nn.Module):
         self.num_se3 = num_se3
         sdim = 256 if wide else 128 # NOTE: This was 64 before! #128
         self.se3decoder  = nn.Sequential(
-                                nn.Linear(self.celem, sdim),
+                                nn.Linear(self.celem + jdim, sdim),
                                 get_nonlinearity(nonlinearity),
                                 nn.Linear(sdim, self.num_se3 * self.se3_dim)  # Predict the SE3s from the conv-output
                            )
@@ -543,7 +557,12 @@ class PoseMaskEncoder(nn.Module):
             pow = min(1 + (citer/500.0) * self.sharpen_rate, 100) # Should be 26 by ~12500 iters from start (if rate=1)
         return noise_std, pow
 
-    def forward(self, x, predict_masks=True, train_iter=0):
+    def forward(self, z, predict_masks=True, train_iter=0):
+        if self.use_jt_angles:
+            x,j = z # Pts, Jt angles
+        else:
+            x = z
+
         # Run conv-encoder to generate embedding
         c1 = self.conv1(x)
         c2 = self.conv2(c1)
@@ -551,8 +570,14 @@ class PoseMaskEncoder(nn.Module):
         c4 = self.conv4(c3)
         c5 = self.conv5(c4)
 
+        # Run jt-encoder & concatenate the embeddings
+        if self.use_jt_angles:
+            j = self.jtencoder(j)
+            p = torch.cat([c5.view(-1, self.celem), j], 1)
+        else:
+            p = c5.view(-1, self.celem)
+
         # Run pose-decoder to predict poses
-        p = c5.view(-1, self.celem)
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
         p = self.posedecoder(p)
@@ -697,7 +722,8 @@ class SE3PoseModel(nn.Module):
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -706,12 +732,18 @@ class SE3PoseModel(nn.Module):
                                              init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                              nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                              sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                             use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                             use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                             use_jt_angles=use_jt_angles, num_state=num_state)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
-                                               local_delta_se3=local_delta_se3)
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+
+        # Options
+        self.use_jt_angles = use_jt_angles
+        self.use_jt_angles_trans = use_jt_angles_trans
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -719,11 +751,14 @@ class SE3PoseModel(nn.Module):
         ptcloud_1, ptcloud_2, ctrl_1, jtangles_1, jtangles_2 = x
 
         # Get pose & mask predictions @ t0 & t1
-        pose_1, mask_1 = self.posemaskmodel(ptcloud_1, train_iter=train_iter, predict_masks=True)  # ptcloud @ t1
-        pose_2, mask_2 = self.posemaskmodel(ptcloud_2, train_iter=train_iter, predict_masks=True)  # ptcloud @ t2
+        inp1 = [ptcloud_1, jtangles_1] if self.use_jt_angles else ptcloud_1
+        inp2 = [ptcloud_2, jtangles_2] if self.use_jt_angles else ptcloud_2
+        pose_1, mask_1 = self.posemaskmodel(inp1, train_iter=train_iter, predict_masks=True)  # ptcloud @ t1
+        pose_2, mask_2 = self.posemaskmodel(inp2, train_iter=train_iter, predict_masks=True)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
-        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
+        inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
         return [pose_1, mask_1], [pose_2, mask_2],  [deltapose_t_12, pose_t_2]
@@ -752,7 +787,9 @@ class SE3OnlyPoseModel(nn.Module):
                                                nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
                                                use_jt_angles=use_jt_angles_trans, num_state=num_state)
-        self.use_jt_angles       = use_jt_angles
+
+        # Options
+        self.use_jt_angles = use_jt_angles
         self.use_jt_angles_trans = use_jt_angles_trans
 
     # Forward pass through the model
@@ -767,8 +804,8 @@ class SE3OnlyPoseModel(nn.Module):
         pose_2 = self.posemodel(inp2)  # ptcloud @ t2
 
         # Get transition model predicton of pose_1
-        inpp = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
-        deltapose_t_12, pose_t_2 = self.transitionmodel(inpp)  # Predicts [delta-pose, pose]
+        inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
         return pose_1, pose_2, [deltapose_t_12, pose_t_2]
@@ -781,7 +818,8 @@ class SE3OnlyMaskModel(nn.Module):
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(SE3OnlyMaskModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -812,7 +850,7 @@ class SE3DecompModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(SE3DecompModel, self).__init__()
 
         # Initialize the pose model
@@ -833,7 +871,12 @@ class SE3DecompModel(nn.Module):
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
-                                               local_delta_se3=local_delta_se3)
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+
+        # Options
+        self.use_jt_angles = use_jt_angles
+        self.use_jt_angles_trans = use_jt_angles_trans
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -841,15 +884,18 @@ class SE3DecompModel(nn.Module):
         ptcloud_1, ptcloud_2, ctrl_1, jtangles_1, jtangles_2 = x
 
         # Get pose predictions @ t0 & t1
-        pose_1 = self.posemodel(ptcloud_1)  # ptcloud @ t1
-        pose_2 = self.posemodel(ptcloud_2)  # ptcloud @ t2
+        inp1 = [ptcloud_1, jtangles_1] if self.use_jt_angles else ptcloud_1
+        inp2 = [ptcloud_2, jtangles_2] if self.use_jt_angles else ptcloud_2
+        pose_1 = self.posemodel(inp1)  # ptcloud @ t1
+        pose_2 = self.posemodel(inp2)  # ptcloud @ t2
 
         # Get mask predictions @ t0 & t1
         mask_1 = self.maskmodel(ptcloud_1, train_iter=train_iter)  # ptcloud @ t1
         mask_2 = self.maskmodel(ptcloud_2, train_iter=train_iter)  # ptcloud @ t2
 
-        # Get transition model predicton ofCUDA_VISIBLE_DEVICES=2 python main_ctrlnets_coord.py -c config/singlejt/coord/10iter/3jts/jt246_4se3_wtsharpenr1s0_1seq.yaml --batch-size 16 pose_1
-        deltapose_t_12, pose_t_2 = self.transitionmodel([pose_1, ctrl_1])  # Predicts [delta-pose, pose]
+        # Get transition model predicton of pose_1
+        inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
         return [pose_1, mask_1], [pose_2, mask_2], [deltapose_t_12, pose_t_2]
@@ -864,7 +910,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -888,32 +934,46 @@ class MultiStepSE3PoseModel(nn.Module):
                                                  init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                                  nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                                  sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                                 use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                                 use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                                 use_jt_angles=use_jt_angles, num_state=num_state)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
-                                               local_delta_se3=local_delta_se3)
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+
+        # Options
+        self.use_jt_angles = use_jt_angles
+        self.use_jt_angles_trans = use_jt_angles_trans
+
     # Predict pose only
     def forward_only_pose(self, x):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
         if self.decomp_model:
-            return self.posemodel(x)
+            return self.posemodel(inp)
         else:
-            return self.posemaskmodel(x, predict_masks=False) # returns only pose
+            return self.posemaskmodel(inp, predict_masks=False) # returns only pose
 
     # Predict both pose and mask
     def forward_pose_mask(self, x, train_iter=0):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
         if self.decomp_model:
-            pose = self.posemodel(x)
-            mask = self.maskmodel(x, train_iter=train_iter)
+            pose = self.posemodel(inp)
+            mask = self.maskmodel(ptcloud, train_iter=train_iter)
             return pose, mask
         else:
-            return self.posemaskmodel(x, train_iter=train_iter, predict_masks=True) # Predict both
+            return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
 
     # Predict next pose based on current pose and control
-    def forward_next_pose(self, pose, ctrl):
-        return self.transitionmodel([pose, ctrl])
+    def forward_next_pose(self, pose, ctrl, jtangles=None):
+        if self.use_jt_angles_trans:
+            return self.transitionmodel([pose, jtangles, ctrl])
+        else:
+            return self.transitionmodel([pose, ctrl])
 
     # Forward pass through the model
     def forward(self, x):
@@ -930,7 +990,7 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(MultiStepSE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -945,7 +1005,8 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
-                                               local_delta_se3=local_delta_se3)
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
     # Predict pose only
     def forward_only_pose(self, x):
         return self.posemodel(x)
@@ -956,8 +1017,11 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
         raise NotImplementedError
 
     # Predict next pose based on current pose and control
-    def forward_next_pose(self, pose, ctrl):
-        return self.transitionmodel([pose, ctrl])
+    def forward_next_pose(self, pose, ctrl, jtangles=None):
+        if self.use_jt_angles_trans:
+            return self.transitionmodel([pose, jtangles, ctrl])
+        else:
+            return self.transitionmodel([pose, ctrl])
 
     # Forward pass through the model
     def forward(self, x):
@@ -971,7 +1035,8 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, local_delta_se3=False, wide=False):
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
         super(MultiStepSE3OnlyMaskModel, self).__init__()
 
         # Initialize the mask model

@@ -168,6 +168,12 @@ def main():
     if args.wide_model:
         print('Using a wider network!')
 
+    if args.use_jt_angles:
+        print("Using Jt angles as input to the pose encoder")
+
+    if args.use_jt_angles_trans:
+        print("Using Jt angles as input to the transition model")
+
     # TODO: Add option for using encoder pose for tfm t2
 
     ########################
@@ -227,7 +233,8 @@ def main():
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
-                    wide=args.wide_model)
+                    wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -436,8 +443,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts      = util.to_var(sample['points'].type(deftype), requires_grad=True)
-        ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=True)
+        pts      = util.to_var(sample['points'].type(deftype), requires_grad=train)
+        ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=train)
+        jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
         fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         fwdvis   = util.to_var(sample['fwdvisibilities'].type(deftype), requires_grad=False)
         tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
@@ -458,12 +466,12 @@ def iterate(data_loader, model, tblogger, num_iters,
             # For all subsequent timesteps, predict only the poses
             if(k == 0):
                 if args.use_gt_masks:
-                    p = model.forward_only_pose(pts[:,k]) # We can only predict poses
+                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]]) # We can only predict poses
                     initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
                 else:
-                    p, initmask = model.forward_pose_mask(pts[:,k], train_iter=num_train_iter)
+                    p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
             else:
-                p = model.forward_only_pose(pts[:,k])
+                p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
             poses.append(p)
 
         # Make next-pose predictions & corresponding 3D point predictions using the transition model
@@ -478,7 +486,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 pose = transposes[k-1] # Use previous predicted pose
 
             # Predict next pose based on curr pose, control
-            delta, trans = model.forward_next_pose(pose, ctrls[:,k])
+            delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k])
             deltaposes.append(delta)
             transposes.append(trans)
 

@@ -35,10 +35,6 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the 3D point based loss in the BWD direction (default: 1)')
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
-parser.add_argument('--use-jt-angles', action='store_true', default=False,
-                    help='Model uses GT jt angles as inputs to the pose net. (default: False)')
-parser.add_argument('--use-jt-angles-trans', action='store_true', default=False,
-                    help='Model uses GT jt angles as inputs to the transition net. (default: False)')
 
 ################ MAIN
 #@profile
@@ -196,11 +192,9 @@ def main():
 
     if args.use_jt_angles:
         print("Using Jt angles as input to the pose encoder")
-        assert args.use_gt_masks, "Jt angles only enabled for nets that use GT masks"
 
     if args.use_jt_angles_trans:
         print("Using Jt angles as input to the transition model")
-        assert args.use_gt_masks, "Jt angles only enabled for nets that use GT masks"
 
     # TODO: Add option for using encoder pose for tfm t2
 

@@ -62,6 +62,10 @@ def setup_comon_options():
                         help='Model predicts only poses & delta poses. GT masks are given. (default: False)')
     parser.add_argument('--use-gt-poses', action='store_true', default=False,
                         help='Model predicts only masks. GT poses & deltas are given. (default: False)')
+    parser.add_argument('--use-jt-angles', action='store_true', default=False,
+                        help='Model uses GT jt angles as inputs to the pose net. (default: False)')
+    parser.add_argument('--use-jt-angles-trans', action='store_true', default=False,
+                        help='Model uses GT jt angles as inputs to the transition net. (default: False)')
 
     # Mask options
     parser.add_argument('--use-wt-sharpening', action='store_true', default=False,

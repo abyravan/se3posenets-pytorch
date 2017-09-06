@@ -51,4 +51,3 @@ class PangolinViz
 
         void stop_saving_frames();
 };
-

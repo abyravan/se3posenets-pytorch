@@ -355,7 +355,7 @@ void Renderer<RenderTypeList>::renderMeshes(const std::vector<std::vector<pangol
         const int nAttributeBuffers = vertexAttributeBuffers[m].size();
         assert(nAttributeBuffers == RenderTypeTraits<IntToType<RT> >::numVertAtrributes);
 
-        for (GLuint i=0; i<nAttributeBuffers; ++i) {
+        for (GLuint i=0; i<RenderTypeTraits<IntToType<RT> >::numVertAtrributes; ++i) {
             const GLuint size = RenderTypeTraits<IntToType<RT> >::vertAttributeSizes()[i];
             const GLenum type = RenderTypeTraits<IntToType<RT> >::vertAttributeTypes()[i];
 

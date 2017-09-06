@@ -154,6 +154,10 @@ def main():
         args.use_gt_masks, args.use_gt_poses = False, False
     if not hasattr(args, "num_state"):
         args.num_state = args.num_ctrl
+    if not hasattr(args, "use_gt_angles"):
+        args.use_gt_angles, args.use_gt_angles_trans = False, False
+    if not hasattr(args, "num_state"):
+        args.num_state = 7
 
     ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
     ## TODO: Or allow pangolin to change the args later
@@ -168,7 +172,9 @@ def main():
                                               use_wt_sharpening=args.use_wt_sharpening,
                                               sharpen_start_iter=args.sharpen_start_iter,
                                               sharpen_rate=args.sharpen_rate, pre_conv=False,
-                                              wide=args.wide_model)  # TODO: pre-conv
+                                              wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+                                              use_jt_angles_trans=args.use_jt_angles_trans,
+                                              num_state=args.num_state)  # TODO: pre-conv
             posemaskpredfn = model.posemodel.forward
         elif args.use_gt_poses:
             assert False, "No need to run tests with GT poses provided"
@@ -301,8 +307,14 @@ def main():
         start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
         goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
 
-        start_poses = posemaskpredfn(util.to_var(start_pts.type(deftype)))
-        goal_poses  = posemaskpredfn(util.to_var(goal_pts.type(deftype)))
+        if args.use_jt_angles:
+            sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1,-1).type(deftype))]
+            tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1,-1).type(deftype))]
+        else:
+            sinp = util.to_var(start_pts.type(deftype))
+            tinp = util.to_var(goal_pts.type(deftype))
+        start_poses = posemaskpredfn(sinp)
+        goal_poses  = posemaskpredfn(tinp)
     else:
         start_poses, start_masks = posemaskpredfn(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
         goal_poses, goal_masks   = posemaskpredfn(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
@@ -359,7 +371,11 @@ def main():
         start = time.time()
         if args.use_gt_masks:
             curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
-            curr_poses = posemaskpredfn(util.to_var(curr_pts))
+            if args.use_jt_angles:
+                inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1,-1).type(deftype))]
+            else:
+                inp = util.to_var(curr_pts)
+            curr_poses = posemaskpredfn(inp)
         else:
             curr_poses, curr_masks = posemaskpredfn(util.to_var(curr_pts), train_iter=num_train_iter)
         curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
@@ -384,6 +400,7 @@ def main():
         start = time.time()
         ctrl_grad, loss = optimize_ctrl(model=model.transitionmodel,
                                         poses=curr_poses, ctrl=init_ctrl_v,
+                                        angles=angles[it].view(1,-1),
                                         goal_poses=goal_poses_v)
         optim_time.update(time.time() - start)
         ctrl_grads[it] = ctrl_grad.cpu().float() # Save this
@@ -454,7 +471,7 @@ def main():
 
 ### Function to generate the optimized control
 # Note: assumes that it get Variables
-def optimize_ctrl(model, poses, ctrl, goal_poses):
+def optimize_ctrl(model, poses, ctrl, angles, goal_poses):
 
     # Do specific optimization based on the type
     if pargs.optimization == 'backprop':
@@ -466,7 +483,11 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
         # FWD pass + loss
         poses_1 = util.to_var(poses.data, requires_grad=False)
         ctrl_1  = util.to_var(ctrl.data, requires_grad=True)
-        _, pred_poses = model([poses_1, ctrl_1])
+        if args.use_jt_angles_trans:
+            angles_1 = util.to_var(angles.type_as(poses.data), requires_grad=False)
+            _, pred_poses = model([poses_1, angles_1, ctrl_1])
+        else:
+            _, pred_poses = model([poses_1, ctrl_1])
         loss = args.loss_scale * ctrlnets.BiMSELoss(pred_poses, goal_poses) # Get distance from goal
 
         # ============ BWD pass ============#
@@ -497,7 +518,12 @@ def optimize_ctrl(model, poses, ctrl, goal_poses):
         # ============ FWD pass ============#
 
         # FWD pass
-        _, pred_poses_p = model([poses_p, ctrl_p])
+        if args.use_jt_angles_trans:
+            angles_p = util.to_var(angles.repeat(nperturb+1,1).type_as(poses.data))  # Replicate angles
+            _, pred_poses_p = model([poses_p, angles_p, ctrl_p])
+        else:
+            _, pred_poses_p = model([poses_p, ctrl_p])
+        #_, pred_poses_p = model([poses_p, ctrl_p])
 
         # Backprop only over the loss!
         pred_poses = util.to_var(pred_poses_p.data.narrow(0,0,1), requires_grad=True) # Need grad of loss w.r.t true pred

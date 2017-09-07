@@ -628,7 +628,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Compute consistency error for display
         consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         for k in xrange(args.seq_len):
-            consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs.max()
+            consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs().max()
             consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1].data, transposes[k].data)
         consiserrorm.update(consiserror)
 

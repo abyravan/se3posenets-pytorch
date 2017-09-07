@@ -735,7 +735,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
                 loss=lossm, ptloss=ptlossm, consisloss=consislossm,
                 posedisloss=dissimposelossm, deltadisloss=dissimdeltalossm,
-                flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg)
+                flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg,
+                consiserror=consiserrorm)
     print('========================================================')
 
     # Return the loss & flow loss

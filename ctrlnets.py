@@ -558,7 +558,7 @@ class PoseMaskEncoder(nn.Module):
         return noise_std, pow
 
     def forward(self, z, predict_masks=True, train_iter=0):
-        if self.use_jt_angles:
+        if self.use_jt_angles or type(z) == list:
             x,j = z # Pts, Jt angles
         else:
             x = z

@@ -36,6 +36,9 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
 
+parser.add_argument('--no-consis-delta-grads', action='store_true', default=False,
+                    help="Don't backpropagate the consistency gradients to the predicted deltas. (default: False)")
+
 ################ MAIN
 #@profile
 def main():
@@ -89,6 +92,11 @@ def main():
                                'fy': 589.3664541825391 / 2,
                                'cx': 320.5 / 2,
                                'cy': 240.5 / 2}
+    print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(args.img_ht, args.img_wd,
+                                                                                args.cam_intrinsics['fx'],
+                                                                                args.cam_intrinsics['fy'],
+                                                                                args.cam_intrinsics['cx'],
+                                                                                args.cam_intrinsics['cy']))
 
     # Get dimensions of ctrl & state
     try:
@@ -335,12 +343,12 @@ def main():
             tr_flowsum_b, tr_flowavg_b = iterate(train_loader, model, tblogger, args.train_ipe,
                                                  mode='train', optimizer=optimizer, epoch=epoch+1)
 
-        # Log values and gradients of the parameters (histogram)
-        # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
-        for tag, value in model.named_parameters():
-            tag = tag.replace('.', '/')
-            tblogger.histo_summary(tag, util.to_np(value.data), epoch + 1)
-            tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
+        # # Log values and gradients of the parameters (histogram)
+        # # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
+        # for tag, value in model.named_parameters():
+        #     tag = tag.replace('.', '/')
+        #     tblogger.histo_summary(tag, util.to_np(value.data), epoch + 1)
+        #     tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
         val_loss, val_fwdloss, val_bwdloss, val_consisloss, \
@@ -436,7 +444,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     deltaroterrm, deltatranserrm = AverageMeter(), AverageMeter()
     deltaroterrm_mask, deltatranserrm_mask = AverageMeter(), AverageMeter()
 
-    poselossm_1, poselossm_2 = AverageMeter(), AverageMeter()
+    poselossm_1, poselossm_2, consiserrorm = AverageMeter(), AverageMeter(), AverageMeter()
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -559,7 +567,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                 ptloss_2 = bwd_wt * ctrlnets.Loss3D(inputs_2, targets_2, loss_type=args.loss_type, wts=bwdvis)
 
         # Compute pose consistency loss
-        consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+        if args.no_consis_delta_grads:
+            # Consistency loss gives gradients only to pose_2. No gradients to pose_t_2, and not to => deltapose_t_12 or pose_1
+            #pose_t_2p = util.to_var(pose_t_2.data.clone(), requires_grad=False)
+            #consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2p) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
+            delta = util.to_var(deltapose_t_12.data.clone(), requires_grad=False)  # Break the graph here
+            pose_trans_2 = se3nn.ComposeRtPair()(delta, pose_1)
+            consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_trans_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+        else:
+            consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
 
         # Add a loss for pose dis-similarity & delta dis-similarity
         dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
@@ -657,6 +673,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                                 gtdeltapose_t_12.unsqueeze(1))
             deltaroterrm_mask.update(deltaroterr_mask);  deltatranserrm_mask.update(deltatranserr_mask)
 
+        ### Pose consistency error
+        # Compute consistency error for display
+        consisdiff = pose_2.data - pose_t_2.data
+        consiserror = ctrlnets.BiAbsLoss(pose_2.data, pose_t_2.data)
+        consiserrorm.update(consiserror)
+
         ### Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
@@ -671,8 +693,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                   'Delta-Trans-Err: {delt.val:.5f} ({delt.avg:.5f})'.format(
                   disP=dissimposelossm, disD=dissimdeltalossm, delR=deltaroterrm, delt=deltatranserrm))
             print('\tPose-Loss-1: {pos1.val:.5f} ({pos1.avg:.5f}), '
-                    'Pose-Loss-2: {pos2.val:.5f} ({pos2.avg:.5f})'.format(
-                    pos1=poselossm_1, pos2=poselossm_2))
+                    'Pose-Loss-2: {pos2.val:.5f} ({pos2.avg:.5f}), '
+                    'Consis error: {c.val:.5f} ({c.avg:.5f})'.format(
+                    pos1=poselossm_1, pos2=poselossm_2, c=consiserrorm))
 
             # Print (flow & pose) error per mask if enabled
             if args.disp_err_per_mask:
@@ -719,6 +742,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-deltatransloss': deltatranserrm.val,
                 mode+'-poseloss1': poselossm_1.val,
                 mode+'-poseloss2': poselossm_2.val,
+                mode+'-consiserror': consiserrorm.val,
+                mode+'-consiserrormax': consisdiff.abs().max(),
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)

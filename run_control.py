@@ -184,7 +184,9 @@ def main():
                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                           init_posese3_iden=False, init_transse3_iden=False,
                                           use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                          sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model) # TODO: pre-conv
+                                          sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model,
+                                          use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                                          num_state=args.num_state) # TODO: pre-conv
             posemaskpredfn = model.posemaskmodel.forward
     else:
         if args.use_gt_masks:
@@ -201,7 +203,9 @@ def main():
                         use_wt_sharpening=args.use_wt_sharpening,
                         sharpen_start_iter=args.sharpen_start_iter,
                         sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                        decomp_model=args.decomp_model, wide=args.wide_model)
+                        decomp_model=args.decomp_model, wide=args.wide_model,
+                        use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                        num_state=args.num_state)
         posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
@@ -301,23 +305,23 @@ def main():
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
+    if args.use_jt_angles:
+        sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
+        tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
+    else:
+        sinp = util.to_var(start_pts.type(deftype))
+        tinp = util.to_var(goal_pts.type(deftype))
+
     if args.use_gt_masks: # GT masks are provided!
         _, start_rlabels = generate_ptcloud(start_angles)
         _, goal_rlabels  = generate_ptcloud(goal_angles)
         start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
         goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
-
-        if args.use_jt_angles:
-            sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1,-1).type(deftype))]
-            tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1,-1).type(deftype))]
-        else:
-            sinp = util.to_var(start_pts.type(deftype))
-            tinp = util.to_var(goal_pts.type(deftype))
         start_poses = posemaskpredfn(sinp)
         goal_poses  = posemaskpredfn(tinp)
     else:
-        start_poses, start_masks = posemaskpredfn(util.to_var(start_pts.type(deftype)), train_iter=num_train_iter)
-        goal_poses, goal_masks   = posemaskpredfn(util.to_var(goal_pts.type(deftype)), train_iter=num_train_iter)
+        start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
+        goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
 
     # Display the masks as an image summary
     maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
@@ -369,15 +373,15 @@ def main():
 
         # Predict poses and masks
         start = time.time()
+        if args.use_jt_angles:
+            inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
+        else:
+            inp = util.to_var(curr_pts)
         if args.use_gt_masks:
             curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
-            if args.use_jt_angles:
-                inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1,-1).type(deftype))]
-            else:
-                inp = util.to_var(curr_pts)
             curr_poses = posemaskpredfn(inp)
         else:
-            curr_poses, curr_masks = posemaskpredfn(util.to_var(curr_pts), train_iter=num_train_iter)
+            curr_poses, curr_masks = posemaskpredfn(inp, train_iter=num_train_iter)
         curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
         posemask_time.update(time.time() - start)
 

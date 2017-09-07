@@ -180,6 +180,9 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
+    if args.se2_data:
+        print('Using the smaller SE2 models')
+
     ### Load the model
     num_train_iter = 0
     if args.use_gt_masks:
@@ -198,7 +201,7 @@ def main():
                     init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                    wide=args.wide_model)
+                    wide=args.wide_model, se2_data=args.se2_data)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

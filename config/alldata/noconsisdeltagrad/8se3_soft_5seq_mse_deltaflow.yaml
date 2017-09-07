@@ -1,13 +1,13 @@
 ---
 # Dataset options
 data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions_f,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_wfixjts_5hrs_Feb10_17/postprocessmotionshalf_f,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint0/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint1/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint2/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint3/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint4/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint6/postprocessmotions_f]
-batch-size:   32
+batch-size:   16
 num-workers:  8
 train-per:    0.6
 val-per:      0.15
 img-scale:    1e-4
 step-len:     2
-seq-len:      1
+seq-len:      5
 ctrl-type:    actdiffvel
 
 # Model options
@@ -24,20 +24,22 @@ local-delta-se3:    False
 use-ntfm-delta:     False
 wide-model:         True
 use-gt-poses:		  False
-use-gt-masks:		  True
+use-gt-masks:		  False
+use-jt-angles:		  False
+use-jt-angles-trans: False
 
 # Mask options
-use-wt-sharpening: True
+use-wt-sharpening: False
 sharpen-start-iter: 0
 sharpen-rate: 1.0
 use-sigmoid-mask:  False
 
 # Loss options
-loss-type:        normmsesqrt
-motion-norm-loss: True
-fwd-wt:           1.0
-bwd-wt:           1.0
-consis-wt:        10.0
+loss-type:        mse
+motion-norm-loss: False
+delta-flow-loss:  True
+pt-wt:            1.0
+consis-wt:        0.1
 pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0
 loss-scale:       10000.0
@@ -46,7 +48,7 @@ no-consis-delta-grads: True
 # Training options
 no-cuda:        False
 use-pin-memory: False
-epochs:         40
+epochs:         50
 start-epoch:    0
 train-ipe:      2000
 val-ipe:        500
@@ -58,9 +60,9 @@ optimization: adam
 lr:           1e-4
 momentum:     0
 lr-decay:     0.1
-decay-epochs: 30
+decay-epochs: 50
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/alldata/gtmasks/comparison_n/8se3_1seq_normmsesqrt_motionnormloss_nodissim_noconsisdeltagrad
+save-dir:  trained_nets/alldata/noconsisdeltagrad/8se3_soft_5seq_mse_deltaflow
 disp-err-per-mask: False

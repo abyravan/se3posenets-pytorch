@@ -36,9 +36,6 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
 
-parser.add_argument('--no-consis-delta-grads', action='store_true', default=False,
-                    help="Don't backpropagate the consistency gradients to the predicted deltas. (default: False)")
-
 ################ MAIN
 #@profile
 def main():

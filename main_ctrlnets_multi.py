@@ -401,6 +401,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     flowlossm_sum, flowlossm_avg = AverageMeter(), AverageMeter()
     dissimposelossm, dissimdeltalossm = AverageMeter(), AverageMeter()
     #flowlossm_mask_sum, flowlossm_mask_avg = AverageMeter(), AverageMeter()
+    consiserrorm = AverageMeter()
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -554,7 +555,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                     currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
 
             # Compute pose consistency loss
-            currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
+            if args.no_consis_delta_grads:
+                delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
+                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
+                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
+            else:
+                currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
 
             # Add a loss for pose dis-similarity & delta dis-similarity
             dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
@@ -618,6 +624,14 @@ def iterate(data_loader, model, tblogger, num_iters,
         #                                                                                      flows.data,
         #                                                                                      sample['gtmasks'])
 
+        ### Pose consistency error
+        # Compute consistency error for display
+        consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        for k in xrange(args.seq_len):
+            consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs.max()
+            consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1].data, transposes[k].data)
+        consiserrorm.update(consiserror)
+
         # Display/Print frequency
         if i % args.disp_freq == 0:
             ### Print statistics
@@ -625,7 +639,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         loss=lossm, ptloss=ptlossm, consisloss=consislossm,
                         posedisloss=dissimposelossm, deltadisloss=dissimdeltalossm,
-                        flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg)
+                        flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg,
+                        consiserror=consiserrorm)
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
@@ -651,7 +666,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-consisloss': consisloss.sum(),
                 mode+'-dissimposeloss': dissimposeloss.sum(),
-                mode+'-dissimdeltaloss': dissimdeltaloss.sum()
+                mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
+                mode+'-consiserror': consiserror.sum(),
+                mode+'-consiserrormax': consiserrormax.sum()
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -728,7 +745,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
                 loss, ptloss, consisloss, posedisloss, deltadisloss,
-                flowloss_sum, flowloss_avg):
+                flowloss_sum, flowloss_avg, consiserror):
     # Print loss
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
           'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
@@ -738,11 +755,12 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print flow loss per timestep
     bsz = args.batch_size
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f} ({:.3f}), '
+        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '.format(
             1 + k * args.step_len,
             ptloss.val[k], ptloss.avg[k], consisloss.val[k], consisloss.avg[k],
+            consiserror.val[k], consiserror.avg[k],
             posedisloss.val[k], posedisloss.avg[k], deltadisloss.val[k], deltadisloss.avg[k],
             flowloss_sum.val[k] / bsz, flowloss_sum.avg[k] / bsz,
             flowloss_avg.val[k] / bsz, flowloss_avg.avg[k] / bsz))

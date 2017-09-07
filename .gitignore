@@ -3,3 +3,4 @@
 *.so
 build
 _ext
+.DS_Store

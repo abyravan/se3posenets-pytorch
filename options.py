@@ -93,6 +93,8 @@ def setup_comon_options():
                         metavar='WT', help='Weight for the dissimilarity loss in the pose space (default: 0)')
     parser.add_argument('--delta-dissim-wt', default=0.0, type=float,
                         metavar='WT', help='Weight for the loss that regularizes the predicted delta away from zero (default: 0)')
+    parser.add_argument('--no-consis-delta-grads', action='store_true', default=False,
+                        help="Don't backpropagate the consistency gradients to the predicted deltas. (default: False)")
 
     # Training options
     parser.add_argument('--no-cuda', action='store_true', default=False,

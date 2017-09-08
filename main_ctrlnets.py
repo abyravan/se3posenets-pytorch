@@ -36,6 +36,13 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
 
+
+parser.add_argument('--consis-grads-pose1', action='store_true', default=False,
+                        help="Backpropagate the consistency gradients only to the pose @ t1. (default: False)")
+parser.add_argument('--consis-grads-pose2', action='store_true', default=False,
+                        help="Backpropagate the consistency gradients only to the pose @ t2. (default: False)")
+
+
 ################ MAIN
 #@profile
 def main():
@@ -571,6 +578,18 @@ def iterate(data_loader, model, tblogger, num_iters,
             delta = util.to_var(deltapose_t_12.data.clone(), requires_grad=False)  # Break the graph here
             pose_trans_2 = se3nn.ComposeRtPair()(delta, pose_1)
             consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_trans_2)  # Enforce consistency between pose @ t1 predicted by encoder & pose @ t1 from transition model
+        elif args.consis_grads_pose1:
+            # Backprop only to pose1
+            delta = util.to_var(deltapose_t_12.data.clone(), requires_grad=False)  # Break the graph here
+            pose2 = util.to_var(pose_2.data.clone(), requires_grad=False)  # Break the graph here
+            pose_trans_2 = se3nn.ComposeRtPair()(delta, pose_1) # Gradient flows to pose1
+            consisloss = consis_wt * ctrlnets.BiMSELoss(pose2, pose_trans_2)  # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
+        elif args.consis_grads_pose2:
+            # Backprop only to pose2
+            delta = util.to_var(deltapose_t_12.data.clone(), requires_grad=False)  # Break the graph here
+            pose1 =  util.to_var(pose_1.data.clone(), requires_grad=False)  # Break the graph here
+            pose_trans_2 = se3nn.ComposeRtPair()(delta, pose1) # Gradient doesn't flow to delta or pose 1
+            consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_trans_2) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
         else:
             consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
 

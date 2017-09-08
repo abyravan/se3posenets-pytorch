@@ -25,6 +25,13 @@ def read_baxter_state_file(filename):
         ret['comjtvel']     = torch.Tensor(spamreader.next()[0:-1])
         ret['comjtacc']     = torch.Tensor(spamreader.next()[0:-1])
         ret['tarendeffpos'] = torch.Tensor(spamreader.next()[0:-1])
+        try:
+            trackdata = spamreader.next()[0:-1]
+            ret['trackerjtpos'] = torch.Tensor(trackdata if trackdata[-1] != '' else trackdata[:-1])
+            ret['timestamp']    = spamreader.next()[0]
+        except:
+            ret['trackerjtpos'] = None
+            ret['timestamp']    = None
     return ret
 
 
@@ -98,7 +105,11 @@ def read_statectrllabels_file(filename):
         spamreader = csv.reader(csvfile, delimiter=' ')
         statenames = spamreader.next()[:-1]
         ctrlnames  = spamreader.next()[:-1]
-    return statenames, ctrlnames
+        try:
+            trackernames = spamreader.next()[:-1]
+        except:
+            trackernames = []
+    return statenames, ctrlnames, trackernames
 
 ############
 ### Helper functions for reading image data
@@ -133,6 +144,15 @@ def read_label_image(filename, ht=240, wd=320):
     else:
         imgscale = imgl
     return torch.ByteTensor(imgscale).unsqueeze(0)  # Add extra dimension
+
+# Read label image from disk
+def read_color_image(filename, ht=240, wd=320):
+    imgl = cv2.imread(filename) # This can be an image with 1 or 3 channels. If 3 channel image, choose 2nd channel
+    if (imgl.shape[0] != int(ht) or imgl.shape[1] != int(wd)):
+        imgscale = cv2.resize(imgl, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
+    else:
+        imgscale = imgl
+    return torch.ByteTensor(imgscale.transpose(2,0,1)).unsqueeze(0)  # Add extra dimension
 
 #############
 ### Helper functions for perspective projection stuff
@@ -281,7 +301,7 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
     # Get all the load directories
     if type(load_dirs) == str: # BWDs compatibility
         load_dirs = load_dirs.split(',,')  # Get all the load directories
-    assert (train_per + val_per < 1);  # Train + val < test
+    assert (train_per + val_per <= 1);  # Train + val < test
 
     # Iterate over each load directory to find the datasets
     datasets = []
@@ -386,6 +406,7 @@ def generate_baxter_sequence(dataset, idx):
     for k in xrange(start, end + 1, step):
         sequence[ct] = {'depth'     : path + 'depth' + suffix + str(k) + '.png',
                         'label'     : path + 'labels' + suffix + str(k) + '.png',
+                        'color'     : path + 'color' + suffix + str(k) + '.png',
                         'state1'    : path + 'state' + str(k) + '.txt',
                         'state2'    : path + 'state' + str(k + 1) + '.txt',
                         'se3state1' : path + 'se3state' + str(k) + '.txt',
@@ -404,7 +425,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    ctrl_type='actdiffvel', num_ctrl=7, num_state=7,
                                    mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
-                                   compute_bwdflows=True):
+                                   compute_bwdflows=True, load_color=False, num_tracker=0):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -428,8 +449,18 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     if compute_bwdflows:
         masks = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
 
+    # Setup vars for color image
+    if load_color:
+        rgbs = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)
+        actvels = torch.FloatTensor(seq_len + 1, num_state)        # Actual data is same as state dimension
+        comvels = torch.FloatTensor(seq_len + 1, num_ctrl)         # Commanded data is same as control dimension
+
+    # Setup vars for tracker data
+    if num_tracker > 0:
+        trackerconfigs = torch.FloatTensor(seq_len + 1, num_tracker)  # Tracker data is same as tracker dimension
+
     # Load sequence
-    dt = step_len * (1.0 / 30.0)
+    t = torch.linspace(0, seq_len*step_len*(1.0/30.0), seq_len+1).view(seq_len+1,1) # time stamp
     for k in xrange(len(sequence)):
         # Get data table
         s = sequence[k]
@@ -445,6 +476,18 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         state = read_baxter_state_file(s['state1'])
         actconfigs[k] = state['actjtpos'] # state dimension
         comconfigs[k] = state['comjtpos'] # ctrl dimension
+        if state['timestamp'] is not None:
+            t[k] = state['timestamp']
+
+        # Load RGB
+        if load_color:
+            rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
+            actvels[k] = state['actjtvel']
+            comvels[k] = state['comjtvel']
+
+        # Load tracker data
+        if num_tracker > 0:
+            trackerconfigs[k] = state['trackerjtpos']
 
         # Load SE3 state & get all poses
         se3state = read_baxter_se3state_file(s['se3state1'])
@@ -472,6 +515,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                 controls[k] = state['comjtacc'] # ctrl dimension
 
     # Different control types
+    dt = t[1:] - t[:-1] # Get proper dt which can vary between consecutive frames
     if ctrl_type == 'actdiffvel':
         controls = (actconfigs[1:seq_len+1][:, ctrl_ids] - actconfigs[0:seq_len][:, ctrl_ids]) / dt # state -> ctrl dimension
     elif ctrl_type == 'comdiffvel':
@@ -512,6 +556,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['masks']           = masks
         data['bwdflows']        = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+    if load_color:
+        data['rgbs']   = rgbs
+        data['labels'] = labels
+        data['actvels'] = actvels
+        data['comvels'] = comvels
+    if num_tracker > 0:
+        data['trackerconfigs'] = trackerconfigs
 
     return data
 

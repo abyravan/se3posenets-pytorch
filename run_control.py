@@ -305,7 +305,7 @@ def main():
 
     #### Predict start/goal poses and masks
     print('Predicting start/goal poses and masks')
-    if args.use_jt_angles:
+    if args.use_jt_angles or args.seq_len > 1:
         sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
     else:
@@ -373,7 +373,7 @@ def main():
 
         # Predict poses and masks
         start = time.time()
-        if args.use_jt_angles:
+        if args.use_jt_angles or args.seq_len > 1:
             inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
         else:
             inp = util.to_var(curr_pts)

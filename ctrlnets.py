@@ -1009,7 +1009,9 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                                                use_jt_angles=use_jt_angles_trans, num_state=num_state)
     # Predict pose only
     def forward_only_pose(self, x):
-        return self.posemodel(x)
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
+        return self.posemodel(inp)
 
     # Predict both pose and mask
     def forward_pose_mask(self, x, train_iter=0):

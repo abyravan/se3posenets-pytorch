@@ -590,6 +590,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             pose1 =  util.to_var(pose_1.data.clone(), requires_grad=False)  # Break the graph here
             pose_trans_2 = se3nn.ComposeRtPair()(delta, pose1) # Gradient doesn't flow to delta or pose 1
             consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_trans_2) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
+
         else:
             consisloss = consis_wt * ctrlnets.BiMSELoss(pose_2, pose_t_2) # Enforce consistency between pose @ t2 predicted by encoder & pose @ t2 from transition model
 

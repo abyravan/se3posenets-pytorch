@@ -321,3 +321,9 @@ add_library(pangoposeviz
              pose_visualizer.cpp
              src/render/renderer.cpp)
 target_link_libraries(pangoposeviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
+
+# Data Visualizer
+add_library(pangodataviz
+             data_visualizer.cpp
+             src/render/renderer.cpp)
+target_link_libraries(pangodataviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})

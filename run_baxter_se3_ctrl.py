@@ -6,6 +6,8 @@ from dynamic_reconfigure.server import Server
 from std_msgs.msg import Empty
 import baxter_interface
 from baxter_interface import CHECK_VERSION
+from sensor_msgs.msg import Image
+from cv_bridge import CvBridge, CvBridgeError
 
 # Global imports
 import _init_paths
@@ -18,6 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 
+############# Import pangolin
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
 img_ht, img_wd, img_scale = 240, 320, 1e-4
 seq_len = 1 # For now, only single step
@@ -53,6 +56,7 @@ import torch.utils.data
 from torch.autograd import Variable
 from torch.autograd.gradcheck import zero_gradients
 import torchvision
+import cv2
 
 # Local imports
 import se3layers as se3nn
@@ -123,6 +127,36 @@ class SE3ControlPositionMode(object):
         if not self._init_state and self._rs.state().enabled:
             print("Disabling robot...")
             self._rs.disable()
+
+############ Depth image subscriber
+class DepthImageSubscriber:
+    def __init__(self, ht, wd, scale, intrinsics):
+        self.subscriber = rospy.Subscriber("/camera/depth_registered/image_raw", Image, self.callback)
+        self.bridge     = CvBridge()
+        self.ht, self.wd, self.scale = ht, wd, scale
+        self.intrinsics = intrinsics
+        self.imgf = None
+
+    def callback(self,data):
+        try:
+            self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1").astype(np.int16) * self.scale
+        except CvBridgeError as e:
+            print(e)
+
+    def get_ptcloud(self):
+        assert self.imgf is not None, "Error: Haven't seen a single depth image yet!"
+        ptcloud = torch.zeros(1,3,self.ht,self.wd)
+        if (self.imgf.shape[0] != int(self.ht) or self.imgf.shape[1] != int(self.wd)):
+            depth = cv2.resize(self.imgf, (int(self.wd), int(self.ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
+        else:
+            depth = self.imgf
+        ptcloud[0, 2].copy_(torch.FloatTensor(depth))  # Copy depth
+
+        # Compute x & y values for the 3D points (= xygrid * depths)
+        xy = ptcloud[:, 0:2]
+        xy.copy_(self.intrinsics['xygrid'].expand_as(xy))  # = xygrid
+        xy.mul_(ptcloud[0, 2])  # = xygrid * depths
+        return ptcloud
 
 #############################################################333
 # Setup functions
@@ -204,18 +238,39 @@ def setup_test_dataset(args):
     ############ Get the data
     # Get datasets (TODO: Make this path variable)
     data_path = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/'
-    args.cam_extrinsics = data.read_cameradata_file(data_path + '/cameradata.txt')  # TODO: BWDs compatibility
-    args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-                                                                               args.cam_intrinsics)  # TODO: BWDs compatibility
-    baxter_data = data.read_recurrent_baxter_dataset(data_path, args.img_suffix,
+
+    # Get dimensions of ctrl & state
+    try:
+        statelabels, ctrllabels = data.read_statectrllabels_file(data_path + "/statectrllabels.txt")
+        print("Reading state/ctrl joint labels from: " + data_path + "/statectrllabels.txt")
+    except:
+        statelabels = data.read_statelabels_file(data_path + '/statelabels.txt')['frames']
+        ctrllabels = statelabels  # Just use the labels
+        print("Could not read statectrllabels file. Reverting to labels in statelabels file")
+    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
+
+    # Find the IDs of the controlled joints in the state vector
+    # We need this if we have state dimension > ctrl dimension and
+    # if we need to choose the vals in the state vector for the control
+    ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+    print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+
+    # Get cam data
+    #args.cam_extrinsics = data.read_cameradata_file(data_path + '/cameradata.txt')  # TODO: BWDs compatibility
+    #args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
+    #                                                                           args.cam_intrinsics)  # TODO: BWDs compatibility
+    baxter_data = data.read_recurrent_baxter_dataset(data_path, 'sub',
                                                      step_len=1, seq_len=1,
                                                      train_per=args.train_per, val_per=args.val_per)
-    disk_read_func = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=args.img_ht, img_wd=args.img_wd,
-                                                                      img_scale=args.img_scale,
+    disk_read_func = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=240,#args.img_ht,
+                                                                      img_wd=320,#args.img_wd,
+                                                                      img_scale=1e-4,#args.img_scale,
                                                                       ctrl_type='actdiffvel',
-                                                                      num_ctrl=args.num_ctrl,
-                                                                      num_state=args.num_state,
+                                                                      num_ctrl=7,#args.num_ctrl,
+                                                                      num_state=7,#args.num_state,
                                                                       mesh_ids=args.mesh_ids,
+                                                                      ctrl_ids = ctrlids_in_state,
                                                                       camera_extrinsics=args.cam_extrinsics,
                                                                       camera_intrinsics=args.cam_intrinsics)
     test_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -319,7 +374,8 @@ class SE3PoseSpaceOptimizer(object):
 
         # Sanity check some parameters (TODO: remove it later)
         assert (self.args.num_se3 == num_se3)
-        assert (self.args.img_scale == img_scale)
+        if not pargs.real_robot:
+            assert (self.args.img_scale == img_scale)
 
         ########################
         # Setup dataset
@@ -365,12 +421,13 @@ class SE3PoseSpaceOptimizer(object):
     ## Compute pose & masks
     def predict_pose_masks(self, config, pts, tbtopic='Mask'):
         ## Predict pose / mask
+        config_v = util.to_var(config.view(1,-1).type(self.deftype), requires_grad=False)
         if self.args.use_gt_masks:  # GT masks are provided!
             _, rlabels = generate_ptcloud(config, self.args)
             masks = util.to_var(compute_masks_from_labels(rlabels, self.args.mesh_ids, self.args))
-            poses = self.posemaskfn(util.to_var(pts.type(self.deftype)))
+            poses = self.posemaskfn([util.to_var(pts.type(self.deftype)), config_v])
         else:
-            poses, masks = self.posemaskfn(util.to_var(pts.type(self.deftype)), train_iter=self.num_train_iter)
+            poses, masks = self.posemaskfn([util.to_var(pts.type(self.deftype)), config_v], train_iter=self.num_train_iter)
 
         ## Display the masks as an image summary
         maskdisp = torchvision.utils.make_grid(masks.data.cpu().view(-1, 1, self.args.img_ht, self.args.img_wd),
@@ -500,8 +557,8 @@ class SE3PoseSpaceOptimizer(object):
 def main():
     """Control using SE3-Pose-Nets
     """
-    ##########
-    # Parse arguments
+    #############
+    ## Parse arguments right at the top
     parser = argparse.ArgumentParser(description='Reactive control using SE3-Pose-Nets')
 
     # Required params
@@ -554,17 +611,33 @@ def main():
     # Display/Save options
     parser.add_argument('-s', '--save-dir', default='', type=str,
                         metavar='PATH', help='directory to save results in. (default: <checkpoint_dir>/planlogs/)')
+    parser.add_argument('--real-robot', action='store_true', default=False,
+                        help='use real robot! (default: False)')
 
     # Parse args
     pargs = parser.parse_args(rospy.myargv()[1:])
 
     ###### Setup ros node & jt space controller
     print("Initializing node... ")
-    rospy.init_node("baxter_se3_control_%s" % (pargs.limb,))
+    rospy.init_node("baxter_se3_control_%s" % (pargs.limb,), anonymous=True)
 
     # Create BAXTER controller
     jc = SE3ControlPositionMode(pargs.limb)
     rospy.on_shutdown(jc.clean_shutdown) # register shutdown callback
+
+    # If real robot, set left arm to default position
+    if pargs.real_robot:
+        lc = SE3ControlPositionMode("left")
+        print("Moving left arm to default position...")
+        lc.move_to_pos({
+            "left_e0": -0.309864,
+            "left_e1":  1.55201,
+            "left_s0":  0.341311,
+            "left_s1":  0.0310631,
+            "left_w0":  0.083602,
+            "left_w1":  0.766607,
+            "left_w2":  0.00076699,
+        })
 
     ###### Setup controller (load trained net)
     se3optim = SE3PoseSpaceOptimizer(pargs)
@@ -574,10 +647,22 @@ def main():
     # Initialize start & goal config
     start_angles, goal_angles, start_id, goal_id = se3optim.setup_start_goal_angles()
 
+    ###### Setup subscriber to depth images if using real robot
+    if pargs.real_robot:
+        print("Setting up depth subscriber...")
+        depth_subscriber = DepthImageSubscriber(se3optim.args.img_ht,
+                                                se3optim.args.img_wd,
+                                                se3optim.args.img_scale,
+                                                se3optim.args.cam_intrinsics)
+        time.sleep(1)
+
     ###### Goal stuff
     # Set goal position, get observation
     jc.move_to_pos(create_config(goal_angles.numpy()))
-    goal_pts, _ = generate_ptcloud(goal_angles, se3optim.args)
+    if pargs.real_robot:
+        goal_pts = depth_subscriber.get_ptcloud()
+    else:
+        goal_pts, _ = generate_ptcloud(goal_angles, se3optim.args)
 
     # Compute goal poses
     goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
@@ -585,7 +670,10 @@ def main():
     ###### Start stuff
     # Set start position, get observation
     jc.move_to_pos(create_config(start_angles.numpy()))
-    start_pts, _ = generate_ptcloud(start_angles, se3optim.args)
+    if pargs.real_robot:
+        start_pts = depth_subscriber.get_ptcloud()
+    else:
+        start_pts, _ = generate_ptcloud(start_angles, se3optim.args)
 
     # Compute goal poses
     start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
@@ -628,7 +716,10 @@ def main():
         start = time.time()
 
         curr_angles = get_angles(jc.cur_pos())
-        curr_pts, _ = generate_ptcloud(curr_angles, se3optim.args)
+        if pargs.real_robot:
+            curr_pts = depth_subscriber.get_ptcloud()
+        else:
+            curr_pts, _ = generate_ptcloud(curr_angles, se3optim.args)
         curr_pts = curr_pts.type(deftype)
 
         gen_time.update(time.time() - start)

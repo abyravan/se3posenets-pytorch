@@ -34,6 +34,10 @@ parser.add_argument('--delta-flow-loss', action='store_true', default=False,
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 
+parser.add_argument('--kstep-consis', action='store_true', default=False,
+                    help='Consistency between t = 0 & t = k+1 instead of t = k & t = k+1 (default: False)')
+
+
 ################ MAIN
 #@profile
 def main():
@@ -173,6 +177,9 @@ def main():
 
     if args.use_jt_angles_trans:
         print("Using Jt angles as input to the transition model")
+
+    if args.kstep_consis:
+        print("Using k-step consistency loss")
 
     # TODO: Add option for using encoder pose for tfm t2
 
@@ -555,12 +562,22 @@ def iterate(data_loader, model, tblogger, num_iters,
                     currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
 
             # Compute pose consistency loss
-            if args.no_consis_delta_grads:
-                delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
-                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
+            if args.kstep_consis:
+                # Consistency between t = 0 & t = k+1 always
+                if args.no_consis_delta_grads:
+                    delta = util.to_var(compdeltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
+                else:
+                    delta = compdeltaposes[k]  # Don't break the graph
+                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[0])  # pose_k = pose_k * pose_0^-1 * pose_0
                 currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
             else:
-                currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
+                # Consistency between t & t+1 always
+                if args.no_consis_delta_grads:
+                    delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
+                    nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
+                    currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
+                else:
+                    currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
 
             # Add a loss for pose dis-similarity & delta dis-similarity
             dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale

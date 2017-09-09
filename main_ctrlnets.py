@@ -765,7 +765,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
                         'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
                     data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
-            print('Num datasets sampled/discarded: {}/{}'.format(data_loader.data.dataset.numsampled,
+            print('\tNum datasets sampled/discarded: {}/{}'.format(data_loader.data.dataset.numsampled,
                                                                  data_loader.data.dataset.numdiscarded))
 
             ### TensorBoard logging

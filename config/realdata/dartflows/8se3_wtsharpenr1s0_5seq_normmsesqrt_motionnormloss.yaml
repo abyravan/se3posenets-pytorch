@@ -12,8 +12,8 @@ seq-len:      5
 ctrl-type:    actdiffvel
 mean-dt:		  0.0698
 std-dt:		  0.0025
-dawinsize:    5
-dathreshold:  0.015
+da-winsize:   5
+da-threshold: 0.015
 use-only-da-for-flows: False
 
 # Model options

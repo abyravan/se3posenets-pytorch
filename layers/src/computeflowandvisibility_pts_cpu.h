@@ -1,0 +1,22 @@
+// == Float
+int ComputeFlowAndVisibility_Pts_float(
+            THFloatTensor *cloud_1,
+            THFloatTensor *cloud_2,
+            THFloatTensor *local_1,
+            THFloatTensor *local_2,
+            THByteTensor  *label_1,
+            THByteTensor  *label_2,
+            THFloatTensor *poses_1,
+            THFloatTensor *poses_2,
+            THFloatTensor *poseinvs_1,
+            THFloatTensor *poseinvs_2,
+            THFloatTensor *fwdflows,
+            THFloatTensor *bwdflows,
+            THByteTensor  *fwdvisibility,
+            THByteTensor  *bwdvisibility,
+            float fx,
+            float fy,
+            float cx,
+            float cy,
+            float threshold,
+            float winsize);

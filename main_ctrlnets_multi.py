@@ -207,6 +207,10 @@ def main():
     # DA threshold / winsize
     print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_thresh,
                                                                                  args.da_winsize))
+    if args.use_only_da_for_flows:
+        print("Computing flows using only data-associations. Flows can only be computed for visible points")
+    else:
+        print("Computing flows using tracker poses. Can get flows for all input points")
 
     ########################
     ############ Load datasets
@@ -221,7 +225,8 @@ def main():
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
-                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize) # Need BWD flows / masks if using GT masks
+                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize,
+                                                                       use_only_da=args.use_only_da_for_flows) # Need BWD flows / masks if using GT masks
     filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func)  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val',   filter_func)  # Val dataset
@@ -657,7 +662,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         # NOTE: I'm using CUDA here to speed up computation by ~4x
         predflows = torch.cat([(x.data - pts.data[:,0]).unsqueeze(1) for x in predpts], 1)
         flows = fwdflows.data
-        flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
+        if args.use_only_da_for_flows:
+            # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
+            # account when computing the flow errors
+            flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
+        else:
+            flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
 
         # Update stats
         flowlossm_sum.update(flowloss_sum); flowlossm_avg.update(flowloss_avg)

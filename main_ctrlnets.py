@@ -227,6 +227,10 @@ def main():
     # DA threshold / winsize
     print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_thresh,
                                                                                  args.da_winsize))
+    if args.use_only_da_for_flows:
+        print("Computing flows using only data-associations. Flows can only be computed for visible points")
+    else:
+        print("Computing flows using tracker poses. Can get flows for all input points")
 
     ########################
     ############ Load datasets
@@ -241,7 +245,8 @@ def main():
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=True, num_tracker=args.num_tracker,
-                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize)
+                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize,
+                                                                       use_only_da=args.use_only_da_for_flows)
     filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func) # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val',   filter_func)   # Val dataset
@@ -666,10 +671,18 @@ def iterate(data_loader, model, tblogger, num_iters,
         # NOTE: I'm using CUDA here to speed up computation by ~4x
         predfwdflows = (predpts_1 - pts_1)
         predbwdflows = (predpts_2 - pts_2)
-        flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1),
+        if args.use_only_da_for_flows:
+            # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
+            # account when computing the flow errors
+            flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1) * fwdvis.data, # All pts that are visible have 0 flow
                                                                            fwdflows.data.unsqueeze(1))
-        flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1),
+            flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1) * bwdvis.data, # All pts that are visible have 0 flow
                                                                            bwdflows.data.unsqueeze(1))
+        else:
+            flowloss_sum_fwd, flowloss_avg_fwd, _, _ = compute_flow_errors(predfwdflows.data.unsqueeze(1),
+                                                                               fwdflows.data.unsqueeze(1))
+            flowloss_sum_bwd, flowloss_avg_bwd, _, _ = compute_flow_errors(predbwdflows.data.unsqueeze(1),
+                                                                               bwdflows.data.unsqueeze(1))
 
         # Update stats
         flowlossm_sum_f.update(flowloss_sum_fwd); flowlossm_sum_b.update(flowloss_sum_bwd)
@@ -684,12 +697,22 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 gtmask_1 = get_jt_masks(sample['masks'][:, 0].type(deftype), args.jt_ids)
                 gtmask_2 = get_jt_masks(sample['masks'][:, 1].type(deftype), args.jt_ids)
-            flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1),
-                                                                                              fwdflows.data.unsqueeze(1),
-                                                                                              gtmask_1.unsqueeze(1))
-            flowloss_mask_sum_bwd, flowloss_mask_avg_bwd, _, _ = compute_flow_errors_per_mask(predbwdflows.data.unsqueeze(1),
-                                                                                              bwdflows.data.unsqueeze(1),
-                                                                                              gtmask_2.unsqueeze(1))
+            if args.use_only_da_for_flows:
+                # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
+                # account when computing the flow errors
+                flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1) * fwdvis.data,
+                                                                                                  fwdflows.data.unsqueeze(1),
+                                                                                                  gtmask_1.unsqueeze(1))
+                flowloss_mask_sum_bwd, flowloss_mask_avg_bwd, _, _ = compute_flow_errors_per_mask(predbwdflows.data.unsqueeze(1) * bwdvis.data,
+                                                                                                  bwdflows.data.unsqueeze(1),
+                                                                                                  gtmask_2.unsqueeze(1))
+            else:
+                flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predfwdflows.data.unsqueeze(1),
+                                                                                                  fwdflows.data.unsqueeze(1),
+                                                                                                  gtmask_1.unsqueeze(1))
+                flowloss_mask_sum_bwd, flowloss_mask_avg_bwd, _, _ = compute_flow_errors_per_mask(predbwdflows.data.unsqueeze(1),
+                                                                                                  bwdflows.data.unsqueeze(1),
+                                                                                                  gtmask_2.unsqueeze(1))
 
             # Update stats
             flowlossm_mask_sum_f.update(flowloss_mask_sum_fwd); flowlossm_mask_sum_b.update(flowloss_mask_sum_bwd)

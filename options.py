@@ -41,6 +41,8 @@ def setup_comon_options():
                         help='Threshold for DA (used for flow/visibility computation) (default: 0.01 m)')
     parser.add_argument('--da-winsize', default=5, type=int, metavar='WIN',
                         help='Windowsize for DA search (used for flow/visibility computation) (default: 5)')
+    parser.add_argument('--use-only-da-for-flows', action='store_true', default=False,
+                        help='Use only data-association for computing flows, dont use tracker info. (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

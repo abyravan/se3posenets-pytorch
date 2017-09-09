@@ -236,7 +236,8 @@ def NTfm3D(points, masks, transforms, output=None):
 # Expects 4D inputs: seq x ndim x ht x wd (or seq x ndim x 3 x 4)
 def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
                              poses_1, poses_2, intrinsics,
-                             dathreshold=0.01, dawinsize=5):
+                             dathreshold=0.01, dawinsize=5,
+                             use_only_da=False):
     # Create memory
     seq, dim, ht, wd = cloud_1.size()
     fwdflows      = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_1)
@@ -251,44 +252,56 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
     # Call cpp/CUDA functions
     if cloud_1.is_cuda:
         assert NotImplementedError, "Only Float version implemented!"
-        se3layers.ComputeFlowAndVisibility_cuda(cloud_1,
-                                                cloud_2,
-                                                label_1,
-                                                label_2,
-                                                poses_1,
-                                                poses_2,
-                                                poseinvs_1,
-                                                poseinvs_2,
-                                                fwdflows,
-                                                bwdflows,
-                                                fwdvisibility,
-                                                bwdvisibility,
-                                                intrinsics['fx'],
-                                                intrinsics['fy'],
-                                                intrinsics['cx'],
-                                                intrinsics['cy'],
-                                                dathreshold,
-                                                dawinsize)
     else:
-        assert(cloud_1.type() == 'torch.FloatTensor')
-        se3layers.ComputeFlowAndVisibility_float(cloud_1,
-                                                 cloud_2,
-                                                 label_1,
-                                                 label_2,
-                                                 poses_1,
-                                                 poses_2,
-                                                 poseinvs_1,
-                                                 poseinvs_2,
-                                                 fwdflows,
-                                                 bwdflows,
-                                                 fwdvisibility,
-                                                 bwdvisibility,
-                                                 intrinsics['fx'],
-                                                 intrinsics['fy'],
-                                                 intrinsics['cx'],
-                                                 intrinsics['cy'],
-                                                 dathreshold,
-                                                 dawinsize)
+        assert (cloud_1.type() == 'torch.FloatTensor')
+        if use_only_da:
+            # This computes flows based only on points @ t1 that are visible and can be associated to a point @ t2
+            # So it assumes that we are only given data-associations as opposed to full tracking information
+            # This flow will be noisy for real data. For sim data, it should give the same result as the other function
+            local_1 = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_1)
+            local_2 = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_2)
+            se3layers.ComputeFlowAndVisibility_Pts_float(cloud_1,
+                                                         cloud_2,
+                                                         local_1,
+                                                         local_2,
+                                                         label_1,
+                                                         label_2,
+                                                         poses_1,
+                                                         poses_2,
+                                                         poseinvs_1,
+                                                         poseinvs_2,
+                                                         fwdflows,
+                                                         bwdflows,
+                                                         fwdvisibility,
+                                                         bwdvisibility,
+                                                         intrinsics['fx'],
+                                                         intrinsics['fy'],
+                                                         intrinsics['cx'],
+                                                         intrinsics['cy'],
+                                                         dathreshold,
+                                                         dawinsize)
+        else:
+            # This computes flows based on the internal tracker poses over time, so we can get flow
+            # for every input point, not just the ones that are visible @ t2
+            # Flow will be smoother for real data
+            se3layers.ComputeFlowAndVisibility_float(cloud_1,
+                                                     cloud_2,
+                                                     label_1,
+                                                     label_2,
+                                                     poses_1,
+                                                     poses_2,
+                                                     poseinvs_1,
+                                                     poseinvs_2,
+                                                     fwdflows,
+                                                     bwdflows,
+                                                     fwdvisibility,
+                                                     bwdvisibility,
+                                                     intrinsics['fx'],
+                                                     intrinsics['fy'],
+                                                     intrinsics['cx'],
+                                                     intrinsics['cy'],
+                                                     dathreshold,
+                                                     dawinsize)
 
     # Return
     return fwdflows, bwdflows, fwdvisibility, bwdvisibility
@@ -426,7 +439,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
-                                   dathreshold=0.01, dawinsize=5):
+                                   dathreshold=0.01, dawinsize=5, use_only_da=False):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -549,7 +562,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     fwdflows, bwdflows, \
     fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
                                                                 initpose, tarposes, camera_intrinsics,
-                                                                dathreshold, dawinsize)
+                                                                dathreshold, dawinsize, use_only_da)
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,

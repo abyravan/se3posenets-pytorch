@@ -37,7 +37,7 @@ def setup_comon_options():
     parser.add_argument('--std-dt', default=0.005, type=float, metavar='DT',
                         help='Std.deviaton of the time-difference between two consecutive frames in the dataset.'
                              'All examples that have dt over 2*std_dts from the mean will be discarded (default: 0.005 seconds)')
-    parser.add_argument('--da-thresh', default=0.01, type=float, metavar='DIST',
+    parser.add_argument('--da-threshold', default=0.01, type=float, metavar='DIST',
                         help='Threshold for DA (used for flow/visibility computation) (default: 0.01 m)')
     parser.add_argument('--da-winsize', default=5, type=int, metavar='WIN',
                         help='Windowsize for DA search (used for flow/visibility computation) (default: 5)')

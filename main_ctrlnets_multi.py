@@ -205,7 +205,7 @@ def main():
     # TODO: Add option for using encoder pose for tfm t2
 
     # DA threshold / winsize
-    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_thresh,
+    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_threshold,
                                                                                  args.da_winsize))
     if args.use_only_da_for_flows:
         print("Computing flows using only data-associations. Flows can only be computed for visible points")
@@ -225,7 +225,7 @@ def main():
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
-                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize,
+                                                                       dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                                        use_only_da=args.use_only_da_for_flows) # Need BWD flows / masks if using GT masks
     filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func)  # Train dataset

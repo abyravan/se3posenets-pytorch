@@ -31,6 +31,16 @@ def setup_comon_options():
                         help='dimensionality of the control space (default: 7)')
     parser.add_argument('--se2-data', action='store_true', default=False,
                         help='SE2 data. (default: False)')
+    parser.add_argument('--mean-dt', default=0.0, type=float, metavar='DT',
+                        help='Mean expected time-difference between two consecutive frames in the dataset.'
+                             'If not set, will revert to step_len * (1.0/30.0) ~ 30 fps camera (default: 0)')
+    parser.add_argument('--std-dt', default=0.005, type=float, metavar='DT',
+                        help='Std.deviaton of the time-difference between two consecutive frames in the dataset.'
+                             'All examples that have dt over 2*std_dts from the mean will be discarded (default: 0.005 seconds)')
+    parser.add_argument('--da-thresh', default=0.01, type=float, metavar='DIST',
+                        help='Threshold for DA (used for flow/visibility computation) (default: 0.01 m)')
+    parser.add_argument('--da-winsize', default=5, type=int, metavar='WIN',
+                        help='Windowsize for DA search (used for flow/visibility computation) (default: 5)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

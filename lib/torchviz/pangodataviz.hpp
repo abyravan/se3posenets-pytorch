@@ -1,9 +1,8 @@
 class PangolinDataViz
 {
     public:
-        PangolinDataViz(std::string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,
-                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy,
-                        const float *initconfig);
+        PangolinDataViz(std::string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy);
         ~PangolinDataViz();
 
         void update_viz( const float *ptclouds,
@@ -22,6 +21,9 @@ class PangolinDataViz
                          const float *comconfigs,
                          const float *comvels,
                          const float *trackerconfigs,
+                         const float *actdiffvels,
+                         const float *comdiffvels,
+                         const float *dartdiffvels,
                          const float *controls,
                          float *id);
 };

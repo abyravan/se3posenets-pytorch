@@ -36,12 +36,11 @@ parser.add_argument('--bwd-wt', default=1.0, type=float,
 parser.add_argument('--poseloss-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the pose loss (default: 0)')
 
-
+# Consistency options
 parser.add_argument('--consis-grads-pose1', action='store_true', default=False,
                         help="Backpropagate the consistency gradients only to the pose @ t1. (default: False)")
 parser.add_argument('--consis-grads-pose2', action='store_true', default=False,
                         help="Backpropagate the consistency gradients only to the pose @ t2. (default: False)")
-
 
 ################ MAIN
 #@profile
@@ -102,15 +101,30 @@ def main():
                                                                                 args.cam_intrinsics['cx'],
                                                                                 args.cam_intrinsics['cy']))
 
+    # Get mean/std deviations of dt for the data
+    if args.mean_dt == 0:
+        args.mean_dt = args.step_len * (1.0/30.0)
+        args.std_dt  = 0.005 # +- 10 ms
+        print("Using default mean & std.deviation based on the step length. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
+    else:
+        exp_mean_dt = (args.step_len * (1.0/30.0))
+        assert ((args.mean_dt - exp_mean_dt) < 1.0/30.0), \
+            "Passed in mean dt ({}) is very different from the expected value ({})".format(
+                args.mean_dt, exp_mean_dt) # Make sure that the numbers are reasonable
+        print("Using passed in mean & std.deviation values. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
+
     # Get dimensions of ctrl & state
     try:
-        statelabels, ctrllabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+        statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
         print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
     except:
         statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
         ctrllabels = statelabels  # Just use the labels
+        trackerlabels = []
         print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
     print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
 
     # Find the IDs of the controlled joints in the state vector
@@ -210,6 +224,10 @@ def main():
 
     # TODO: Add option for using encoder pose for tfm t2
 
+    # DA threshold / winsize
+    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_thresh,
+                                                                                 args.da_winsize))
+
     ########################
     ############ Load datasets
     # Get datasets
@@ -222,10 +240,12 @@ def main():
                                                                        mesh_ids = args.mesh_ids, ctrl_ids=ctrlids_in_state,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=True)
-    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
-    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
-    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
+                                                                       compute_bwdflows=True, num_tracker=args.num_tracker,
+                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize)
+    filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
+    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func) # Train dataset
+    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val',   filter_func)   # Val dataset
+    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test',  filter_func)  # Test dataset
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
@@ -703,7 +723,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         loss=lossm, fwdloss=ptlossm_f, bwdloss=ptlossm_b, consisloss=consislossm,
                         flowloss_sum_f=flowlossm_sum_f, flowloss_sum_b=flowlossm_sum_b,
-                        flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b)
+                        flowloss_avg_f=flowlossm_avg_f, flowloss_avg_b=flowlossm_avg_b,
+                        bsz=pts_1.size(0))
             print('\tPose-Dissim loss: {disP.val:.5f} ({disP.avg:.5f}), '
                   'Delta-Dissim loss: {disD.val:.5f} ({disD.avg:.5f}), '
                   'Delta-Rot-Err: {delR.val:.5f} ({delR.avg:.5f}), '
@@ -716,7 +737,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # Print (flow & pose) error per mask if enabled
             if args.disp_err_per_mask:
-                bsz = args.batch_size
+                bsz = pts_1.size(0)
                 for k in xrange(args.num_se3):
                     print('\tSE3/Mask: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
                           'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
@@ -744,10 +765,13 @@ def iterate(data_loader, model, tblogger, num_iters,
                         'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
                         'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
                     data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
+            print('Num datasets sampled/discarded: {}/{}'.format(data_loader.data.dataset.numsampled,
+                                                                 data_loader.data.dataset.numdiscarded))
 
             ### TensorBoard logging
             # (1) Log the scalar values
             iterct = data_loader.iteration_count() # Get total number of iterations so far
+            bsz = pts_1.size(0)
             info = {
                 mode+'-loss': loss.data[0],
                 mode+'-fwd3dloss': ptloss_1.data[0],
@@ -761,6 +785,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-poseloss2': poselossm_2.val,
                 mode+'-consiserror': consiserrorm.val,
                 mode+'-consiserrormax': consisdiff.abs().max(),
+                mode+'-flowlosssum_f': flowloss_sum_fwd.sum()/bsz,
+                mode+'-flowlosssum_b': flowloss_sum_bwd.sum()/bsz,
+                mode+'-flowlossavg_f': flowloss_avg_fwd.sum()/bsz,
+                mode+'-flowlossavg_b': flowloss_avg_bwd.sum()/bsz,
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -848,7 +876,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
                 loss, fwdloss, bwdloss, consisloss,
                 flowloss_sum_f, flowloss_avg_f,
-                flowloss_sum_b, flowloss_avg_b):
+                flowloss_sum_b, flowloss_avg_b, bsz=None):
     # Print loss
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
           'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
@@ -860,7 +888,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
         consis=consisloss))
 
     # Print flow loss per timestep
-    bsz = args.batch_size
+    bsz = args.batch_size if bsz is None else bsz
     for k in xrange(args.seq_len):
         print('\tStep: {}, Fwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
               'Bwd => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f})'.format(

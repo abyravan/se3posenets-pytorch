@@ -425,7 +425,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    ctrl_type='actdiffvel', num_ctrl=7, num_state=7,
                                    mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
-                                   compute_bwdflows=True, load_color=False, num_tracker=0):
+                                   compute_bwdflows=True, load_color=False, num_tracker=0,
+                                   dathreshold=0.01, dawinsize=5):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -547,11 +548,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Compute flow and visibility
     fwdflows, bwdflows, \
     fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
-                                                                initpose, tarposes, camera_intrinsics)
+                                                                initpose, tarposes, camera_intrinsics,
+                                                                dathreshold, dawinsize)
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
-            'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses}
+            'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses,
+            'dt': dt}
     if compute_bwdflows:
         data['masks']           = masks
         data['bwdflows']        = bwdflows
@@ -566,23 +569,43 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     return data
 
+def filter_func(batch, mean_dt, std_dt):
+    # Check if there are any nans in the sampled poses. If there are, then discard the sample
+    filtered_batch = []
+    for sample in batch:
+        # Check if any dt is too large (within 2 std. deviations of the mean)
+        tok    = ((sample['dt'] - mean_dt).abs_() < 2*std_dt).all()
+        # Check if there are NaNs in the poses
+        poseok = sample['poses'].eq(sample['poses']).all()
+        # Append if both checks pass
+        if tok and poseok:
+            filtered_batch.append(sample)
+    # Return
+    return filtered_batch
+
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):
     ''' Datasets for training SE3-Nets based on Baxter Sequential data '''
 
-    def __init__(self, datasets, load_function, dtype='train'):
+    def __init__(self, datasets, load_function, dtype='train', filter_func=None):
         '''
         Create the data loader given paths to existing list of datasets:
         :param datasets: 		List of datasets that have train | test | val splits
         :param load_function:	Function for reading data from disk given a dataset and an ID (this function needs to
                                 return a dictionary of torch tensors)
         :param dtype:			Type of dataset: 'train', 'test' or 'val'
+        :param filter_func:     Function that filters out bad samples from a batch during collating
         '''
         assert (len(datasets) > 0);  # Need atleast one dataset
         assert (dtype == 'train' or dtype == 'val' or dtype == 'test')  # Has to be one of the types
         self.datasets = datasets
         self.load_function = load_function
         self.dtype = dtype
+        self.filter_func = filter_func # Filters samples in the collater
+
+        # Some stats
+        self.numsampled = 0
+        self.numdiscarded = 0
 
         # Get some stats
         self.numdata = 0
@@ -616,13 +639,19 @@ class BaxterSeqDataset(Dataset):
 
     ### Collate the batch together
     def collate_batch(self, batch):
-        # Check if there are any nans in the sampled poses. If there are, then discard the sample
-        filtered_batch = []
-        for sample in batch:
-            if sample['poses'].eq(sample['poses']).all():  # test for nans
-                filtered_batch.append(sample)
-                # else:
-                #    print('Found a dataset with NaNs in the poses. Discarding it')
+        # Filter batch based on custom function
+        if self.filter_func is not None:
+            filtered_batch = self.filter_func(batch)
+        else:
+            # Check if there are NaNs in the poses (BWDs compatibility)
+            filtered_batch = []
+            for sample in batch:
+                if sample['poses'].eq(sample['poses']).all():
+                    filtered_batch.append(sample)
+
+        # Update stats
+        self.numsampled += len(batch)
+        self.numdiscarded += len(batch) - len(filtered_batch) # Increment count
 
         # Collate the other samples together using the default collate function
         collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)

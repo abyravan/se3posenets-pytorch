@@ -13,6 +13,8 @@ args.se3_type = 'se3aa'
 args.pred_pivot = False
 args.num_se3 = 8
 args.se2_data = False
+args.mean_dt = 0.0697
+args.std_dt  = 0.00248
 
 ### CSV stuff
 import csv
@@ -115,19 +117,26 @@ print('Num state: {}, Num ctrl: {}, Num tracker: {}'.format(args.num_state, args
 statefile = load_dir + "/motion0/state0.txt"
 state = read_baxter_state_file(statefile)
 
+# Get number of images
+postprocessstatsfile = load_dir + "/motion0/postprocessstats.txt"
+with open(postprocessstatsfile, 'rb') as csvfile:
+    spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
+    nimages = int(spamreader.next()[0])
+print("Number of images: {}".format(nimages))
+
 #########
 # Load pangolin visualizer library (before torch)
 import _init_paths
+#import numpy as np
 from torchviz import pangodataviz
-import numpy as np
-pangolin = pangodataviz.PyPangolinDataViz(args.data[0], args.step_len, args.seq_len, args.num_se3,
+pangolin = pangodataviz.PyPangolinDataViz(args.data[0], nimages, args.step_len, args.seq_len, args.num_se3,
                                          args.img_ht, args.img_wd, args.num_state, args.num_ctrl,
                                          args.num_tracker,
                                          args.cam_intrinsics['fx'],
                                          args.cam_intrinsics['fy'],
                                          args.cam_intrinsics['cx'],
-                                         args.cam_intrinsics['cy'],
-                                         np.asarray(state['actjtpos'], dtype=np.float32))
+                                         args.cam_intrinsics['cy'])
+                                         #np.asarray(state['actjtpos'], dtype=np.float32))
 
 #########
 # Torch imports
@@ -140,7 +149,9 @@ import ctrlnets
 # We need this if we have state dimension > ctrl dimension and
 # if we need to choose the vals in the state vector for the control
 ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+ctrlids_in_track = torch.LongTensor([trackerlabels.index(x) for x in ctrllabels])
 print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+print("ID of controlled joints in the track vector: ", ctrlids_in_track.view(1, -1))
 
 # Compute intrinsic grid
 args.cam_intrinsics['xygrid'] = datav.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
@@ -178,7 +189,8 @@ disk_read_func  = lambda d, i: datav.read_baxter_sequence_from_disk(d, i, img_ht
                                                                    camera_intrinsics = args.cam_intrinsics,
                                                                    compute_bwdflows=True, load_color=True,
                                                                    num_tracker=args.num_tracker)
-train_dataset = datav.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
+filter_func = lambda b: datav.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
+train_dataset = datav.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func) # Train dataset
 print('Dataset size => Train: {}'.format(len(train_dataset)))
 
 ########################
@@ -188,6 +200,13 @@ while True:
     # Read data
     print("Reading data....")
     sample = train_dataset[int(id[0])]
+
+    # Compute act, com & dart diff vels
+    actdiffvels = sample['controls']
+    comdiffvels = (sample['comconfigs'][1:] - sample['comconfigs'][:-1]) / sample['dt']
+    dartdiffvels = (sample['trackerconfigs'][1:][:, ctrlids_in_track] -
+                    sample['trackerconfigs'][:-1][:, ctrlids_in_track]) / sample['dt'] # state -> ctrl dimension
+
 
     # Send data to pangolin & get ID
     print("Sending data to pangolin....")
@@ -207,6 +226,9 @@ while True:
                         sample['comconfigs'].numpy(),
                         sample['comvels'].numpy(),
                         sample['trackerconfigs'].numpy(),
+                        actdiffvels.numpy(),
+                        comdiffvels.numpy(),
+                        dartdiffvels.numpy(),
                         sample['controls'].numpy(),
                         id.numpy())
 

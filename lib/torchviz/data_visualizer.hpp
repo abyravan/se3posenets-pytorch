@@ -34,6 +34,7 @@ public:
     float *trackerconfigs;
     float *controls;
     float *initconfig;
+    float *actdiffvels, *comdiffvels, *dartdiffvels;
 
     // Params
     int nSE3;
@@ -62,10 +63,10 @@ public:
     bool new_seq, done_seq;
 
     // Better constructor
-    LuaData(std::string data, int step_len, int seq_len, int nSE3, int ht, int wd,
-            int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy, const float *initconfig):
+    LuaData(std::string data, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+            int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy):
         data_path(data), step(step_len), seq(seq_len), nSE3(nSE3), ht(ht), wd(wd), nstate(nstate),
-        nctrl(nctrl), ntracker(ntracker), fx(fx), cx(cx), fy(fy), cy(cy)
+        nctrl(nctrl), ntracker(ntracker), fx(fx), cx(cx), fy(fy), cy(cy), nimages(nimages)
     {
         // Initialize memory for the pointers (done only once)
         ptclouds  = new float[(seq+1) * 3 * ht * wd];
@@ -108,9 +109,17 @@ public:
         memset(trackerconfigs, 0, (seq+1) * ntracker * sizeof(float));
         memset(controls,   0, seq * nctrl * sizeof(float));
 
+        actdiffvels    = new float[(seq) * nctrl];
+        comdiffvels    = new float[(seq) * nctrl];
+        dartdiffvels   = new float[(seq) * nctrl];
+        memset(actdiffvels,    0, (seq) * nctrl * sizeof(float));
+        memset(comdiffvels,    0, (seq) * nctrl * sizeof(float));
+        memset(dartdiffvels,    0, (seq) * nctrl * sizeof(float));
+
         // Init config
         this->initconfig = new float[nstate];
-        memcpy(this->initconfig, initconfig, nstate * sizeof(float));
+        memset(this->initconfig,    0, nstate * sizeof(float));
+        //memcpy(this->initconfig, initconfig, nstate * sizeof(float));
 
         // Other params
         dt = step * (1.0/30);
@@ -127,7 +136,6 @@ public:
                                                   "l_gripper_r_finger_joint","l_gripper_l_finger_joint",
                                                   "right_s0","right_s1","right_e0","right_e1","right_w0","right_w1","right_w2",
                                                   "r_gripper_r_finger_joint","r_gripper_l_finger_joint" });
-        nimages = 70000;
 
         // Booleans
         init_done = false;
@@ -148,9 +156,8 @@ public:
 class PangolinDataViz
 {
     public:
-        PangolinDataViz(std::string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,
-                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy,
-                        const float *initconfig);
+        PangolinDataViz(std::string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy);
         ~PangolinDataViz();
 
         void update_viz(const float *ptclouds,
@@ -169,6 +176,9 @@ class PangolinDataViz
                         const float *comconfigs,
                         const float *comvels,
                         const float *trackerconfigs,
+                        const float *actdiffvels,
+                        const float *comdiffvels,
+                        const float *dartdiffvels,
                         const float *controls,
                         float *id);
 

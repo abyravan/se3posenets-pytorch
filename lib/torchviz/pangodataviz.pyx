@@ -13,9 +13,9 @@ import ctypes
 ##################### Pose visualizer
 cdef extern from "pangodataviz.hpp":
     cdef cppclass PangolinDataViz:
-        PangolinDataViz(string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,
-                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy,
-                        const float *initconfig);
+        PangolinDataViz(string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+                        int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy)
+                        #const float *initconfig);
 
         void update_viz( const float *ptclouds,
                          const float *fwdflows,
@@ -33,17 +33,20 @@ cdef extern from "pangodataviz.hpp":
                          const float *comconfigs,
                          const float *comvels,
                          const float *trackerconfigs,
+                         const float *actdiffvels,
+                         const float *comdiffvels,
+                         const float *dartdiffvels,
                          const float *controls,
                          float *id);
 
 cdef class PyPangolinDataViz:
     cdef PangolinDataViz *pangodataviz     # hold a C++ instance which we're wrapping
 
-    def __cinit__(self, string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,
-                        int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy,
-                        np.ndarray[np.float32_t, ndim=1] initconfig):
-        self.pangodataviz = new PangolinDataViz(data_path, step_len, seq_len, nSE3, ht, wd,
-                                                nstate, nctrl, ntracker, fx, fy, cx, cy, &initconfig[0])
+    def __cinit__(self, string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+                        int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy):
+                        #np.ndarray[np.float32_t, ndim=1] initconfig):
+        self.pangodataviz = new PangolinDataViz(data_path, nimages, step_len, seq_len, nSE3, ht, wd,
+                                                nstate, nctrl, ntracker, fx, fy, cx, cy)#, &initconfig[0])
 
     def __dealloc__(self):
         del self.pangodataviz
@@ -64,6 +67,9 @@ cdef class PyPangolinDataViz:
                          np.ndarray[np.float32_t, ndim=2] comconfigs,
                          np.ndarray[np.float32_t, ndim=2] comvels,
                          np.ndarray[np.float32_t, ndim=2] trackerconfigs,
+                         np.ndarray[np.float32_t, ndim=2] actdiffvels,
+                         np.ndarray[np.float32_t, ndim=2] comdiffvels,
+                         np.ndarray[np.float32_t, ndim=2] dartdiffvels,
                          np.ndarray[np.float32_t, ndim=2] controls,
                          np.ndarray[np.float32_t, ndim=1] id):
         # Run CPP code
@@ -83,5 +89,8 @@ cdef class PyPangolinDataViz:
                                      &comconfigs[0,0],
                                      &comvels[0,0],
                                      &trackerconfigs[0,0],
+                                     &actdiffvels[0,0],
+                                     &comdiffvels[0,0],
+                                     &dartdiffvels[0,0],
                                      &controls[0,0],
                                      &id[0])

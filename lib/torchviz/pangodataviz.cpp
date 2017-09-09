@@ -965,7 +965,7 @@ typedef npy_clongdouble __pyx_t_5numpy_clongdouble_t;
  */
 typedef npy_cdouble __pyx_t_5numpy_complex_t;
 
-/* "torchviz/pangodataviz.pyx":39
+/* "torchviz/pangodataviz.pyx":42
  *                          float *id);
  * 
  * cdef class PyPangolinDataViz:             # <<<<<<<<<<<<<<
@@ -1070,6 +1070,8 @@ static void __Pyx_BufFmt_Init(__Pyx_BufFmt_Context* ctx,
 /* BufferIndexError.proto */
 static void __Pyx_RaiseBufferIndexError(int axis);
 
+#define __Pyx_BufPtrStrided4d(type, buf, i0, s0, i1, s1, i2, s2, i3, s3) (type)((char*)buf + i0 * s0 + i1 * s1 + i2 * s2 + i3 * s3)
+#define __Pyx_BufPtrStrided2d(type, buf, i0, s0, i1, s1) (type)((char*)buf + i0 * s0 + i1 * s1)
 #define __Pyx_BufPtrStrided1d(type, buf, i0, s0) (type)((char*)buf + i0 * s0)
 /* PyThreadStateGet.proto */
 #if CYTHON_FAST_THREAD_STATE
@@ -1095,8 +1097,6 @@ static CYTHON_INLINE void __Pyx_ErrFetchInState(PyThreadState *tstate, PyObject 
 #define __Pyx_ErrFetch(type, value, tb)  PyErr_Fetch(type, value, tb)
 #endif
 
-#define __Pyx_BufPtrStrided4d(type, buf, i0, s0, i1, s1, i2, s2, i3, s3) (type)((char*)buf + i0 * s0 + i1 * s1 + i2 * s2 + i3 * s3)
-#define __Pyx_BufPtrStrided2d(type, buf, i0, s0, i1, s1) (type)((char*)buf + i0 * s0 + i1 * s1)
 /* PyObjectGetAttrStr.proto */
 #if CYTHON_USE_TYPE_SLOTS
 static CYTHON_INLINE PyObject* __Pyx_PyObject_GetAttrStr(PyObject* obj, PyObject* attr_name) {
@@ -1439,6 +1439,7 @@ static const char __pyx_k_labels[] = "labels";
 static const char __pyx_k_nstate[] = "nstate";
 static const char __pyx_k_actvels[] = "actvels";
 static const char __pyx_k_comvels[] = "comvels";
+static const char __pyx_k_nimages[] = "nimages";
 static const char __pyx_k_seq_len[] = "seq_len";
 static const char __pyx_k_bwdflows[] = "bwdflows";
 static const char __pyx_k_camposes[] = "camposes";
@@ -1452,9 +1453,11 @@ static const char __pyx_k_modelview[] = "modelview";
 static const char __pyx_k_ValueError[] = "ValueError";
 static const char __pyx_k_actconfigs[] = "actconfigs";
 static const char __pyx_k_comconfigs[] = "comconfigs";
-static const char __pyx_k_initconfig[] = "initconfig";
 static const char __pyx_k_ImportError[] = "ImportError";
+static const char __pyx_k_actdiffvels[] = "actdiffvels";
+static const char __pyx_k_comdiffvels[] = "comdiffvels";
 static const char __pyx_k_RuntimeError[] = "RuntimeError";
+static const char __pyx_k_dartdiffvels[] = "dartdiffvels";
 static const char __pyx_k_trackerconfigs[] = "trackerconfigs";
 static const char __pyx_k_ndarray_is_not_C_contiguous[] = "ndarray is not C contiguous";
 static const char __pyx_k_numpy_core_multiarray_failed_to[] = "numpy.core.multiarray failed to import";
@@ -1471,16 +1474,19 @@ static PyObject *__pyx_kp_u_Non_native_byte_order_not_suppor;
 static PyObject *__pyx_n_s_RuntimeError;
 static PyObject *__pyx_n_s_ValueError;
 static PyObject *__pyx_n_s_actconfigs;
+static PyObject *__pyx_n_s_actdiffvels;
 static PyObject *__pyx_n_s_actvels;
 static PyObject *__pyx_n_s_bwdflows;
 static PyObject *__pyx_n_s_bwdvis;
 static PyObject *__pyx_n_s_camposes;
 static PyObject *__pyx_n_s_comconfigs;
+static PyObject *__pyx_n_s_comdiffvels;
 static PyObject *__pyx_n_s_comvels;
 static PyObject *__pyx_n_s_controls;
 static PyObject *__pyx_n_s_ctypes;
 static PyObject *__pyx_n_s_cx;
 static PyObject *__pyx_n_s_cy;
+static PyObject *__pyx_n_s_dartdiffvels;
 static PyObject *__pyx_n_s_data_path;
 static PyObject *__pyx_n_s_fwdflows;
 static PyObject *__pyx_n_s_fwdvis;
@@ -1489,7 +1495,6 @@ static PyObject *__pyx_n_s_fy;
 static PyObject *__pyx_n_s_ht;
 static PyObject *__pyx_n_s_id;
 static PyObject *__pyx_n_s_import;
-static PyObject *__pyx_n_s_initconfig;
 static PyObject *__pyx_n_s_labels;
 static PyObject *__pyx_n_s_main;
 static PyObject *__pyx_n_s_masks;
@@ -1498,6 +1503,7 @@ static PyObject *__pyx_n_s_nSE3;
 static PyObject *__pyx_n_s_nctrl;
 static PyObject *__pyx_kp_u_ndarray_is_not_C_contiguous;
 static PyObject *__pyx_kp_u_ndarray_is_not_Fortran_contiguou;
+static PyObject *__pyx_n_s_nimages;
 static PyObject *__pyx_n_s_np;
 static PyObject *__pyx_n_s_nstate;
 static PyObject *__pyx_n_s_ntracker;
@@ -1514,9 +1520,9 @@ static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_n_s_trackerconfigs;
 static PyObject *__pyx_kp_u_unknown_dtype_code_in_numpy_pxd;
 static PyObject *__pyx_n_s_wd;
-static int __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, std::string __pyx_v_data_path, int __pyx_v_step_len, int __pyx_v_seq_len, int __pyx_v_nSE3, int __pyx_v_ht, int __pyx_v_wd, int __pyx_v_nstate, int __pyx_v_nctrl, int __pyx_v_ntracker, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, PyArrayObject *__pyx_v_initconfig); /* proto */
+static int __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, std::string __pyx_v_data_path, int __pyx_v_nimages, int __pyx_v_step_len, int __pyx_v_seq_len, int __pyx_v_nSE3, int __pyx_v_ht, int __pyx_v_wd, int __pyx_v_nstate, int __pyx_v_nctrl, int __pyx_v_ntracker, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy); /* proto */
 static void __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_2__dealloc__(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, PyArrayObject *__pyx_v_ptclouds, PyArrayObject *__pyx_v_fwdflows, PyArrayObject *__pyx_v_bwdflows, PyArrayObject *__pyx_v_fwdvis, PyArrayObject *__pyx_v_bwdvis, PyArrayObject *__pyx_v_labels, PyArrayObject *__pyx_v_rgbs, PyArrayObject *__pyx_v_masks, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_camposes, PyArrayObject *__pyx_v_modelview, PyArrayObject *__pyx_v_actconfigs, PyArrayObject *__pyx_v_actvels, PyArrayObject *__pyx_v_comconfigs, PyArrayObject *__pyx_v_comvels, PyArrayObject *__pyx_v_trackerconfigs, PyArrayObject *__pyx_v_controls, PyArrayObject *__pyx_v_id); /* proto */
+static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, PyArrayObject *__pyx_v_ptclouds, PyArrayObject *__pyx_v_fwdflows, PyArrayObject *__pyx_v_bwdflows, PyArrayObject *__pyx_v_fwdvis, PyArrayObject *__pyx_v_bwdvis, PyArrayObject *__pyx_v_labels, PyArrayObject *__pyx_v_rgbs, PyArrayObject *__pyx_v_masks, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_camposes, PyArrayObject *__pyx_v_modelview, PyArrayObject *__pyx_v_actconfigs, PyArrayObject *__pyx_v_actvels, PyArrayObject *__pyx_v_comconfigs, PyArrayObject *__pyx_v_comvels, PyArrayObject *__pyx_v_trackerconfigs, PyArrayObject *__pyx_v_actdiffvels, PyArrayObject *__pyx_v_comdiffvels, PyArrayObject *__pyx_v_dartdiffvels, PyArrayObject *__pyx_v_controls, PyArrayObject *__pyx_v_id); /* proto */
 static int __pyx_pf_5numpy_7ndarray___getbuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info, int __pyx_v_flags); /* proto */
 static void __pyx_pf_5numpy_7ndarray_2__releasebuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info); /* proto */
 static PyObject *__pyx_tp_new_8torchviz_12pangodataviz_PyPangolinDataViz(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
@@ -1530,18 +1536,19 @@ static PyObject *__pyx_tuple__7;
 static PyObject *__pyx_tuple__8;
 static PyObject *__pyx_tuple__9;
 
-/* "torchviz/pangodataviz.pyx":42
+/* "torchviz/pangodataviz.pyx":45
  *     cdef PangolinDataViz *pangodataviz     # hold a C++ instance which we're wrapping
  * 
- *     def __cinit__(self, string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,             # <<<<<<<<<<<<<<
- *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy,
- *                         np.ndarray[np.float32_t, ndim=1] initconfig):
+ *     def __cinit__(self, string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,             # <<<<<<<<<<<<<<
+ *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy):
+ *                         #np.ndarray[np.float32_t, ndim=1] initconfig):
  */
 
 /* Python wrapper */
 static int __pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
 static int __pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   std::string __pyx_v_data_path;
+  int __pyx_v_nimages;
   int __pyx_v_step_len;
   int __pyx_v_seq_len;
   int __pyx_v_nSE3;
@@ -1554,12 +1561,11 @@ static int __pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_1__cinit__(PyOb
   float __pyx_v_fy;
   float __pyx_v_cx;
   float __pyx_v_cy;
-  PyArrayObject *__pyx_v_initconfig = 0;
   int __pyx_r;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__cinit__ (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_data_path,&__pyx_n_s_step_len,&__pyx_n_s_seq_len,&__pyx_n_s_nSE3,&__pyx_n_s_ht,&__pyx_n_s_wd,&__pyx_n_s_nstate,&__pyx_n_s_nctrl,&__pyx_n_s_ntracker,&__pyx_n_s_fx,&__pyx_n_s_fy,&__pyx_n_s_cx,&__pyx_n_s_cy,&__pyx_n_s_initconfig,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_data_path,&__pyx_n_s_nimages,&__pyx_n_s_step_len,&__pyx_n_s_seq_len,&__pyx_n_s_nSE3,&__pyx_n_s_ht,&__pyx_n_s_wd,&__pyx_n_s_nstate,&__pyx_n_s_nctrl,&__pyx_n_s_ntracker,&__pyx_n_s_fx,&__pyx_n_s_fy,&__pyx_n_s_cx,&__pyx_n_s_cy,0};
     PyObject* values[14] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
@@ -1588,73 +1594,73 @@ static int __pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_1__cinit__(PyOb
         if (likely((values[0] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_data_path)) != 0)) kw_args--;
         else goto __pyx_L5_argtuple_error;
         case  1:
-        if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_step_len)) != 0)) kw_args--;
+        if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nimages)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 1); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 1); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  2:
-        if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_seq_len)) != 0)) kw_args--;
+        if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_step_len)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 2); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 2); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  3:
-        if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nSE3)) != 0)) kw_args--;
+        if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_seq_len)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 3); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 3); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  4:
-        if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ht)) != 0)) kw_args--;
+        if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nSE3)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 4); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 4); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  5:
-        if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_wd)) != 0)) kw_args--;
+        if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ht)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 5); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 5); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  6:
-        if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nstate)) != 0)) kw_args--;
+        if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_wd)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 6); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 6); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  7:
-        if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nctrl)) != 0)) kw_args--;
+        if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nstate)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 7); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 7); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  8:
-        if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ntracker)) != 0)) kw_args--;
+        if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_nctrl)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 8); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 8); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case  9:
-        if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fx)) != 0)) kw_args--;
+        if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ntracker)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 9); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 9); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case 10:
-        if (likely((values[10] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fy)) != 0)) kw_args--;
+        if (likely((values[10] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fx)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 10); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 10); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case 11:
-        if (likely((values[11] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cx)) != 0)) kw_args--;
+        if (likely((values[11] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fy)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 11); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 11); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case 12:
-        if (likely((values[12] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cy)) != 0)) kw_args--;
+        if (likely((values[12] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cx)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 12); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 12); __PYX_ERR(0, 45, __pyx_L3_error)
         }
         case 13:
-        if (likely((values[13] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_initconfig)) != 0)) kw_args--;
+        if (likely((values[13] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cy)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 13); __PYX_ERR(0, 42, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, 13); __PYX_ERR(0, 45, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 42, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 45, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 14) {
       goto __pyx_L5_argtuple_error;
@@ -1674,116 +1680,66 @@ static int __pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_1__cinit__(PyOb
       values[12] = PyTuple_GET_ITEM(__pyx_args, 12);
       values[13] = PyTuple_GET_ITEM(__pyx_args, 13);
     }
-    __pyx_v_data_path = __pyx_convert_string_from_py_std__in_string(values[0]); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_step_len = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_step_len == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_seq_len = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_seq_len == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_nSE3 = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_nSE3 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_ht = __Pyx_PyInt_As_int(values[4]); if (unlikely((__pyx_v_ht == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_wd = __Pyx_PyInt_As_int(values[5]); if (unlikely((__pyx_v_wd == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 42, __pyx_L3_error)
-    __pyx_v_nstate = __Pyx_PyInt_As_int(values[6]); if (unlikely((__pyx_v_nstate == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_nctrl = __Pyx_PyInt_As_int(values[7]); if (unlikely((__pyx_v_nctrl == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_ntracker = __Pyx_PyInt_As_int(values[8]); if (unlikely((__pyx_v_ntracker == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_fx = __pyx_PyFloat_AsFloat(values[9]); if (unlikely((__pyx_v_fx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_fy = __pyx_PyFloat_AsFloat(values[10]); if (unlikely((__pyx_v_fy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_cx = __pyx_PyFloat_AsFloat(values[11]); if (unlikely((__pyx_v_cx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_cy = __pyx_PyFloat_AsFloat(values[12]); if (unlikely((__pyx_v_cy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 43, __pyx_L3_error)
-    __pyx_v_initconfig = ((PyArrayObject *)values[13]);
+    __pyx_v_data_path = __pyx_convert_string_from_py_std__in_string(values[0]); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_nimages = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_nimages == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_step_len = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_step_len == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_seq_len = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_seq_len == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_nSE3 = __Pyx_PyInt_As_int(values[4]); if (unlikely((__pyx_v_nSE3 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_ht = __Pyx_PyInt_As_int(values[5]); if (unlikely((__pyx_v_ht == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_wd = __Pyx_PyInt_As_int(values[6]); if (unlikely((__pyx_v_wd == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 45, __pyx_L3_error)
+    __pyx_v_nstate = __Pyx_PyInt_As_int(values[7]); if (unlikely((__pyx_v_nstate == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_nctrl = __Pyx_PyInt_As_int(values[8]); if (unlikely((__pyx_v_nctrl == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_ntracker = __Pyx_PyInt_As_int(values[9]); if (unlikely((__pyx_v_ntracker == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_fx = __pyx_PyFloat_AsFloat(values[10]); if (unlikely((__pyx_v_fx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_fy = __pyx_PyFloat_AsFloat(values[11]); if (unlikely((__pyx_v_fy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_cx = __pyx_PyFloat_AsFloat(values[12]); if (unlikely((__pyx_v_cx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
+    __pyx_v_cy = __pyx_PyFloat_AsFloat(values[13]); if (unlikely((__pyx_v_cy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 46, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 42, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 14, 14, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 45, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("torchviz.pangodataviz.PyPangolinDataViz.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return -1;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_initconfig), __pyx_ptype_5numpy_ndarray, 1, "initconfig", 0))) __PYX_ERR(0, 44, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(((struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *)__pyx_v_self), __pyx_v_data_path, __pyx_v_step_len, __pyx_v_seq_len, __pyx_v_nSE3, __pyx_v_ht, __pyx_v_wd, __pyx_v_nstate, __pyx_v_nctrl, __pyx_v_ntracker, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, __pyx_v_initconfig);
+  __pyx_r = __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(((struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *)__pyx_v_self), __pyx_v_data_path, __pyx_v_nimages, __pyx_v_step_len, __pyx_v_seq_len, __pyx_v_nSE3, __pyx_v_ht, __pyx_v_wd, __pyx_v_nstate, __pyx_v_nctrl, __pyx_v_ntracker, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy);
 
   /* function exit code */
-  goto __pyx_L0;
-  __pyx_L1_error:;
-  __pyx_r = -1;
-  __pyx_L0:;
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static int __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, std::string __pyx_v_data_path, int __pyx_v_step_len, int __pyx_v_seq_len, int __pyx_v_nSE3, int __pyx_v_ht, int __pyx_v_wd, int __pyx_v_nstate, int __pyx_v_nctrl, int __pyx_v_ntracker, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, PyArrayObject *__pyx_v_initconfig) {
-  __Pyx_LocalBuf_ND __pyx_pybuffernd_initconfig;
-  __Pyx_Buffer __pyx_pybuffer_initconfig;
+static int __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz___cinit__(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, std::string __pyx_v_data_path, int __pyx_v_nimages, int __pyx_v_step_len, int __pyx_v_seq_len, int __pyx_v_nSE3, int __pyx_v_ht, int __pyx_v_wd, int __pyx_v_nstate, int __pyx_v_nctrl, int __pyx_v_ntracker, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy) {
   int __pyx_r;
   __Pyx_RefNannyDeclarations
-  Py_ssize_t __pyx_t_1;
-  int __pyx_t_2;
   __Pyx_RefNannySetupContext("__cinit__", 0);
-  __pyx_pybuffer_initconfig.pybuffer.buf = NULL;
-  __pyx_pybuffer_initconfig.refcount = 0;
-  __pyx_pybuffernd_initconfig.data = NULL;
-  __pyx_pybuffernd_initconfig.rcbuffer = &__pyx_pybuffer_initconfig;
-  {
-    __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_initconfig.rcbuffer->pybuffer, (PyObject*)__pyx_v_initconfig, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 42, __pyx_L1_error)
-  }
-  __pyx_pybuffernd_initconfig.diminfo[0].strides = __pyx_pybuffernd_initconfig.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_initconfig.diminfo[0].shape = __pyx_pybuffernd_initconfig.rcbuffer->pybuffer.shape[0];
 
-  /* "torchviz/pangodataviz.pyx":46
- *                         np.ndarray[np.float32_t, ndim=1] initconfig):
- *         self.pangodataviz = new PangolinDataViz(data_path, step_len, seq_len, nSE3, ht, wd,
- *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy, &initconfig[0])             # <<<<<<<<<<<<<<
+  /* "torchviz/pangodataviz.pyx":48
+ *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy):
+ *                         #np.ndarray[np.float32_t, ndim=1] initconfig):
+ *         self.pangodataviz = new PangolinDataViz(data_path, nimages, step_len, seq_len, nSE3, ht, wd,             # <<<<<<<<<<<<<<
+ *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy)#, &initconfig[0])
  * 
- *     def __dealloc__(self):
  */
-  __pyx_t_1 = 0;
-  __pyx_t_2 = -1;
-  if (__pyx_t_1 < 0) {
-    __pyx_t_1 += __pyx_pybuffernd_initconfig.diminfo[0].shape;
-    if (unlikely(__pyx_t_1 < 0)) __pyx_t_2 = 0;
-  } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_initconfig.diminfo[0].shape)) __pyx_t_2 = 0;
-  if (unlikely(__pyx_t_2 != -1)) {
-    __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 46, __pyx_L1_error)
-  }
+  __pyx_v_self->pangodataviz = new PangolinDataViz(__pyx_v_data_path, __pyx_v_nimages, __pyx_v_step_len, __pyx_v_seq_len, __pyx_v_nSE3, __pyx_v_ht, __pyx_v_wd, __pyx_v_nstate, __pyx_v_nctrl, __pyx_v_ntracker, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy);
 
   /* "torchviz/pangodataviz.pyx":45
- *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy,
- *                         np.ndarray[np.float32_t, ndim=1] initconfig):
- *         self.pangodataviz = new PangolinDataViz(data_path, step_len, seq_len, nSE3, ht, wd,             # <<<<<<<<<<<<<<
- *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy, &initconfig[0])
- * 
- */
-  __pyx_v_self->pangodataviz = new PangolinDataViz(__pyx_v_data_path, __pyx_v_step_len, __pyx_v_seq_len, __pyx_v_nSE3, __pyx_v_ht, __pyx_v_wd, __pyx_v_nstate, __pyx_v_nctrl, __pyx_v_ntracker, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_initconfig.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_initconfig.diminfo[0].strides))));
-
-  /* "torchviz/pangodataviz.pyx":42
  *     cdef PangolinDataViz *pangodataviz     # hold a C++ instance which we're wrapping
  * 
- *     def __cinit__(self, string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,             # <<<<<<<<<<<<<<
- *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy,
- *                         np.ndarray[np.float32_t, ndim=1] initconfig):
+ *     def __cinit__(self, string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,             # <<<<<<<<<<<<<<
+ *                         int nstate, int nctrl, int ntracker, float  fx, float fy, float cx, float cy):
+ *                         #np.ndarray[np.float32_t, ndim=1] initconfig):
  */
 
   /* function exit code */
   __pyx_r = 0;
-  goto __pyx_L0;
-  __pyx_L1_error:;
-  { PyObject *__pyx_type, *__pyx_value, *__pyx_tb;
-    __Pyx_PyThreadState_declare
-    __Pyx_PyThreadState_assign
-    __Pyx_ErrFetch(&__pyx_type, &__pyx_value, &__pyx_tb);
-    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_initconfig.rcbuffer->pybuffer);
-  __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.pangodataviz.PyPangolinDataViz.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
-  __pyx_r = -1;
-  goto __pyx_L2;
-  __pyx_L0:;
-  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_initconfig.rcbuffer->pybuffer);
-  __pyx_L2:;
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-/* "torchviz/pangodataviz.pyx":48
- *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy, &initconfig[0])
+/* "torchviz/pangodataviz.pyx":51
+ *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy)#, &initconfig[0])
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
  *         del self.pangodataviz
@@ -1805,7 +1761,7 @@ static void __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_2__dealloc__(s
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__", 0);
 
-  /* "torchviz/pangodataviz.pyx":49
+  /* "torchviz/pangodataviz.pyx":52
  * 
  *     def __dealloc__(self):
  *         del self.pangodataviz             # <<<<<<<<<<<<<<
@@ -1814,8 +1770,8 @@ static void __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_2__dealloc__(s
  */
   delete __pyx_v_self->pangodataviz;
 
-  /* "torchviz/pangodataviz.pyx":48
- *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy, &initconfig[0])
+  /* "torchviz/pangodataviz.pyx":51
+ *                                                 nstate, nctrl, ntracker, fx, fy, cx, cy)#, &initconfig[0])
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
  *         del self.pangodataviz
@@ -1826,7 +1782,7 @@ static void __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_2__dealloc__(s
   __Pyx_RefNannyFinishContext();
 }
 
-/* "torchviz/pangodataviz.pyx":51
+/* "torchviz/pangodataviz.pyx":54
  *         del self.pangodataviz
  * 
  *     def update_viz(self, np.ndarray[np.float32_t, ndim=4] ptclouds,             # <<<<<<<<<<<<<<
@@ -1853,18 +1809,24 @@ static PyObject *__pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_5update_v
   PyArrayObject *__pyx_v_comconfigs = 0;
   PyArrayObject *__pyx_v_comvels = 0;
   PyArrayObject *__pyx_v_trackerconfigs = 0;
+  PyArrayObject *__pyx_v_actdiffvels = 0;
+  PyArrayObject *__pyx_v_comdiffvels = 0;
+  PyArrayObject *__pyx_v_dartdiffvels = 0;
   PyArrayObject *__pyx_v_controls = 0;
   PyArrayObject *__pyx_v_id = 0;
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("update_viz (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_ptclouds,&__pyx_n_s_fwdflows,&__pyx_n_s_bwdflows,&__pyx_n_s_fwdvis,&__pyx_n_s_bwdvis,&__pyx_n_s_labels,&__pyx_n_s_rgbs,&__pyx_n_s_masks,&__pyx_n_s_poses,&__pyx_n_s_camposes,&__pyx_n_s_modelview,&__pyx_n_s_actconfigs,&__pyx_n_s_actvels,&__pyx_n_s_comconfigs,&__pyx_n_s_comvels,&__pyx_n_s_trackerconfigs,&__pyx_n_s_controls,&__pyx_n_s_id,0};
-    PyObject* values[18] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_ptclouds,&__pyx_n_s_fwdflows,&__pyx_n_s_bwdflows,&__pyx_n_s_fwdvis,&__pyx_n_s_bwdvis,&__pyx_n_s_labels,&__pyx_n_s_rgbs,&__pyx_n_s_masks,&__pyx_n_s_poses,&__pyx_n_s_camposes,&__pyx_n_s_modelview,&__pyx_n_s_actconfigs,&__pyx_n_s_actvels,&__pyx_n_s_comconfigs,&__pyx_n_s_comvels,&__pyx_n_s_trackerconfigs,&__pyx_n_s_actdiffvels,&__pyx_n_s_comdiffvels,&__pyx_n_s_dartdiffvels,&__pyx_n_s_controls,&__pyx_n_s_id,0};
+    PyObject* values[21] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
       switch (pos_args) {
+        case 21: values[20] = PyTuple_GET_ITEM(__pyx_args, 20);
+        case 20: values[19] = PyTuple_GET_ITEM(__pyx_args, 19);
+        case 19: values[18] = PyTuple_GET_ITEM(__pyx_args, 18);
         case 18: values[17] = PyTuple_GET_ITEM(__pyx_args, 17);
         case 17: values[16] = PyTuple_GET_ITEM(__pyx_args, 16);
         case 16: values[15] = PyTuple_GET_ITEM(__pyx_args, 15);
@@ -1894,93 +1856,108 @@ static PyObject *__pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_5update_v
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fwdflows)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 1); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 1); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_bwdflows)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 2); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 2); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fwdvis)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 3); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 3); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  4:
         if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_bwdvis)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 4); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 4); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  5:
         if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_labels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 5); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 5); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  6:
         if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_rgbs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 6); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 6); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  7:
         if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_masks)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 7); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 7); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  8:
         if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_poses)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 8); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 8); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case  9:
         if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_camposes)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 9); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 9); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 10:
         if (likely((values[10] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_modelview)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 10); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 10); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 11:
         if (likely((values[11] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_actconfigs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 11); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 11); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 12:
         if (likely((values[12] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_actvels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 12); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 12); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 13:
         if (likely((values[13] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_comconfigs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 13); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 13); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 14:
         if (likely((values[14] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_comvels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 14); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 14); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 15:
         if (likely((values[15] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_trackerconfigs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 15); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 15); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 16:
-        if (likely((values[16] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_controls)) != 0)) kw_args--;
+        if (likely((values[16] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_actdiffvels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 16); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 16); __PYX_ERR(0, 54, __pyx_L3_error)
         }
         case 17:
-        if (likely((values[17] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_id)) != 0)) kw_args--;
+        if (likely((values[17] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_comdiffvels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, 17); __PYX_ERR(0, 51, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 17); __PYX_ERR(0, 54, __pyx_L3_error)
+        }
+        case 18:
+        if (likely((values[18] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_dartdiffvels)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 18); __PYX_ERR(0, 54, __pyx_L3_error)
+        }
+        case 19:
+        if (likely((values[19] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_controls)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 19); __PYX_ERR(0, 54, __pyx_L3_error)
+        }
+        case 20:
+        if (likely((values[20] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_id)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, 20); __PYX_ERR(0, 54, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_viz") < 0)) __PYX_ERR(0, 51, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_viz") < 0)) __PYX_ERR(0, 54, __pyx_L3_error)
       }
-    } else if (PyTuple_GET_SIZE(__pyx_args) != 18) {
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 21) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
@@ -2001,6 +1978,9 @@ static PyObject *__pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_5update_v
       values[15] = PyTuple_GET_ITEM(__pyx_args, 15);
       values[16] = PyTuple_GET_ITEM(__pyx_args, 16);
       values[17] = PyTuple_GET_ITEM(__pyx_args, 17);
+      values[18] = PyTuple_GET_ITEM(__pyx_args, 18);
+      values[19] = PyTuple_GET_ITEM(__pyx_args, 19);
+      values[20] = PyTuple_GET_ITEM(__pyx_args, 20);
     }
     __pyx_v_ptclouds = ((PyArrayObject *)values[0]);
     __pyx_v_fwdflows = ((PyArrayObject *)values[1]);
@@ -2018,36 +1998,42 @@ static PyObject *__pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_5update_v
     __pyx_v_comconfigs = ((PyArrayObject *)values[13]);
     __pyx_v_comvels = ((PyArrayObject *)values[14]);
     __pyx_v_trackerconfigs = ((PyArrayObject *)values[15]);
-    __pyx_v_controls = ((PyArrayObject *)values[16]);
-    __pyx_v_id = ((PyArrayObject *)values[17]);
+    __pyx_v_actdiffvels = ((PyArrayObject *)values[16]);
+    __pyx_v_comdiffvels = ((PyArrayObject *)values[17]);
+    __pyx_v_dartdiffvels = ((PyArrayObject *)values[18]);
+    __pyx_v_controls = ((PyArrayObject *)values[19]);
+    __pyx_v_id = ((PyArrayObject *)values[20]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("update_viz", 1, 18, 18, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 51, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("update_viz", 1, 21, 21, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 54, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("torchviz.pangodataviz.PyPangolinDataViz.update_viz", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptclouds), __pyx_ptype_5numpy_ndarray, 1, "ptclouds", 0))) __PYX_ERR(0, 51, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_fwdflows), __pyx_ptype_5numpy_ndarray, 1, "fwdflows", 0))) __PYX_ERR(0, 52, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bwdflows), __pyx_ptype_5numpy_ndarray, 1, "bwdflows", 0))) __PYX_ERR(0, 53, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_fwdvis), __pyx_ptype_5numpy_ndarray, 1, "fwdvis", 0))) __PYX_ERR(0, 54, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bwdvis), __pyx_ptype_5numpy_ndarray, 1, "bwdvis", 0))) __PYX_ERR(0, 55, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_labels), __pyx_ptype_5numpy_ndarray, 1, "labels", 0))) __PYX_ERR(0, 56, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_rgbs), __pyx_ptype_5numpy_ndarray, 1, "rgbs", 0))) __PYX_ERR(0, 57, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_masks), __pyx_ptype_5numpy_ndarray, 1, "masks", 0))) __PYX_ERR(0, 58, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_poses), __pyx_ptype_5numpy_ndarray, 1, "poses", 0))) __PYX_ERR(0, 59, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_camposes), __pyx_ptype_5numpy_ndarray, 1, "camposes", 0))) __PYX_ERR(0, 60, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_modelview), __pyx_ptype_5numpy_ndarray, 1, "modelview", 0))) __PYX_ERR(0, 61, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_actconfigs), __pyx_ptype_5numpy_ndarray, 1, "actconfigs", 0))) __PYX_ERR(0, 62, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_actvels), __pyx_ptype_5numpy_ndarray, 1, "actvels", 0))) __PYX_ERR(0, 63, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_comconfigs), __pyx_ptype_5numpy_ndarray, 1, "comconfigs", 0))) __PYX_ERR(0, 64, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_comvels), __pyx_ptype_5numpy_ndarray, 1, "comvels", 0))) __PYX_ERR(0, 65, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_trackerconfigs), __pyx_ptype_5numpy_ndarray, 1, "trackerconfigs", 0))) __PYX_ERR(0, 66, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_controls), __pyx_ptype_5numpy_ndarray, 1, "controls", 0))) __PYX_ERR(0, 67, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_id), __pyx_ptype_5numpy_ndarray, 1, "id", 0))) __PYX_ERR(0, 68, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(((struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *)__pyx_v_self), __pyx_v_ptclouds, __pyx_v_fwdflows, __pyx_v_bwdflows, __pyx_v_fwdvis, __pyx_v_bwdvis, __pyx_v_labels, __pyx_v_rgbs, __pyx_v_masks, __pyx_v_poses, __pyx_v_camposes, __pyx_v_modelview, __pyx_v_actconfigs, __pyx_v_actvels, __pyx_v_comconfigs, __pyx_v_comvels, __pyx_v_trackerconfigs, __pyx_v_controls, __pyx_v_id);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptclouds), __pyx_ptype_5numpy_ndarray, 1, "ptclouds", 0))) __PYX_ERR(0, 54, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_fwdflows), __pyx_ptype_5numpy_ndarray, 1, "fwdflows", 0))) __PYX_ERR(0, 55, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bwdflows), __pyx_ptype_5numpy_ndarray, 1, "bwdflows", 0))) __PYX_ERR(0, 56, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_fwdvis), __pyx_ptype_5numpy_ndarray, 1, "fwdvis", 0))) __PYX_ERR(0, 57, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_bwdvis), __pyx_ptype_5numpy_ndarray, 1, "bwdvis", 0))) __PYX_ERR(0, 58, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_labels), __pyx_ptype_5numpy_ndarray, 1, "labels", 0))) __PYX_ERR(0, 59, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_rgbs), __pyx_ptype_5numpy_ndarray, 1, "rgbs", 0))) __PYX_ERR(0, 60, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_masks), __pyx_ptype_5numpy_ndarray, 1, "masks", 0))) __PYX_ERR(0, 61, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_poses), __pyx_ptype_5numpy_ndarray, 1, "poses", 0))) __PYX_ERR(0, 62, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_camposes), __pyx_ptype_5numpy_ndarray, 1, "camposes", 0))) __PYX_ERR(0, 63, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_modelview), __pyx_ptype_5numpy_ndarray, 1, "modelview", 0))) __PYX_ERR(0, 64, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_actconfigs), __pyx_ptype_5numpy_ndarray, 1, "actconfigs", 0))) __PYX_ERR(0, 65, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_actvels), __pyx_ptype_5numpy_ndarray, 1, "actvels", 0))) __PYX_ERR(0, 66, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_comconfigs), __pyx_ptype_5numpy_ndarray, 1, "comconfigs", 0))) __PYX_ERR(0, 67, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_comvels), __pyx_ptype_5numpy_ndarray, 1, "comvels", 0))) __PYX_ERR(0, 68, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_trackerconfigs), __pyx_ptype_5numpy_ndarray, 1, "trackerconfigs", 0))) __PYX_ERR(0, 69, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_actdiffvels), __pyx_ptype_5numpy_ndarray, 1, "actdiffvels", 0))) __PYX_ERR(0, 70, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_comdiffvels), __pyx_ptype_5numpy_ndarray, 1, "comdiffvels", 0))) __PYX_ERR(0, 71, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_dartdiffvels), __pyx_ptype_5numpy_ndarray, 1, "dartdiffvels", 0))) __PYX_ERR(0, 72, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_controls), __pyx_ptype_5numpy_ndarray, 1, "controls", 0))) __PYX_ERR(0, 73, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_id), __pyx_ptype_5numpy_ndarray, 1, "id", 0))) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(((struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *)__pyx_v_self), __pyx_v_ptclouds, __pyx_v_fwdflows, __pyx_v_bwdflows, __pyx_v_fwdvis, __pyx_v_bwdvis, __pyx_v_labels, __pyx_v_rgbs, __pyx_v_masks, __pyx_v_poses, __pyx_v_camposes, __pyx_v_modelview, __pyx_v_actconfigs, __pyx_v_actvels, __pyx_v_comconfigs, __pyx_v_comvels, __pyx_v_trackerconfigs, __pyx_v_actdiffvels, __pyx_v_comdiffvels, __pyx_v_dartdiffvels, __pyx_v_controls, __pyx_v_id);
 
   /* function exit code */
   goto __pyx_L0;
@@ -2058,9 +2044,11 @@ static PyObject *__pyx_pw_8torchviz_12pangodataviz_17PyPangolinDataViz_5update_v
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, PyArrayObject *__pyx_v_ptclouds, PyArrayObject *__pyx_v_fwdflows, PyArrayObject *__pyx_v_bwdflows, PyArrayObject *__pyx_v_fwdvis, PyArrayObject *__pyx_v_bwdvis, PyArrayObject *__pyx_v_labels, PyArrayObject *__pyx_v_rgbs, PyArrayObject *__pyx_v_masks, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_camposes, PyArrayObject *__pyx_v_modelview, PyArrayObject *__pyx_v_actconfigs, PyArrayObject *__pyx_v_actvels, PyArrayObject *__pyx_v_comconfigs, PyArrayObject *__pyx_v_comvels, PyArrayObject *__pyx_v_trackerconfigs, PyArrayObject *__pyx_v_controls, PyArrayObject *__pyx_v_id) {
+static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_viz(struct __pyx_obj_8torchviz_12pangodataviz_PyPangolinDataViz *__pyx_v_self, PyArrayObject *__pyx_v_ptclouds, PyArrayObject *__pyx_v_fwdflows, PyArrayObject *__pyx_v_bwdflows, PyArrayObject *__pyx_v_fwdvis, PyArrayObject *__pyx_v_bwdvis, PyArrayObject *__pyx_v_labels, PyArrayObject *__pyx_v_rgbs, PyArrayObject *__pyx_v_masks, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_camposes, PyArrayObject *__pyx_v_modelview, PyArrayObject *__pyx_v_actconfigs, PyArrayObject *__pyx_v_actvels, PyArrayObject *__pyx_v_comconfigs, PyArrayObject *__pyx_v_comvels, PyArrayObject *__pyx_v_trackerconfigs, PyArrayObject *__pyx_v_actdiffvels, PyArrayObject *__pyx_v_comdiffvels, PyArrayObject *__pyx_v_dartdiffvels, PyArrayObject *__pyx_v_controls, PyArrayObject *__pyx_v_id) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_actconfigs;
   __Pyx_Buffer __pyx_pybuffer_actconfigs;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_actdiffvels;
+  __Pyx_Buffer __pyx_pybuffer_actdiffvels;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_actvels;
   __Pyx_Buffer __pyx_pybuffer_actvels;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_bwdflows;
@@ -2071,10 +2059,14 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   __Pyx_Buffer __pyx_pybuffer_camposes;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_comconfigs;
   __Pyx_Buffer __pyx_pybuffer_comconfigs;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_comdiffvels;
+  __Pyx_Buffer __pyx_pybuffer_comdiffvels;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_comvels;
   __Pyx_Buffer __pyx_pybuffer_comvels;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_controls;
   __Pyx_Buffer __pyx_pybuffer_controls;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_dartdiffvels;
+  __Pyx_Buffer __pyx_pybuffer_dartdiffvels;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_fwdflows;
   __Pyx_Buffer __pyx_pybuffer_fwdflows;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_fwdvis;
@@ -2153,6 +2145,12 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   Py_ssize_t __pyx_t_54;
   Py_ssize_t __pyx_t_55;
   Py_ssize_t __pyx_t_56;
+  Py_ssize_t __pyx_t_57;
+  Py_ssize_t __pyx_t_58;
+  Py_ssize_t __pyx_t_59;
+  Py_ssize_t __pyx_t_60;
+  Py_ssize_t __pyx_t_61;
+  Py_ssize_t __pyx_t_62;
   __Pyx_RefNannySetupContext("update_viz", 0);
   __pyx_pybuffer_ptclouds.pybuffer.buf = NULL;
   __pyx_pybuffer_ptclouds.refcount = 0;
@@ -2218,6 +2216,18 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   __pyx_pybuffer_trackerconfigs.refcount = 0;
   __pyx_pybuffernd_trackerconfigs.data = NULL;
   __pyx_pybuffernd_trackerconfigs.rcbuffer = &__pyx_pybuffer_trackerconfigs;
+  __pyx_pybuffer_actdiffvels.pybuffer.buf = NULL;
+  __pyx_pybuffer_actdiffvels.refcount = 0;
+  __pyx_pybuffernd_actdiffvels.data = NULL;
+  __pyx_pybuffernd_actdiffvels.rcbuffer = &__pyx_pybuffer_actdiffvels;
+  __pyx_pybuffer_comdiffvels.pybuffer.buf = NULL;
+  __pyx_pybuffer_comdiffvels.refcount = 0;
+  __pyx_pybuffernd_comdiffvels.data = NULL;
+  __pyx_pybuffernd_comdiffvels.rcbuffer = &__pyx_pybuffer_comdiffvels;
+  __pyx_pybuffer_dartdiffvels.pybuffer.buf = NULL;
+  __pyx_pybuffer_dartdiffvels.refcount = 0;
+  __pyx_pybuffernd_dartdiffvels.data = NULL;
+  __pyx_pybuffernd_dartdiffvels.rcbuffer = &__pyx_pybuffer_dartdiffvels;
   __pyx_pybuffer_controls.pybuffer.buf = NULL;
   __pyx_pybuffer_controls.refcount = 0;
   __pyx_pybuffernd_controls.data = NULL;
@@ -2228,96 +2238,111 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   __pyx_pybuffernd_id.rcbuffer = &__pyx_pybuffer_id;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_ptclouds.rcbuffer->pybuffer, (PyObject*)__pyx_v_ptclouds, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_ptclouds.rcbuffer->pybuffer, (PyObject*)__pyx_v_ptclouds, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_ptclouds.diminfo[0].strides = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_ptclouds.diminfo[0].shape = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_ptclouds.diminfo[1].strides = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_ptclouds.diminfo[1].shape = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_ptclouds.diminfo[2].strides = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_ptclouds.diminfo[2].shape = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_ptclouds.diminfo[3].strides = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_ptclouds.diminfo[3].shape = __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_fwdflows.rcbuffer->pybuffer, (PyObject*)__pyx_v_fwdflows, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_fwdflows.rcbuffer->pybuffer, (PyObject*)__pyx_v_fwdflows, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_fwdflows.diminfo[0].strides = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_fwdflows.diminfo[0].shape = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_fwdflows.diminfo[1].strides = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_fwdflows.diminfo[1].shape = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_fwdflows.diminfo[2].strides = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_fwdflows.diminfo[2].shape = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_fwdflows.diminfo[3].strides = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_fwdflows.diminfo[3].shape = __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_bwdflows.rcbuffer->pybuffer, (PyObject*)__pyx_v_bwdflows, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_bwdflows.rcbuffer->pybuffer, (PyObject*)__pyx_v_bwdflows, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_bwdflows.diminfo[0].strides = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_bwdflows.diminfo[0].shape = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_bwdflows.diminfo[1].strides = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_bwdflows.diminfo[1].shape = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_bwdflows.diminfo[2].strides = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_bwdflows.diminfo[2].shape = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_bwdflows.diminfo[3].strides = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_bwdflows.diminfo[3].shape = __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_fwdvis.rcbuffer->pybuffer, (PyObject*)__pyx_v_fwdvis, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_fwdvis.rcbuffer->pybuffer, (PyObject*)__pyx_v_fwdvis, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_fwdvis.diminfo[0].strides = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_fwdvis.diminfo[0].shape = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_fwdvis.diminfo[1].strides = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_fwdvis.diminfo[1].shape = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_fwdvis.diminfo[2].strides = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_fwdvis.diminfo[2].shape = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_fwdvis.diminfo[3].strides = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_fwdvis.diminfo[3].shape = __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_bwdvis.rcbuffer->pybuffer, (PyObject*)__pyx_v_bwdvis, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_bwdvis.rcbuffer->pybuffer, (PyObject*)__pyx_v_bwdvis, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_bwdvis.diminfo[0].strides = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_bwdvis.diminfo[0].shape = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_bwdvis.diminfo[1].strides = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_bwdvis.diminfo[1].shape = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_bwdvis.diminfo[2].strides = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_bwdvis.diminfo[2].shape = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_bwdvis.diminfo[3].strides = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_bwdvis.diminfo[3].shape = __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_labels.rcbuffer->pybuffer, (PyObject*)__pyx_v_labels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_labels.rcbuffer->pybuffer, (PyObject*)__pyx_v_labels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_labels.diminfo[0].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_labels.diminfo[0].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_labels.diminfo[1].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_labels.diminfo[1].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_labels.diminfo[2].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_labels.diminfo[2].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_labels.diminfo[3].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_labels.diminfo[3].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_rgbs.rcbuffer->pybuffer, (PyObject*)__pyx_v_rgbs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_rgbs.rcbuffer->pybuffer, (PyObject*)__pyx_v_rgbs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_rgbs.diminfo[0].strides = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_rgbs.diminfo[0].shape = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_rgbs.diminfo[1].strides = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_rgbs.diminfo[1].shape = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_rgbs.diminfo[2].strides = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_rgbs.diminfo[2].shape = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_rgbs.diminfo[3].strides = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_rgbs.diminfo[3].shape = __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_masks.diminfo[0].strides = __pyx_pybuffernd_masks.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_masks.diminfo[0].shape = __pyx_pybuffernd_masks.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_masks.diminfo[1].strides = __pyx_pybuffernd_masks.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_masks.diminfo[1].shape = __pyx_pybuffernd_masks.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_masks.diminfo[2].strides = __pyx_pybuffernd_masks.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_masks.diminfo[2].shape = __pyx_pybuffernd_masks.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_masks.diminfo[3].strides = __pyx_pybuffernd_masks.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_masks.diminfo[3].shape = __pyx_pybuffernd_masks.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_poses.diminfo[0].strides = __pyx_pybuffernd_poses.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_poses.diminfo[0].shape = __pyx_pybuffernd_poses.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_poses.diminfo[1].strides = __pyx_pybuffernd_poses.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_poses.diminfo[1].shape = __pyx_pybuffernd_poses.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_poses.diminfo[2].strides = __pyx_pybuffernd_poses.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_poses.diminfo[2].shape = __pyx_pybuffernd_poses.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_poses.diminfo[3].strides = __pyx_pybuffernd_poses.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_poses.diminfo[3].shape = __pyx_pybuffernd_poses.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_camposes.rcbuffer->pybuffer, (PyObject*)__pyx_v_camposes, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_camposes.rcbuffer->pybuffer, (PyObject*)__pyx_v_camposes, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 4, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_camposes.diminfo[0].strides = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_camposes.diminfo[0].shape = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_camposes.diminfo[1].strides = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_camposes.diminfo[1].shape = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_camposes.diminfo[2].strides = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_camposes.diminfo[2].shape = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.shape[2]; __pyx_pybuffernd_camposes.diminfo[3].strides = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.strides[3]; __pyx_pybuffernd_camposes.diminfo[3].shape = __pyx_pybuffernd_camposes.rcbuffer->pybuffer.shape[3];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_modelview.rcbuffer->pybuffer, (PyObject*)__pyx_v_modelview, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_modelview.rcbuffer->pybuffer, (PyObject*)__pyx_v_modelview, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_modelview.diminfo[0].strides = __pyx_pybuffernd_modelview.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_modelview.diminfo[0].shape = __pyx_pybuffernd_modelview.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_modelview.diminfo[1].strides = __pyx_pybuffernd_modelview.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_modelview.diminfo[1].shape = __pyx_pybuffernd_modelview.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_actconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_actconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_actconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_actconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_actconfigs.diminfo[0].strides = __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_actconfigs.diminfo[0].shape = __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_actconfigs.diminfo[1].strides = __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_actconfigs.diminfo[1].shape = __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_actvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_actvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_actvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_actvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_actvels.diminfo[0].strides = __pyx_pybuffernd_actvels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_actvels.diminfo[0].shape = __pyx_pybuffernd_actvels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_actvels.diminfo[1].strides = __pyx_pybuffernd_actvels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_actvels.diminfo[1].shape = __pyx_pybuffernd_actvels.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_comconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_comconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_comconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_comconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_comconfigs.diminfo[0].strides = __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_comconfigs.diminfo[0].shape = __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_comconfigs.diminfo[1].strides = __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_comconfigs.diminfo[1].shape = __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_comvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_comvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_comvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_comvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_comvels.diminfo[0].strides = __pyx_pybuffernd_comvels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_comvels.diminfo[0].shape = __pyx_pybuffernd_comvels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_comvels.diminfo[1].strides = __pyx_pybuffernd_comvels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_comvels.diminfo[1].shape = __pyx_pybuffernd_comvels.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_trackerconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer, (PyObject*)__pyx_v_trackerconfigs, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_trackerconfigs.diminfo[0].strides = __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_trackerconfigs.diminfo[0].shape = __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_trackerconfigs.diminfo[1].strides = __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_trackerconfigs.diminfo[1].shape = __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_controls.rcbuffer->pybuffer, (PyObject*)__pyx_v_controls, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_actdiffvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_actdiffvels.diminfo[0].strides = __pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_actdiffvels.diminfo[0].shape = __pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_actdiffvels.diminfo[1].strides = __pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_actdiffvels.diminfo[1].shape = __pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer.shape[1];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_comdiffvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_comdiffvels.diminfo[0].strides = __pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_comdiffvels.diminfo[0].shape = __pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_comdiffvels.diminfo[1].strides = __pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_comdiffvels.diminfo[1].shape = __pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer.shape[1];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer, (PyObject*)__pyx_v_dartdiffvels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_dartdiffvels.diminfo[0].strides = __pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_dartdiffvels.diminfo[0].shape = __pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_dartdiffvels.diminfo[1].strides = __pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_dartdiffvels.diminfo[1].shape = __pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer.shape[1];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_controls.rcbuffer->pybuffer, (PyObject*)__pyx_v_controls, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 2, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_controls.diminfo[0].strides = __pyx_pybuffernd_controls.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_controls.diminfo[0].shape = __pyx_pybuffernd_controls.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_controls.diminfo[1].strides = __pyx_pybuffernd_controls.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_controls.diminfo[1].shape = __pyx_pybuffernd_controls.rcbuffer->pybuffer.shape[1];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_id.rcbuffer->pybuffer, (PyObject*)__pyx_v_id, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_id.rcbuffer->pybuffer, (PyObject*)__pyx_v_id, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 54, __pyx_L1_error)
   }
   __pyx_pybuffernd_id.diminfo[0].strides = __pyx_pybuffernd_id.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_id.diminfo[0].shape = __pyx_pybuffernd_id.rcbuffer->pybuffer.shape[0];
 
-  /* "torchviz/pangodataviz.pyx":70
+  /* "torchviz/pangodataviz.pyx":76
  *                          np.ndarray[np.float32_t, ndim=1] id):
  *         # Run CPP code
  *         self.pangodataviz.update_viz(&ptclouds[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2347,10 +2372,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_4 >= __pyx_pybuffernd_ptclouds.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 70, __pyx_L1_error)
+    __PYX_ERR(0, 76, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":71
+  /* "torchviz/pangodataviz.pyx":77
  *         # Run CPP code
  *         self.pangodataviz.update_viz(&ptclouds[0,0,0,0],
  *                                      &fwdflows[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2380,10 +2405,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_9 >= __pyx_pybuffernd_fwdflows.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 71, __pyx_L1_error)
+    __PYX_ERR(0, 77, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":72
+  /* "torchviz/pangodataviz.pyx":78
  *         self.pangodataviz.update_viz(&ptclouds[0,0,0,0],
  *                                      &fwdflows[0,0,0,0],
  *                                      &bwdflows[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2413,10 +2438,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_13 >= __pyx_pybuffernd_bwdflows.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 72, __pyx_L1_error)
+    __PYX_ERR(0, 78, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":73
+  /* "torchviz/pangodataviz.pyx":79
  *                                      &fwdflows[0,0,0,0],
  *                                      &bwdflows[0,0,0,0],
  *                                      &fwdvis[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2446,10 +2471,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_17 >= __pyx_pybuffernd_fwdvis.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 73, __pyx_L1_error)
+    __PYX_ERR(0, 79, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":74
+  /* "torchviz/pangodataviz.pyx":80
  *                                      &bwdflows[0,0,0,0],
  *                                      &fwdvis[0,0,0,0],
  *                                      &bwdvis[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2479,10 +2504,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_21 >= __pyx_pybuffernd_bwdvis.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 74, __pyx_L1_error)
+    __PYX_ERR(0, 80, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":75
+  /* "torchviz/pangodataviz.pyx":81
  *                                      &fwdvis[0,0,0,0],
  *                                      &bwdvis[0,0,0,0],
  *                                      &labels[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2512,10 +2537,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_25 >= __pyx_pybuffernd_labels.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 75, __pyx_L1_error)
+    __PYX_ERR(0, 81, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":76
+  /* "torchviz/pangodataviz.pyx":82
  *                                      &bwdvis[0,0,0,0],
  *                                      &labels[0,0,0,0],
  *                                      &rgbs[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2545,10 +2570,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_29 >= __pyx_pybuffernd_rgbs.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 76, __pyx_L1_error)
+    __PYX_ERR(0, 82, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":77
+  /* "torchviz/pangodataviz.pyx":83
  *                                      &labels[0,0,0,0],
  *                                      &rgbs[0,0,0,0],
  *                                      &masks[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2578,10 +2603,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_33 >= __pyx_pybuffernd_masks.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 77, __pyx_L1_error)
+    __PYX_ERR(0, 83, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":78
+  /* "torchviz/pangodataviz.pyx":84
  *                                      &rgbs[0,0,0,0],
  *                                      &masks[0,0,0,0],
  *                                      &poses[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2611,10 +2636,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_37 >= __pyx_pybuffernd_poses.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 78, __pyx_L1_error)
+    __PYX_ERR(0, 84, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":79
+  /* "torchviz/pangodataviz.pyx":85
  *                                      &masks[0,0,0,0],
  *                                      &poses[0,0,0,0],
  *                                      &camposes[0,0,0,0],             # <<<<<<<<<<<<<<
@@ -2644,10 +2669,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_41 >= __pyx_pybuffernd_camposes.diminfo[3].shape)) __pyx_t_5 = 3;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 79, __pyx_L1_error)
+    __PYX_ERR(0, 85, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":80
+  /* "torchviz/pangodataviz.pyx":86
  *                                      &poses[0,0,0,0],
  *                                      &camposes[0,0,0,0],
  *                                      &modelview[0,0],             # <<<<<<<<<<<<<<
@@ -2667,10 +2692,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_43 >= __pyx_pybuffernd_modelview.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 80, __pyx_L1_error)
+    __PYX_ERR(0, 86, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":81
+  /* "torchviz/pangodataviz.pyx":87
  *                                      &camposes[0,0,0,0],
  *                                      &modelview[0,0],
  *                                      &actconfigs[0,0],             # <<<<<<<<<<<<<<
@@ -2690,10 +2715,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_45 >= __pyx_pybuffernd_actconfigs.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 81, __pyx_L1_error)
+    __PYX_ERR(0, 87, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":82
+  /* "torchviz/pangodataviz.pyx":88
  *                                      &modelview[0,0],
  *                                      &actconfigs[0,0],
  *                                      &actvels[0,0],             # <<<<<<<<<<<<<<
@@ -2713,10 +2738,10 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_47 >= __pyx_pybuffernd_actvels.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 82, __pyx_L1_error)
+    __PYX_ERR(0, 88, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":83
+  /* "torchviz/pangodataviz.pyx":89
  *                                      &actconfigs[0,0],
  *                                      &actvels[0,0],
  *                                      &comconfigs[0,0],             # <<<<<<<<<<<<<<
@@ -2736,15 +2761,15 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_49 >= __pyx_pybuffernd_comconfigs.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 83, __pyx_L1_error)
+    __PYX_ERR(0, 89, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":84
+  /* "torchviz/pangodataviz.pyx":90
  *                                      &actvels[0,0],
  *                                      &comconfigs[0,0],
  *                                      &comvels[0,0],             # <<<<<<<<<<<<<<
  *                                      &trackerconfigs[0,0],
- *                                      &controls[0,0],
+ *                                      &actdiffvels[0,0],
  */
   __pyx_t_50 = 0;
   __pyx_t_51 = 0;
@@ -2759,15 +2784,15 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_51 >= __pyx_pybuffernd_comvels.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 84, __pyx_L1_error)
+    __PYX_ERR(0, 90, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":85
+  /* "torchviz/pangodataviz.pyx":91
  *                                      &comconfigs[0,0],
  *                                      &comvels[0,0],
  *                                      &trackerconfigs[0,0],             # <<<<<<<<<<<<<<
- *                                      &controls[0,0],
- *                                      &id[0])
+ *                                      &actdiffvels[0,0],
+ *                                      &comdiffvels[0,0],
  */
   __pyx_t_52 = 0;
   __pyx_t_53 = 0;
@@ -2782,57 +2807,126 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   } else if (unlikely(__pyx_t_53 >= __pyx_pybuffernd_trackerconfigs.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 85, __pyx_L1_error)
+    __PYX_ERR(0, 91, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":86
+  /* "torchviz/pangodataviz.pyx":92
  *                                      &comvels[0,0],
  *                                      &trackerconfigs[0,0],
- *                                      &controls[0,0],             # <<<<<<<<<<<<<<
- *                                      &id[0])
+ *                                      &actdiffvels[0,0],             # <<<<<<<<<<<<<<
+ *                                      &comdiffvels[0,0],
+ *                                      &dartdiffvels[0,0],
  */
   __pyx_t_54 = 0;
   __pyx_t_55 = 0;
   __pyx_t_5 = -1;
   if (__pyx_t_54 < 0) {
-    __pyx_t_54 += __pyx_pybuffernd_controls.diminfo[0].shape;
+    __pyx_t_54 += __pyx_pybuffernd_actdiffvels.diminfo[0].shape;
     if (unlikely(__pyx_t_54 < 0)) __pyx_t_5 = 0;
-  } else if (unlikely(__pyx_t_54 >= __pyx_pybuffernd_controls.diminfo[0].shape)) __pyx_t_5 = 0;
+  } else if (unlikely(__pyx_t_54 >= __pyx_pybuffernd_actdiffvels.diminfo[0].shape)) __pyx_t_5 = 0;
   if (__pyx_t_55 < 0) {
-    __pyx_t_55 += __pyx_pybuffernd_controls.diminfo[1].shape;
+    __pyx_t_55 += __pyx_pybuffernd_actdiffvels.diminfo[1].shape;
     if (unlikely(__pyx_t_55 < 0)) __pyx_t_5 = 1;
-  } else if (unlikely(__pyx_t_55 >= __pyx_pybuffernd_controls.diminfo[1].shape)) __pyx_t_5 = 1;
+  } else if (unlikely(__pyx_t_55 >= __pyx_pybuffernd_actdiffvels.diminfo[1].shape)) __pyx_t_5 = 1;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 86, __pyx_L1_error)
+    __PYX_ERR(0, 92, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":87
+  /* "torchviz/pangodataviz.pyx":93
  *                                      &trackerconfigs[0,0],
+ *                                      &actdiffvels[0,0],
+ *                                      &comdiffvels[0,0],             # <<<<<<<<<<<<<<
+ *                                      &dartdiffvels[0,0],
+ *                                      &controls[0,0],
+ */
+  __pyx_t_56 = 0;
+  __pyx_t_57 = 0;
+  __pyx_t_5 = -1;
+  if (__pyx_t_56 < 0) {
+    __pyx_t_56 += __pyx_pybuffernd_comdiffvels.diminfo[0].shape;
+    if (unlikely(__pyx_t_56 < 0)) __pyx_t_5 = 0;
+  } else if (unlikely(__pyx_t_56 >= __pyx_pybuffernd_comdiffvels.diminfo[0].shape)) __pyx_t_5 = 0;
+  if (__pyx_t_57 < 0) {
+    __pyx_t_57 += __pyx_pybuffernd_comdiffvels.diminfo[1].shape;
+    if (unlikely(__pyx_t_57 < 0)) __pyx_t_5 = 1;
+  } else if (unlikely(__pyx_t_57 >= __pyx_pybuffernd_comdiffvels.diminfo[1].shape)) __pyx_t_5 = 1;
+  if (unlikely(__pyx_t_5 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_5);
+    __PYX_ERR(0, 93, __pyx_L1_error)
+  }
+
+  /* "torchviz/pangodataviz.pyx":94
+ *                                      &actdiffvels[0,0],
+ *                                      &comdiffvels[0,0],
+ *                                      &dartdiffvels[0,0],             # <<<<<<<<<<<<<<
+ *                                      &controls[0,0],
+ *                                      &id[0])
+ */
+  __pyx_t_58 = 0;
+  __pyx_t_59 = 0;
+  __pyx_t_5 = -1;
+  if (__pyx_t_58 < 0) {
+    __pyx_t_58 += __pyx_pybuffernd_dartdiffvels.diminfo[0].shape;
+    if (unlikely(__pyx_t_58 < 0)) __pyx_t_5 = 0;
+  } else if (unlikely(__pyx_t_58 >= __pyx_pybuffernd_dartdiffvels.diminfo[0].shape)) __pyx_t_5 = 0;
+  if (__pyx_t_59 < 0) {
+    __pyx_t_59 += __pyx_pybuffernd_dartdiffvels.diminfo[1].shape;
+    if (unlikely(__pyx_t_59 < 0)) __pyx_t_5 = 1;
+  } else if (unlikely(__pyx_t_59 >= __pyx_pybuffernd_dartdiffvels.diminfo[1].shape)) __pyx_t_5 = 1;
+  if (unlikely(__pyx_t_5 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_5);
+    __PYX_ERR(0, 94, __pyx_L1_error)
+  }
+
+  /* "torchviz/pangodataviz.pyx":95
+ *                                      &comdiffvels[0,0],
+ *                                      &dartdiffvels[0,0],
+ *                                      &controls[0,0],             # <<<<<<<<<<<<<<
+ *                                      &id[0])
+ */
+  __pyx_t_60 = 0;
+  __pyx_t_61 = 0;
+  __pyx_t_5 = -1;
+  if (__pyx_t_60 < 0) {
+    __pyx_t_60 += __pyx_pybuffernd_controls.diminfo[0].shape;
+    if (unlikely(__pyx_t_60 < 0)) __pyx_t_5 = 0;
+  } else if (unlikely(__pyx_t_60 >= __pyx_pybuffernd_controls.diminfo[0].shape)) __pyx_t_5 = 0;
+  if (__pyx_t_61 < 0) {
+    __pyx_t_61 += __pyx_pybuffernd_controls.diminfo[1].shape;
+    if (unlikely(__pyx_t_61 < 0)) __pyx_t_5 = 1;
+  } else if (unlikely(__pyx_t_61 >= __pyx_pybuffernd_controls.diminfo[1].shape)) __pyx_t_5 = 1;
+  if (unlikely(__pyx_t_5 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_5);
+    __PYX_ERR(0, 95, __pyx_L1_error)
+  }
+
+  /* "torchviz/pangodataviz.pyx":96
+ *                                      &dartdiffvels[0,0],
  *                                      &controls[0,0],
  *                                      &id[0])             # <<<<<<<<<<<<<<
  */
-  __pyx_t_56 = 0;
+  __pyx_t_62 = 0;
   __pyx_t_5 = -1;
-  if (__pyx_t_56 < 0) {
-    __pyx_t_56 += __pyx_pybuffernd_id.diminfo[0].shape;
-    if (unlikely(__pyx_t_56 < 0)) __pyx_t_5 = 0;
-  } else if (unlikely(__pyx_t_56 >= __pyx_pybuffernd_id.diminfo[0].shape)) __pyx_t_5 = 0;
+  if (__pyx_t_62 < 0) {
+    __pyx_t_62 += __pyx_pybuffernd_id.diminfo[0].shape;
+    if (unlikely(__pyx_t_62 < 0)) __pyx_t_5 = 0;
+  } else if (unlikely(__pyx_t_62 >= __pyx_pybuffernd_id.diminfo[0].shape)) __pyx_t_5 = 0;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 87, __pyx_L1_error)
+    __PYX_ERR(0, 96, __pyx_L1_error)
   }
 
-  /* "torchviz/pangodataviz.pyx":70
+  /* "torchviz/pangodataviz.pyx":76
  *                          np.ndarray[np.float32_t, ndim=1] id):
  *         # Run CPP code
  *         self.pangodataviz.update_viz(&ptclouds[0,0,0,0],             # <<<<<<<<<<<<<<
  *                                      &fwdflows[0,0,0,0],
  *                                      &bwdflows[0,0,0,0],
  */
-  __pyx_v_self->pangodataviz->update_viz((&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_ptclouds.diminfo[0].strides, __pyx_t_2, __pyx_pybuffernd_ptclouds.diminfo[1].strides, __pyx_t_3, __pyx_pybuffernd_ptclouds.diminfo[2].strides, __pyx_t_4, __pyx_pybuffernd_ptclouds.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_fwdflows.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_fwdflows.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_fwdflows.diminfo[2].strides, __pyx_t_9, __pyx_pybuffernd_fwdflows.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.buf, __pyx_t_10, __pyx_pybuffernd_bwdflows.diminfo[0].strides, __pyx_t_11, __pyx_pybuffernd_bwdflows.diminfo[1].strides, __pyx_t_12, __pyx_pybuffernd_bwdflows.diminfo[2].strides, __pyx_t_13, __pyx_pybuffernd_bwdflows.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.buf, __pyx_t_14, __pyx_pybuffernd_fwdvis.diminfo[0].strides, __pyx_t_15, __pyx_pybuffernd_fwdvis.diminfo[1].strides, __pyx_t_16, __pyx_pybuffernd_fwdvis.diminfo[2].strides, __pyx_t_17, __pyx_pybuffernd_fwdvis.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.buf, __pyx_t_18, __pyx_pybuffernd_bwdvis.diminfo[0].strides, __pyx_t_19, __pyx_pybuffernd_bwdvis.diminfo[1].strides, __pyx_t_20, __pyx_pybuffernd_bwdvis.diminfo[2].strides, __pyx_t_21, __pyx_pybuffernd_bwdvis.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_labels.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_labels.diminfo[0].strides, __pyx_t_23, __pyx_pybuffernd_labels.diminfo[1].strides, __pyx_t_24, __pyx_pybuffernd_labels.diminfo[2].strides, __pyx_t_25, __pyx_pybuffernd_labels.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.buf, __pyx_t_26, __pyx_pybuffernd_rgbs.diminfo[0].strides, __pyx_t_27, __pyx_pybuffernd_rgbs.diminfo[1].strides, __pyx_t_28, __pyx_pybuffernd_rgbs.diminfo[2].strides, __pyx_t_29, __pyx_pybuffernd_rgbs.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_masks.rcbuffer->pybuffer.buf, __pyx_t_30, __pyx_pybuffernd_masks.diminfo[0].strides, __pyx_t_31, __pyx_pybuffernd_masks.diminfo[1].strides, __pyx_t_32, __pyx_pybuffernd_masks.diminfo[2].strides, __pyx_t_33, __pyx_pybuffernd_masks.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_poses.rcbuffer->pybuffer.buf, __pyx_t_34, __pyx_pybuffernd_poses.diminfo[0].strides, __pyx_t_35, __pyx_pybuffernd_poses.diminfo[1].strides, __pyx_t_36, __pyx_pybuffernd_poses.diminfo[2].strides, __pyx_t_37, __pyx_pybuffernd_poses.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_camposes.rcbuffer->pybuffer.buf, __pyx_t_38, __pyx_pybuffernd_camposes.diminfo[0].strides, __pyx_t_39, __pyx_pybuffernd_camposes.diminfo[1].strides, __pyx_t_40, __pyx_pybuffernd_camposes.diminfo[2].strides, __pyx_t_41, __pyx_pybuffernd_camposes.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_modelview.rcbuffer->pybuffer.buf, __pyx_t_42, __pyx_pybuffernd_modelview.diminfo[0].strides, __pyx_t_43, __pyx_pybuffernd_modelview.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.buf, __pyx_t_44, __pyx_pybuffernd_actconfigs.diminfo[0].strides, __pyx_t_45, __pyx_pybuffernd_actconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_actvels.rcbuffer->pybuffer.buf, __pyx_t_46, __pyx_pybuffernd_actvels.diminfo[0].strides, __pyx_t_47, __pyx_pybuffernd_actvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.buf, __pyx_t_48, __pyx_pybuffernd_comconfigs.diminfo[0].strides, __pyx_t_49, __pyx_pybuffernd_comconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_comvels.rcbuffer->pybuffer.buf, __pyx_t_50, __pyx_pybuffernd_comvels.diminfo[0].strides, __pyx_t_51, __pyx_pybuffernd_comvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.buf, __pyx_t_52, __pyx_pybuffernd_trackerconfigs.diminfo[0].strides, __pyx_t_53, __pyx_pybuffernd_trackerconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_controls.rcbuffer->pybuffer.buf, __pyx_t_54, __pyx_pybuffernd_controls.diminfo[0].strides, __pyx_t_55, __pyx_pybuffernd_controls.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_id.rcbuffer->pybuffer.buf, __pyx_t_56, __pyx_pybuffernd_id.diminfo[0].strides))));
+  __pyx_v_self->pangodataviz->update_viz((&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptclouds.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_ptclouds.diminfo[0].strides, __pyx_t_2, __pyx_pybuffernd_ptclouds.diminfo[1].strides, __pyx_t_3, __pyx_pybuffernd_ptclouds.diminfo[2].strides, __pyx_t_4, __pyx_pybuffernd_ptclouds.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_fwdflows.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_fwdflows.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_fwdflows.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_fwdflows.diminfo[2].strides, __pyx_t_9, __pyx_pybuffernd_fwdflows.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_bwdflows.rcbuffer->pybuffer.buf, __pyx_t_10, __pyx_pybuffernd_bwdflows.diminfo[0].strides, __pyx_t_11, __pyx_pybuffernd_bwdflows.diminfo[1].strides, __pyx_t_12, __pyx_pybuffernd_bwdflows.diminfo[2].strides, __pyx_t_13, __pyx_pybuffernd_bwdflows.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_fwdvis.rcbuffer->pybuffer.buf, __pyx_t_14, __pyx_pybuffernd_fwdvis.diminfo[0].strides, __pyx_t_15, __pyx_pybuffernd_fwdvis.diminfo[1].strides, __pyx_t_16, __pyx_pybuffernd_fwdvis.diminfo[2].strides, __pyx_t_17, __pyx_pybuffernd_fwdvis.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_bwdvis.rcbuffer->pybuffer.buf, __pyx_t_18, __pyx_pybuffernd_bwdvis.diminfo[0].strides, __pyx_t_19, __pyx_pybuffernd_bwdvis.diminfo[1].strides, __pyx_t_20, __pyx_pybuffernd_bwdvis.diminfo[2].strides, __pyx_t_21, __pyx_pybuffernd_bwdvis.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_labels.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_labels.diminfo[0].strides, __pyx_t_23, __pyx_pybuffernd_labels.diminfo[1].strides, __pyx_t_24, __pyx_pybuffernd_labels.diminfo[2].strides, __pyx_t_25, __pyx_pybuffernd_labels.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_rgbs.rcbuffer->pybuffer.buf, __pyx_t_26, __pyx_pybuffernd_rgbs.diminfo[0].strides, __pyx_t_27, __pyx_pybuffernd_rgbs.diminfo[1].strides, __pyx_t_28, __pyx_pybuffernd_rgbs.diminfo[2].strides, __pyx_t_29, __pyx_pybuffernd_rgbs.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_masks.rcbuffer->pybuffer.buf, __pyx_t_30, __pyx_pybuffernd_masks.diminfo[0].strides, __pyx_t_31, __pyx_pybuffernd_masks.diminfo[1].strides, __pyx_t_32, __pyx_pybuffernd_masks.diminfo[2].strides, __pyx_t_33, __pyx_pybuffernd_masks.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_poses.rcbuffer->pybuffer.buf, __pyx_t_34, __pyx_pybuffernd_poses.diminfo[0].strides, __pyx_t_35, __pyx_pybuffernd_poses.diminfo[1].strides, __pyx_t_36, __pyx_pybuffernd_poses.diminfo[2].strides, __pyx_t_37, __pyx_pybuffernd_poses.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided4d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_camposes.rcbuffer->pybuffer.buf, __pyx_t_38, __pyx_pybuffernd_camposes.diminfo[0].strides, __pyx_t_39, __pyx_pybuffernd_camposes.diminfo[1].strides, __pyx_t_40, __pyx_pybuffernd_camposes.diminfo[2].strides, __pyx_t_41, __pyx_pybuffernd_camposes.diminfo[3].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_modelview.rcbuffer->pybuffer.buf, __pyx_t_42, __pyx_pybuffernd_modelview.diminfo[0].strides, __pyx_t_43, __pyx_pybuffernd_modelview.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_actconfigs.rcbuffer->pybuffer.buf, __pyx_t_44, __pyx_pybuffernd_actconfigs.diminfo[0].strides, __pyx_t_45, __pyx_pybuffernd_actconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_actvels.rcbuffer->pybuffer.buf, __pyx_t_46, __pyx_pybuffernd_actvels.diminfo[0].strides, __pyx_t_47, __pyx_pybuffernd_actvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_comconfigs.rcbuffer->pybuffer.buf, __pyx_t_48, __pyx_pybuffernd_comconfigs.diminfo[0].strides, __pyx_t_49, __pyx_pybuffernd_comconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_comvels.rcbuffer->pybuffer.buf, __pyx_t_50, __pyx_pybuffernd_comvels.diminfo[0].strides, __pyx_t_51, __pyx_pybuffernd_comvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_trackerconfigs.rcbuffer->pybuffer.buf, __pyx_t_52, __pyx_pybuffernd_trackerconfigs.diminfo[0].strides, __pyx_t_53, __pyx_pybuffernd_trackerconfigs.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer.buf, __pyx_t_54, __pyx_pybuffernd_actdiffvels.diminfo[0].strides, __pyx_t_55, __pyx_pybuffernd_actdiffvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer.buf, __pyx_t_56, __pyx_pybuffernd_comdiffvels.diminfo[0].strides, __pyx_t_57, __pyx_pybuffernd_comdiffvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer.buf, __pyx_t_58, __pyx_pybuffernd_dartdiffvels.diminfo[0].strides, __pyx_t_59, __pyx_pybuffernd_dartdiffvels.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided2d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_controls.rcbuffer->pybuffer.buf, __pyx_t_60, __pyx_pybuffernd_controls.diminfo[0].strides, __pyx_t_61, __pyx_pybuffernd_controls.diminfo[1].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_id.rcbuffer->pybuffer.buf, __pyx_t_62, __pyx_pybuffernd_id.diminfo[0].strides))));
 
-  /* "torchviz/pangodataviz.pyx":51
+  /* "torchviz/pangodataviz.pyx":54
  *         del self.pangodataviz
  * 
  *     def update_viz(self, np.ndarray[np.float32_t, ndim=4] ptclouds,             # <<<<<<<<<<<<<<
@@ -2849,13 +2943,16 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
     __Pyx_PyThreadState_assign
     __Pyx_ErrFetch(&__pyx_type, &__pyx_value, &__pyx_tb);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actconfigs.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actvels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_bwdflows.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_bwdvis.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_camposes.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comconfigs.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comvels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_controls.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_fwdflows.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_fwdvis.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_id.rcbuffer->pybuffer);
@@ -2872,13 +2969,16 @@ static PyObject *__pyx_pf_8torchviz_12pangodataviz_17PyPangolinDataViz_4update_v
   goto __pyx_L2;
   __pyx_L0:;
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actconfigs.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actdiffvels.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_actvels.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_bwdflows.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_bwdvis.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_camposes.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comconfigs.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comdiffvels.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_comvels.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_controls.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_dartdiffvels.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_fwdflows.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_fwdvis.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_id.rcbuffer->pybuffer);
@@ -5586,16 +5686,19 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_RuntimeError, __pyx_k_RuntimeError, sizeof(__pyx_k_RuntimeError), 0, 0, 1, 1},
   {&__pyx_n_s_ValueError, __pyx_k_ValueError, sizeof(__pyx_k_ValueError), 0, 0, 1, 1},
   {&__pyx_n_s_actconfigs, __pyx_k_actconfigs, sizeof(__pyx_k_actconfigs), 0, 0, 1, 1},
+  {&__pyx_n_s_actdiffvels, __pyx_k_actdiffvels, sizeof(__pyx_k_actdiffvels), 0, 0, 1, 1},
   {&__pyx_n_s_actvels, __pyx_k_actvels, sizeof(__pyx_k_actvels), 0, 0, 1, 1},
   {&__pyx_n_s_bwdflows, __pyx_k_bwdflows, sizeof(__pyx_k_bwdflows), 0, 0, 1, 1},
   {&__pyx_n_s_bwdvis, __pyx_k_bwdvis, sizeof(__pyx_k_bwdvis), 0, 0, 1, 1},
   {&__pyx_n_s_camposes, __pyx_k_camposes, sizeof(__pyx_k_camposes), 0, 0, 1, 1},
   {&__pyx_n_s_comconfigs, __pyx_k_comconfigs, sizeof(__pyx_k_comconfigs), 0, 0, 1, 1},
+  {&__pyx_n_s_comdiffvels, __pyx_k_comdiffvels, sizeof(__pyx_k_comdiffvels), 0, 0, 1, 1},
   {&__pyx_n_s_comvels, __pyx_k_comvels, sizeof(__pyx_k_comvels), 0, 0, 1, 1},
   {&__pyx_n_s_controls, __pyx_k_controls, sizeof(__pyx_k_controls), 0, 0, 1, 1},
   {&__pyx_n_s_ctypes, __pyx_k_ctypes, sizeof(__pyx_k_ctypes), 0, 0, 1, 1},
   {&__pyx_n_s_cx, __pyx_k_cx, sizeof(__pyx_k_cx), 0, 0, 1, 1},
   {&__pyx_n_s_cy, __pyx_k_cy, sizeof(__pyx_k_cy), 0, 0, 1, 1},
+  {&__pyx_n_s_dartdiffvels, __pyx_k_dartdiffvels, sizeof(__pyx_k_dartdiffvels), 0, 0, 1, 1},
   {&__pyx_n_s_data_path, __pyx_k_data_path, sizeof(__pyx_k_data_path), 0, 0, 1, 1},
   {&__pyx_n_s_fwdflows, __pyx_k_fwdflows, sizeof(__pyx_k_fwdflows), 0, 0, 1, 1},
   {&__pyx_n_s_fwdvis, __pyx_k_fwdvis, sizeof(__pyx_k_fwdvis), 0, 0, 1, 1},
@@ -5604,7 +5707,6 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_ht, __pyx_k_ht, sizeof(__pyx_k_ht), 0, 0, 1, 1},
   {&__pyx_n_s_id, __pyx_k_id, sizeof(__pyx_k_id), 0, 0, 1, 1},
   {&__pyx_n_s_import, __pyx_k_import, sizeof(__pyx_k_import), 0, 0, 1, 1},
-  {&__pyx_n_s_initconfig, __pyx_k_initconfig, sizeof(__pyx_k_initconfig), 0, 0, 1, 1},
   {&__pyx_n_s_labels, __pyx_k_labels, sizeof(__pyx_k_labels), 0, 0, 1, 1},
   {&__pyx_n_s_main, __pyx_k_main, sizeof(__pyx_k_main), 0, 0, 1, 1},
   {&__pyx_n_s_masks, __pyx_k_masks, sizeof(__pyx_k_masks), 0, 0, 1, 1},
@@ -5613,6 +5715,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_nctrl, __pyx_k_nctrl, sizeof(__pyx_k_nctrl), 0, 0, 1, 1},
   {&__pyx_kp_u_ndarray_is_not_C_contiguous, __pyx_k_ndarray_is_not_C_contiguous, sizeof(__pyx_k_ndarray_is_not_C_contiguous), 0, 1, 0, 0},
   {&__pyx_kp_u_ndarray_is_not_Fortran_contiguou, __pyx_k_ndarray_is_not_Fortran_contiguou, sizeof(__pyx_k_ndarray_is_not_Fortran_contiguou), 0, 1, 0, 0},
+  {&__pyx_n_s_nimages, __pyx_k_nimages, sizeof(__pyx_k_nimages), 0, 0, 1, 1},
   {&__pyx_n_s_np, __pyx_k_np, sizeof(__pyx_k_np), 0, 0, 1, 1},
   {&__pyx_n_s_nstate, __pyx_k_nstate, sizeof(__pyx_k_nstate), 0, 0, 1, 1},
   {&__pyx_n_s_ntracker, __pyx_k_ntracker, sizeof(__pyx_k_ntracker), 0, 0, 1, 1},
@@ -5839,9 +5942,9 @@ PyMODINIT_FUNC PyInit_pangodataviz(void)
   /*--- Variable export code ---*/
   /*--- Function export code ---*/
   /*--- Type init code ---*/
-  if (PyType_Ready(&__pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz) < 0) __PYX_ERR(0, 39, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz) < 0) __PYX_ERR(0, 42, __pyx_L1_error)
   __pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz.tp_print = 0;
-  if (PyObject_SetAttrString(__pyx_m, "PyPangolinDataViz", (PyObject *)&__pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz) < 0) __PYX_ERR(0, 39, __pyx_L1_error)
+  if (PyObject_SetAttrString(__pyx_m, "PyPangolinDataViz", (PyObject *)&__pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz) < 0) __PYX_ERR(0, 42, __pyx_L1_error)
   __pyx_ptype_8torchviz_12pangodataviz_PyPangolinDataViz = &__pyx_type_8torchviz_12pangodataviz_PyPangolinDataViz;
   /*--- Type import code ---*/
   __pyx_ptype_7cpython_4type_type = __Pyx_ImportType(__Pyx_BUILTIN_MODULE_NAME, "type", 

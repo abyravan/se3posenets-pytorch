@@ -271,7 +271,7 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     pangolin::View & flDisp   = pangolin::Display("fl").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & rDisp = pangolin::Display("rgb").SetAspect(glWidth*1.0f/(glHeight*1.0f));
     pangolin::View & allDisp = pangolin::Display("multi")
-            .SetBounds(0.0, 0.65, pangolin::Attach::Pix(panelWidth), 1.0)
+            .SetBounds(0.0, 0.35, pangolin::Attach::Pix(panelWidth), 1.0)
             .SetLayout(pangolin::LayoutEqual)
             .AddDisplay(pcDisp)
             .AddDisplay(flDisp)
@@ -279,7 +279,7 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
 
     // Cam Disp is separate from others
     pangolin::View & camDisp = pangolin::Display("cam")
-            .SetBounds(0.65, 0.9, pangolin::Attach::Pix(panelWidth), 1.0)
+            .SetBounds(0.35, 0.9, pangolin::Attach::Pix(panelWidth), 1.0)
             .SetAspect(glWidth*1.0f/(glHeight*1.0f))
             .SetHandler(new pangolin::Handler3D(camState));
 
@@ -292,8 +292,8 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     //static pangolin::Var<int> ptsColorMap("gui.ptsColorMap",2,-1,11);
 
     // Pose display
-    pangolin::Var<bool> showPose("gui.showPose",true,true);
-    pangolin::Var<bool> showPredPose("gui.showPredPose",true,true);
+    //pangolin::Var<bool> showPose("gui.showPose",true,true);
+    //pangolin::Var<bool> showPredPose("gui.showPredPose",true,true);
     pangolin::Var<bool> showFDataCurrPtCloud("gui.showFlDataCurr",true,true);
     pangolin::Var<bool> showFDataNextPtCloud("gui.showFlDataNext",true,true);
     pangolin::Var<bool> showFFlowNextPtCloud("gui.showFlFlowNext",true,true);
@@ -302,6 +302,16 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     pangolin::Var<bool> showFlowAssoc("gui.showFlowAssoc",true,true);
     pangolin::Var<bool> showOnlyVisible("gui.showOnlyVisible",true,true);
     static pangolin::Var<int> arrowDensity("gui.arrowDensity",4,1,10);
+
+    // Control display
+    pangolin::Var<bool> showVelComparison("gui.showVelComparison",true,true);
+    pangolin::Var<bool> showActVel("gui.showActVel",true,true);
+    pangolin::Var<bool> showComVel("gui.showComVel",true,true);
+    pangolin::Var<bool> showActDiffVel("gui.showActDiffVel",true,true);
+    pangolin::Var<bool> showComDiffVel("gui.showComDiffVel",true,true);
+    pangolin::Var<bool> showDartDiffVel("gui.showDartDiffVel",true,true);
+    pangolin::Var<bool> useDartJtAngles("gui.useDartJtAngles",false,true);
+    pangolin::Var<bool> showOnlyVels("gui.showOnlyVels",false,true);
 
     // == Dataset loading options
     sendSeqToNet = new pangolin::Var<bool>("data.sendSeqToNet",false,true);
@@ -351,6 +361,32 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     int baxterID_2 = 1;
     cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
 
+    // Load baxter model 1 (display init pose)
+    tracker.addModel(modelFile, 0.01); // Add baxter model with SDF resolution = 1 cm
+    int baxterID_3 = 2;
+    cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
+
+    // Load baxter model 1 (display init pose)
+    tracker.addModel(modelFile, 0.01); // Add baxter model with SDF resolution = 1 cm
+    int baxterID_4 = 3;
+    cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
+
+    // Load baxter model 1 (display init pose)
+    tracker.addModel(modelFile, 0.01); // Add baxter model with SDF resolution = 1 cm
+    int baxterID_5 = 4;
+    cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
+
+    // Load baxter model 1 (display init pose)
+    tracker.addModel(modelFile, 0.01); // Add baxter model with SDF resolution = 1 cm
+    int baxterID_6 = 5;
+    cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
+
+    // Load baxter model 1 (display init pose)
+    tracker.addModel(modelFile, 0.01); // Add baxter model with SDF resolution = 1 cm
+    int baxterID_7 = 6;
+    cout << "Initialized DART tracker with Baxter model. Num DOF: " << tracker.getPose(baxterID_1).getReducedArticulatedDimensions() << endl;
+
+
     // Initialize to init config
     for(int k = 0; k < data->statelabels.size(); k++)
     {
@@ -366,7 +402,7 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     // Assuming that the joints are fixed - change later
     std::vector<std::string> valid_joint_names = {"right_s0", "right_s1", "right_e0", "right_e1", "right_w0",
                                                   "right_w1", "right_w2"};
-    std::vector<char> modelAlphas = {(char)128, (char)64}; // GT model alpha = 0.5, pred = 1, render = 0
+    std::vector<char> modelAlphas = {(char)128, (char)64, (char)64, (char)64, (char)64, (char)64, (char)64}; // GT model alpha = 0.5, pred = 1, render = 0
 
     /// == Pre-process to compute the mesh vertices and indices for all the robot parts
     std::vector<std::vector<float3> > meshVertices, transformedMeshVertices;
@@ -690,7 +726,9 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
         /// ****************** Render the point cloud at flow step away
 
         // Set the commanded config using ctrl labels
+        int next = min(b + data->step, data->seq);
         float *flowconfig = &data->trackerconfigs[b * data->ntracker];
+        float *nextflowconfig = &data->trackerconfigs[next * data->ntracker];
         for(int k = 0; k < data->trackerlabels.size(); k++)
         {
             // Set baxter GT
@@ -698,6 +736,8 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
             {
                 int pose_dim = joint_name_to_pose_dim[data->trackerlabels[k]];
                 tracker.getPose(baxterID_2).getReducedArticulation()[pose_dim] = flowconfig[k]; // q_1
+                if (useDartJtAngles)
+                    tracker.getPose(baxterID_7).getReducedArticulation()[pose_dim] = nextflowconfig[k]; // q_1
             }
         }
 
@@ -755,6 +795,7 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
         /// Show current from ROS jt angles & DART
 
         // Set the actual config
+        float *nextconfig = &data->actconfigs[next * data->nstate];
         for(int k = 0; k < data->statelabels.size(); k++)
         {
             // Set baxter GT
@@ -762,7 +803,83 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
             {
                 int pose_dim = joint_name_to_pose_dim[data->statelabels[k]];
                 tracker.getPose(baxterID_1).getReducedArticulation()[pose_dim] = actconfig[k]; // q_1
+                tracker.getPose(baxterID_3).getReducedArticulation()[pose_dim] = actconfig[k]; // q_1
+                tracker.getPose(baxterID_4).getReducedArticulation()[pose_dim] = actconfig[k]; // q_1
+                tracker.getPose(baxterID_5).getReducedArticulation()[pose_dim] = actconfig[k]; // q_1
+                tracker.getPose(baxterID_6).getReducedArticulation()[pose_dim] = actconfig[k]; // q_1
+                if (!useDartJtAngles)
+                    tracker.getPose(baxterID_7).getReducedArticulation()[pose_dim] = nextconfig[k]; // q_2
             }
+        }
+
+        /// ****************** Vel comparison
+        if (showVelComparison)
+        {
+            float baseconfig[data->nctrl];
+            float nextconfig[data->nctrl];
+            for(int k = 0; k < data->ctrllabels.size(); k++)
+            {
+                if (joint_name_to_pose_dim.find(data->ctrllabels[k]) != joint_name_to_pose_dim.end())
+                {
+                    int pose_dim = joint_name_to_pose_dim[data->ctrllabels[k]];
+                    if (useDartJtAngles)
+                    {
+                        baseconfig[k] = tracker.getPose(baxterID_2).getReducedArticulation()[pose_dim];
+                    }
+                    else
+                    {
+                        baseconfig[k] = tracker.getPose(baxterID_1).getReducedArticulation()[pose_dim];
+                    }
+                    nextconfig[k] = tracker.getPose(baxterID_7).getReducedArticulation()[pose_dim];
+                }
+            }
+
+            float actvel[data->nctrl], comvel[data->nctrl], actdiffvel[data->nctrl], comdiffvel[data->nctrl], dartdiffvel[data->nctrl];
+            float diffmax = -HUGE_VALF, diffmin = HUGE_VALF;
+            for(int k = 0; k < data->nctrl; k++)
+            {
+                actvel[k] = showActVel ? (&data->actvels[b * data->nctrl])[k] : 0;
+                comvel[k] = showComVel ? (&data->comvels[b * data->nctrl])[k] : 0;
+                actdiffvel[k] = showActDiffVel ? (&data->actdiffvels[b * data->nctrl])[k] : 0;
+                comdiffvel[k] = showComDiffVel ? (&data->comdiffvels[b * data->nctrl])[k] : 0;
+                dartdiffvel[k] = showDartDiffVel ? (&data->dartdiffvels[b * data->nctrl])[k] : 0;
+                float diff = abs(dartdiffvel[k] - actdiffvel[k]);
+                if (diff > diffmax) diffmax = diff;
+                if (diff < diffmin) diffmin = diff;
+            }
+            cout << diffmax << " " << diffmin << endl;
+
+            // Set the actual config
+            for(int k = 0; k < data->ctrllabels.size(); k++)
+            {
+                // Set baxter GT
+                if (joint_name_to_pose_dim.find(data->ctrllabels[k]) != joint_name_to_pose_dim.end())
+                {
+                    int pose_dim = joint_name_to_pose_dim[data->ctrllabels[k]];
+                    tracker.getPose(baxterID_1).getReducedArticulation()[pose_dim] = baseconfig[k]; // q_1
+                    tracker.getPose(baxterID_2).getReducedArticulation()[pose_dim] = baseconfig[k] + data->dt * actvel[k]; // q_1
+                    tracker.getPose(baxterID_3).getReducedArticulation()[pose_dim] = baseconfig[k] + data->dt * comvel[k]; // q_1
+                    tracker.getPose(baxterID_4).getReducedArticulation()[pose_dim] = baseconfig[k] + data->dt * actdiffvel[k]; // q_1
+                    tracker.getPose(baxterID_5).getReducedArticulation()[pose_dim] = baseconfig[k] + data->dt * comdiffvel[k]; // q_1
+                    tracker.getPose(baxterID_6).getReducedArticulation()[pose_dim] = baseconfig[k] + data->dt * dartdiffvel[k]; // q_1
+                    tracker.getPose(baxterID_7).getReducedArticulation()[pose_dim] = nextconfig[k]; // q_2
+                }
+            }
+        }
+
+        if (showOnlyVels)
+        {
+            modelAlphas[0] = 0;
+            if (!showActVel) modelAlphas[1] = 0;
+            if (!showComVel) modelAlphas[2] = 0;
+            if (!showActDiffVel) modelAlphas[3] = 0;
+            if (!showComDiffVel) modelAlphas[4] = 0;
+            if (!showDartDiffVel) modelAlphas[5] = 0;
+            modelAlphas[6] = 0;
+        }
+        else
+        {
+            modelAlphas = std::vector<char>({(char)128, (char)64, (char)64, (char)64, (char)64, (char)64, (char)0});
         }
 
         /// ****************** Render RGB image
@@ -1075,13 +1192,12 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
 //////////////// == FFI functions for calling from LUA == /////////////////////
 /// \brief initialize_viz - Initialize pangolin based visualizer
 ///
-PangolinDataViz::PangolinDataViz(std::string data_path, int step_len, int seq_len, int nSE3, int ht, int wd,
-                                 int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy,
-                                 const float *initconfig)
+PangolinDataViz::PangolinDataViz(std::string data_path, int nimages, int step_len, int seq_len, int nSE3, int ht, int wd,
+                                 int nstate, int nctrl, int ntracker, float fx, float fy, float cx, float cy)
 {
     printf("==> [PANGOLIN_VIZ] Initializing data for visualizer \n");
-    data = boost::shared_ptr<LuaData>(new LuaData(data_path, step_len, seq_len, nSE3, ht, wd,
-                                                  nstate, nctrl, ntracker, fx, fy, cx, cy, initconfig));
+    data = boost::shared_ptr<LuaData>(new LuaData(data_path, nimages, step_len, seq_len, nSE3, ht, wd,
+                                                  nstate, nctrl, ntracker, fx, fy, cx, cy));
 
     /// ===== PANGOLIN viewer
     printf("==> [PANGOLIN_VIZ] Starting pangolin in a separate thread \n");
@@ -1126,6 +1242,9 @@ void PangolinDataViz::update_viz(const float *ptclouds,
                                  const float *comconfigs,
                                  const float *comvels,
                                  const float *trackerconfigs,
+                                 const float *actdiffvels,
+                                 const float *comdiffvels,
+                                 const float *dartdiffvels,
                                  const float *controls,
                                  float *id)
 {
@@ -1155,6 +1274,10 @@ void PangolinDataViz::update_viz(const float *ptclouds,
         memcpy(data->comvels,    comvels,    (data->seq+1) * data->nctrl * sizeof(float));
         memcpy(data->trackerconfigs, trackerconfigs, (data->seq+1) * data->ntracker * sizeof(float));
         memcpy(data->controls,   controls,   data->seq * data->nctrl * sizeof(float));
+        memcpy(data->actdiffvels,    actdiffvels,    (data->seq) * data->nctrl * sizeof(float));
+        memcpy(data->comdiffvels,    comdiffvels,    (data->seq) * data->nctrl * sizeof(float));
+        memcpy(data->dartdiffvels,    dartdiffvels,    (data->seq) * data->nctrl * sizeof(float));
+
 
         /// === Update modelview
         Eigen::Map<Eigen::Matrix4f> modelview_d(data->modelview);

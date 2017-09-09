@@ -34,6 +34,7 @@ parser.add_argument('--delta-flow-loss', action='store_true', default=False,
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 
+# K-step consistency
 parser.add_argument('--kstep-consis', action='store_true', default=False,
                     help='Consistency between t = 0 & t = k+1 instead of t = k & t = k+1 (default: False)')
 
@@ -90,16 +91,36 @@ def main():
                                'fy': 589.3664541825391 / 2,
                                'cx': 320.5 / 2,
                                'cy': 240.5 / 2}
+    print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(args.img_ht, args.img_wd,
+                                                                                args.cam_intrinsics['fx'],
+                                                                                args.cam_intrinsics['fy'],
+                                                                                args.cam_intrinsics['cx'],
+                                                                                args.cam_intrinsics['cy']))
+
+    # Get mean/std deviations of dt for the data
+    if args.mean_dt == 0:
+        args.mean_dt = args.step_len * (1.0 / 30.0)
+        args.std_dt = 0.005  # +- 10 ms
+        print("Using default mean & std.deviation based on the step length. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
+    else:
+        exp_mean_dt = (args.step_len * (1.0 / 30.0))
+        assert ((args.mean_dt - exp_mean_dt) < 1.0 / 30.0), \
+            "Passed in mean dt ({}) is very different from the expected value ({})".format(
+                args.mean_dt, exp_mean_dt)  # Make sure that the numbers are reasonable
+        print("Using passed in mean & std.deviation values. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
 
     # Get dimensions of ctrl & state
     try:
-        statelabels, ctrllabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+        statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
         print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
     except:
         statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
         ctrllabels = statelabels  # Just use the labels
+        trackerlabels = []
         print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
     print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
 
     # Find the IDs of the controlled joints in the state vector
@@ -183,6 +204,10 @@ def main():
 
     # TODO: Add option for using encoder pose for tfm t2
 
+    # DA threshold / winsize
+    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_thresh,
+                                                                                 args.da_winsize))
+
     ########################
     ############ Load datasets
     # Get datasets
@@ -195,10 +220,12 @@ def main():
                                                                        mesh_ids = args.mesh_ids, ctrl_ids=ctrlids_in_state,
                                                                        camera_extrinsics = args.cam_extrinsics,
                                                                        camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=args.use_gt_masks) # Need BWD flows / masks if using GT masks
-    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
-    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
-    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
+                                                                       compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
+                                                                       dathreshold=args.da_thresh, dawinsize=args.da_winsize) # Need BWD flows / masks if using GT masks
+    filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
+    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train', filter_func)  # Train dataset
+    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val',   filter_func)  # Val dataset
+    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test',  filter_func)  # Test dataset
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
@@ -657,7 +684,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         loss=lossm, ptloss=ptlossm, consisloss=consislossm,
                         posedisloss=dissimposelossm, deltadisloss=dissimdeltalossm,
                         flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg,
-                        consiserror=consiserrorm)
+                        consiserror=consiserrorm, bsz=pts.size(0))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
@@ -674,10 +701,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                         'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
                         'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
                     data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
-
+            print('Num datasets sampled/discarded: {}/{}'.format(data_loader.data.dataset.numsampled,
+                                                                 data_loader.data.dataset.numdiscarded))
             ### TensorBoard logging
             # (1) Log the scalar values
             iterct = data_loader.iteration_count() # Get total number of iterations so far
+            bsz = pts.size(0)
             info = {
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
@@ -685,7 +714,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-dissimposeloss': dissimposeloss.sum(),
                 mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
                 mode+'-consiserror': consiserror.sum(),
-                mode+'-consiserrormax': consiserrormax.sum()
+                mode+'-consiserrormax': consiserrormax.sum(),
+                mode+'-flowlosssum': flowloss_sum.sum()/bsz,
+                mode+'-flowlossavg': flowloss_avg.sum()/bsz,
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -722,7 +753,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))
                 # Show as an image summary
-                info = { mode+'-depths': util.to_np(depthdisp.narrow(0,0,1)),
+                info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                          mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                 }
@@ -763,7 +794,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
                 loss, ptloss, consisloss, posedisloss, deltadisloss,
-                flowloss_sum, flowloss_avg, consiserror):
+                flowloss_sum, flowloss_avg, consiserror, bsz=None):
     # Print loss
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], '
           'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
@@ -771,7 +802,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
         sampletotal, loss=loss))
 
     # Print flow loss per timestep
-    bsz = args.batch_size
+    bsz = args.batch_size if bsz is None else bsz
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '

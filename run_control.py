@@ -158,6 +158,9 @@ def main():
         args.use_gt_angles, args.use_gt_angles_trans = False, False
     if not hasattr(args, "num_state"):
         args.num_state = 7
+    if not hasattr(args, "mean_dt"):
+        args.mean_dt = args.step_len * (1.0/30.0)
+        args.std_dt  = 0.005 # Default params
 
     ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
     ## TODO: Or allow pangolin to change the args later
@@ -265,7 +268,8 @@ def main():
                                                                       mesh_ids=args.mesh_ids, ctrl_ids=ctrlids_in_state,
                                                                       camera_extrinsics=args.cam_extrinsics,
                                                                       camera_intrinsics=args.cam_intrinsics)
-    test_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
+    filter_func = lambda b: data.filter_func(b, mean_dt=args.mean_dt, std_dt=args.std_dt)
+    test_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test', filter_func)  # Test dataset
 
     # Get start & goal samples
     start_id = pargs.start_id if (pargs.start_id >= 0) else np.random.randint(len(test_dataset))

@@ -218,7 +218,7 @@ def main():
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine other than the NVIDIADGX")
-    if args.reject_right_sill:
+    if args.reject_right_still:
         print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine other than the NVIDIADGX")
     valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,

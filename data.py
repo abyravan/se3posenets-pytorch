@@ -323,11 +323,11 @@ def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
             nstate = len(state_labels)
             left_ids  = [state_labels.index(x) for x in ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_w1', 'left_w2']]
             right_ids = [state_labels.index(x) for x in ['right_s0', 'right_s1', 'right_e0', 'right_e1', 'right_w0', 'right_w1', 'right_w2']]
-            jtangles = torch.zeros(nexamples+step*(seq+1), nstate)
+            jtangles = np.zeros((nexamples+step*(seq+1), nstate), dtype=np.float32)
             for k in xrange(nexamples+step*(seq+1)):
                 with open(path + 'state' + str(k) + '.txt', 'rb') as csvfile:
                     spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-                    jtangles[k]  = torch.FloatTensor(spamreader.next()[0:-1])
+                    jtangles[k]  = spamreader.next()[0:-1]
         ## Compute all the valid examples
         validids = []
         for k in xrange(nexamples):
@@ -336,25 +336,29 @@ def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
             tok = np.all(np.abs(dt - mean_dt) < 2*std_dt)
             # Compute max change in joint angles of left arm. Threshold this
             if reject_left_motion:
-                dall = jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step] # Step along the timestamps
-                leftok = np.all(dall[:, left_ids].abs().max() < 0.005) # Max change in left arm < 0.005 radians
+                dall = np.abs(jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step]) # Step along the timestamps
+                leftok = (dall[:, left_ids].max() < 0.005) # Max change in left arm < 0.005 radians
             else:
                 leftok = True
             # Compute max change in joint angles of right arm.
             # Atleast one joint has to have a decent motion in a sequence
             if reject_right_still:
-                dall = jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step] # Step along the timestamps
-                rightok = True
-                for j in xrange(dall.shape[0]):
-                    if np.all(dall[j, right_ids].abs().max() < 0.015): # If all joints have little motion, discard it
-                        rightok = False
-                        break
+                dall = np.abs(jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step]) # Step along the timestamps
+                nstill = (dall[:, right_ids].max(1) < 0.005).sum()
+                rightok = (nstill < seq/2.) # Atleast half the frames need to have motion
+                # All frames need to have motion here (very strict)
+                # rightok = True
+                # for j in xrange(dall.shape[0]):
+                #     if dall[j, right_ids].max() < 0.005: # If all joints in this frame have little motion, discard example
+                #         rightok = False
+                #         break
             else:
                 rightok = True
+            # If all tests pass, accept example
             if tok and leftok and rightok:
                 validids.append(k) # The entire sequence has dts that are within 2 std.devs of the mean dt
     except:
-        print("Did not run validity check. Using all examples in the dataset")
+        print("Failed/Did not run validity check. Using all examples in the dataset")
         validids = range(0, nexamples)  # For sim data, no need for this step
     return validids
 

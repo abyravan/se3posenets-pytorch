@@ -217,10 +217,10 @@ def main():
     # Get datasets
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
-              "NOTE: This test will be slow on any machine other than the NVIDIADGX")
+              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
     if args.reject_right_still:
         print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
-              "NOTE: This test will be slow on any machine other than the NVIDIADGX")
+              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
     valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                state_labels=statelabels,

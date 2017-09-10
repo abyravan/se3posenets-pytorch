@@ -43,6 +43,10 @@ def setup_comon_options():
                         help='Windowsize for DA search (used for flow/visibility computation) (default: 5)')
     parser.add_argument('--use-only-da-for-flows', action='store_true', default=False,
                         help='Use only data-association for computing flows, dont use tracker info. (default: False)')
+    parser.add_argument('--reject-left-motion', action='store_true', default=False,
+                        help='Reject examples where any joint of the left arm moves by >0.005 radians inter-frame. (default: False)')
+    parser.add_argument('--reject-right-still', action='store_true', default=False,
+                        help='Reject examples where all joints of the right arm move by <0.01 radians inter-frame. (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

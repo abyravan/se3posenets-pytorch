@@ -309,8 +309,58 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
 ############
 ###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
 
+### Function that filters the data based - mainly for the real data where we need to check dts
+### and other related stuff.
+def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
+                      state_labels=[], reject_left_motion=False,
+                      reject_right_still=False):
+    try:
+        ## Read the meta-data to get "timestamps"
+        meta_data = np.loadtxt(path + '/trackerdata_meta.txt', skiprows=1)
+        timestamps = (meta_data[0:nexamples+step*(seq+1), 1] + 1e-9 * meta_data[0:nexamples+step*(seq+1), 2]) - meta_data[0,0] # Convert to seconds
+        ## Read all the state files
+        if reject_left_motion or reject_right_still:
+            nstate = len(state_labels)
+            left_ids  = [state_labels.index(x) for x in ['left_s0', 'left_s1', 'left_e0', 'left_e1', 'left_w0', 'left_w1', 'left_w2']]
+            right_ids = [state_labels.index(x) for x in ['right_s0', 'right_s1', 'right_e0', 'right_e1', 'right_w0', 'right_w1', 'right_w2']]
+            jtangles = torch.zeros(nexamples+step*(seq+1), nstate)
+            for k in xrange(nexamples+step*(seq+1)):
+                with open(path + 'state' + str(k) + '.txt', 'rb') as csvfile:
+                    spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
+                    jtangles[k]  = torch.FloatTensor(spamreader.next()[0:-1])
+        ## Compute all the valid examples
+        validids = []
+        for k in xrange(nexamples):
+            # Compute dt & check if dts of all steps are within mean +- 2*std
+            dt = timestamps[k+step:k+step*(seq+1):step] - timestamps[k:k+step*seq:step] # Step along the timestamps
+            tok = np.all(np.abs(dt - mean_dt) < 2*std_dt)
+            # Compute max change in joint angles of left arm. Threshold this
+            if reject_left_motion:
+                dall = jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step] # Step along the timestamps
+                leftok = np.all(dall[:, left_ids].abs().max() < 0.005) # Max change in left arm < 0.005 radians
+            else:
+                leftok = True
+            # Compute max change in joint angles of right arm.
+            # Atleast one joint has to have a decent motion in a sequence
+            if reject_right_still:
+                dall = jtangles[k+step:k+step*(seq+1):step] - jtangles[k:k+step*seq:step] # Step along the timestamps
+                rightok = True
+                for j in xrange(dall.shape[0]):
+                    if np.all(dall[j, right_ids].abs().max() < 0.015): # If all joints have little motion, discard it
+                        rightok = False
+                        break
+            else:
+                rightok = True
+            if tok and leftok and rightok:
+                validids.append(k) # The entire sequence has dts that are within 2 std.devs of the mean dt
+    except:
+        print("Did not run validity check. Using all examples in the dataset")
+        validids = range(0, nexamples)  # For sim data, no need for this step
+    return validids
+
 ### Helper functions for reading the data directories & loading train/test files
-def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, train_per=0.6, val_per=0.15):
+def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, train_per=0.6, val_per=0.15,
+                                  valid_filter=None):
     # Get all the load directories
     if type(load_dirs) == str: # BWDs compatibility
         load_dirs = load_dirs.split(',,')  # Get all the load directories
@@ -331,10 +381,11 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                     if invalid:
                         numinvalid += 1
                     else:
-                        nimages = int(row[3])
-                        numdata.append(int(nimages - max_flow_step)) # We only have flows for these many images!
+                        nexamples = int(row[3])
+                        numdata.append(int(nexamples - max_flow_step)) # We only have flows for these many images!
                         dirnames.append(row[5])
-                print('Found {} motions ({} images, {} invalid) in dataset: {}'.format(len(numdata), sum(numdata), numinvalid, load_dir))
+                print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), numinvalid + len(numdata),
+                                                                                      sum(numdata), load_dir))
 
             # Setup training and test splits in the dataset, here we actually split based on the sub-dirs
             ndirs = len(dirnames)
@@ -342,10 +393,10 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
             ndirtest = int(ndirs - (ndirtrain + ndirval)) # Rest dirs are for testing
 
             # Get number of images in the datasets
-            nimages = sum(numdata)
+            nexamples = sum(numdata)
             ntrain = sum(numdata[:ndirtrain]) # Num images for training
             nval   = sum(numdata[ndirtrain:ndirtrain+ndirval]) # Validation
-            ntest  = nimages - (ntrain + nval) # Number of test images
+            ntest  = nexamples - (ntrain + nval) # Number of test images
             print('\tNum train: {} ({}), val: {} ({}), test: {} ({})'.format(
                 ndirtrain, ntrain, ndirval, nval, ndirtest, ntest))
 
@@ -355,10 +406,10 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                        'suffix' : img_suffix,
                        'step'   : step_len,
                        'seq'    : seq_len,
-                       'numdata': nimages,
+                       'numdata': nexamples,
                        'train'  : [0, ntrain - 1],
                        'val'    : [ntrain, ntrain + nval - 1],
-                       'test'   : [ntrain + nval, nimages - 1],
+                       'test'   : [ntrain + nval, nexamples - 1],
                        'subdirs': {'dirnames': dirnames,
                                    'datahist': np.cumsum(numdata),
                                    'train'   : [0, ndirtrain - 1],
@@ -378,22 +429,34 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                     max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows (flow_k/)
                     with open(statsfilename, 'rb') as csvfile:
                         reader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-                        nimages = int(reader.next()[0]) - max_flow_step # We only have flows for these many images!
-                        print('Found {} images in the dataset: {}'.format(int(nimages), path))
+                        nexamples = int(reader.next()[0]) - max_flow_step # We only have flows for these many images!
 
-                    # Setup training and test splits in the dataset
-                    ntrain = int(train_per * nimages)  # Use first train_per images for training
-                    nval = int(val_per * nimages)  # Use next val_per images for validation set
-                    ntest = int(nimages - (ntrain + nval))  # Use remaining images as test set
+                    # This function checks all examples "apriori" to see if they are valid
+                    # and returns a set of ids such that the sequence of examples from that id
+                    # to id + seq*step are valid
+                    if valid_filter is not None:
+                        validids = valid_filter(path, nexamples, step_len, seq_len)
+                    else:
+                        validids = range(0, nexamples) # Is just the same as ids, all samples are valid
+                    nvalid = len(validids)
+                    print('Found {}/{} valid examples ({}%) in the dataset: {}'.format(int(nvalid),
+                            int(nexamples), nvalid*(100.0/nexamples), path))  # Setup training and test splits in the dataset
 
+                    # Split up train/test/validation
+                    ntrain = int(train_per * nvalid)  # Use first train_per valid examples for training
+                    nval   = int(val_per * nvalid)  # Use next val_per valid examples for validation set
+                    ntest  = int(nvalid - (ntrain + nval))  # Use remaining valid examples as test set
+
+                    # Create the dataset
                     dataset = {'path'   : path,
                                'suffix' : img_suffix,
                                'step'   : step_len,
                                'seq'    : seq_len,
-                               'numdata': nimages,
+                               'numdata': nvalid,
+                               'ids'    : validids,
                                'train'  : [0, ntrain - 1],
                                'val'    : [ntrain, ntrain + nval - 1],
-                               'test'   : [ntrain + nval, nimages - 1]}  # start & end inclusive
+                               'test'   : [ntrain + nval, nvalid - 1]}  # start & end inclusive
                     datasets.append(dataset)
 
     return datasets
@@ -411,7 +474,7 @@ def generate_baxter_sequence(dataset, idx):
         id   = idx - dataset['subdirs']['datahist'][did] # ID of image within the sub-directory
         path = dataset['path'] + '/' + dataset['subdirs']['dirnames'][did] + '/' # Get the path of the sub-directory
     else:
-        id   = idx # Use passed in ID directly
+        id   = dataset['ids'][idx] # Select from the list of valid ids
         path = dataset['path'] # Root of dataset
     # Setup start/end IDs of the sequence
     start, end = id, id + (step * seq)
@@ -616,10 +679,6 @@ class BaxterSeqDataset(Dataset):
         self.dtype = dtype
         self.filter_func = filter_func # Filters samples in the collater
 
-        # Some stats
-        self.numsampled = 0
-        self.numdiscarded = 0
-
         # Get some stats
         self.numdata = 0
         self.datahist = [0]
@@ -661,10 +720,6 @@ class BaxterSeqDataset(Dataset):
             for sample in batch:
                 if sample['poses'].eq(sample['poses']).all():
                     filtered_batch.append(sample)
-
-        # Update stats
-        self.numsampled += len(batch)
-        self.numdiscarded += len(batch) - len(filtered_batch) # Increment count
 
         # Collate the other samples together using the default collate function
         collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)

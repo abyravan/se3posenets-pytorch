@@ -33,7 +33,7 @@ use-ntfm-delta:     False
 wide-model:         True
 use-gt-poses:		  False
 use-gt-masks:		  False
-use-jt-angles:		  True
+use-jt-angles:		  False
 use-jt-angles-trans: False
 
 # Mask options
@@ -45,7 +45,7 @@ use-sigmoid-mask:  False
 # Loss options
 loss-type:        mse
 motion-norm-loss: False
-delta-flow-loss:  True
+delta-flow-loss:  False
 pt-wt:            1.0
 consis-wt:        0.1
 pose-dissim-wt:   0.0
@@ -72,5 +72,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/realdata/dartflows_n/8se3_soft_5seq_mse_deltaflow_noconsisdeltagrad_jtanglespose_rlcheck
+save-dir:  trained_nets/realdata/dartflows_n/8se3_soft_5seq_mse_noconsisdeltagrad_rlcheck
 disp-err-per-mask: False

@@ -37,7 +37,7 @@ use-jt-angles:		  False
 use-jt-angles-trans: False
 
 # Mask options
-use-wt-sharpening: False
+use-wt-sharpening: True
 sharpen-start-iter: 0
 sharpen-rate: 1.0
 use-sigmoid-mask:  False
@@ -72,5 +72,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/realdata/dartflows_n/8se3_soft_5seq_mse_deltaflow_noconsisdeltagrad_rlcheck
+save-dir:  trained_nets/realdata/dartflows_n/8se3_wtsharpenr1s0_5seq_mse_deltaflow_noconsisdeltagrad_rlcheck
 disp-err-per-mask: False

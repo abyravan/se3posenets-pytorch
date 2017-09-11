@@ -2,7 +2,8 @@
 import argparse
 args = argparse.Namespace()
 #args.data = ['/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-2_182257/']
-args.data = ['../data/session_2017-9-7_233102/']
+#args.data = ['../data/session_2017-9-7_233102/']
+args.data = ['../data/session_2017-9-8_152749/']
 args.img_suffix = ''
 args.step_len = 2
 args.seq_len = 100
@@ -114,7 +115,7 @@ args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabe
 print('Num state: {}, Num ctrl: {}, Num tracker: {}'.format(args.num_state, args.num_ctrl, args.num_tracker))
 
 ## TODO: More general
-statefile = load_dir + "/motion0/state0.txt"
+statefile = load_dir + "/motion0/state1.txt"
 state = read_baxter_state_file(statefile)
 
 # Get number of images
@@ -195,11 +196,16 @@ print('Dataset size => Train: {}'.format(len(train_dataset)))
 
 ########################
 ############ Load based on pangolin input
-id = torch.zeros(1)
+id = torch.zeros(1) + 100
 while True:
     # Read data
     print("Reading data....")
     sample = train_dataset[int(id[0])]
+    #
+    # # Load data from disk
+    # fname = '/home/barun/Projects/se3nets-pytorch/test_stats/8se3_wtsharpenr1s0_5seq_mse_deltaflow_noconsisdeltagrad_jtanglespose_rlcheck/'
+    # data = torch.load(fname + '/train-stats4251.pth.tar')
+    # sample['points'] = data['sample']['points']
 
     # Compute act, com & dart diff vels
     actdiffvels = sample['controls']

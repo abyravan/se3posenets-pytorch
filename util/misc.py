@@ -70,7 +70,7 @@ class DataEnumerator(object):
         self.niters = 0    # Num iterations in current run
         self.nruns  = 0    # Num rounds over the entire data
         self.enumerator = enumerate(self.data) # Keeps an iterator around
-
+        self.ids = [] # Used in case we want to keep track of the ids in the data
     def next(self):
         try:
             sample = self.enumerator.next() # Get next sample
@@ -82,6 +82,10 @@ class DataEnumerator(object):
             #print('Completed a run over the data. Num total runs: {}, Num total iters: {}'.format(
             #    self.nruns, self.niters+1))
         self.niters += 1 # Increment iteration count
+        try:
+            self.ids.append(sample[1]['id']) # Append if it exists
+        except:
+            pass
         return sample # Return sample
 
     def __len__(self):

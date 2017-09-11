@@ -366,7 +366,8 @@ def main():
                            'flowsum_f': te_flowsum_f, 'flowavg_f': te_flowavg_f,
                            'flowsum_b': te_flowsum_b, 'flowavg_b': te_flowavg_b,
                            'niters': test_loader.niters, 'nruns': test_loader.nruns,
-                           'totaliters': test_loader.iteration_count()
+                           'totaliters': test_loader.iteration_count(),
+                           'ids': test_loader.ids,
                            },
         }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
@@ -423,13 +424,15 @@ def main():
                             'flowsum_f': tr_flowsum_f, 'flowavg_f': tr_flowavg_f,
                             'flowsum_b': tr_flowsum_b, 'flowavg_b': tr_flowavg_b,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
-                            'totaliters': train_loader.iteration_count()
+                            'totaliters': train_loader.iteration_count(),
+                            'ids': train_loader.ids,
                             },
             'val_stats'  : {'loss': val_loss, 'fwdloss': val_fwdloss, 'bwdloss': val_bwdloss, 'consisloss': val_consisloss,
                             'flowsum_f': val_flowsum_f, 'flowavg_f': val_flowavg_f,
                             'flowsum_b': val_flowsum_b, 'flowavg_b': val_flowavg_b,
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
-                            'totaliters': val_loader.iteration_count()
+                            'totaliters': val_loader.iteration_count(),
+                            'ids': val_loader.ids,
                             },
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
@@ -463,8 +466,9 @@ def main():
                         'flowsum_f': te_flowsum_f, 'flowavg_f': te_flowavg_f,
                         'flowsum_b': te_flowsum_b, 'flowavg_b': te_flowavg_b,
                         'niters': test_loader.niters, 'nruns': test_loader.nruns,
-                        'totaliters': test_loader.iteration_count()
-                      },
+                        'totaliters': test_loader.iteration_count(),
+                        'ids': test_loader.ids,
+                       },
     }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Close log file

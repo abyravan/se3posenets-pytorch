@@ -25,6 +25,7 @@ from util import AverageMeter, Tee, DataEnumerator
 
 #### Setup options
 # Common
+import argparse
 import options
 parser = options.setup_comon_options()
 
@@ -333,16 +334,15 @@ def main():
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                         num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                         collate_fn=test_dataset.collate_batch))
-        te_loss, te_ptloss, te_consisloss, \
-            te_flowsum, te_flowavg = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
+        test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
         # Save final test error
         save_checkpoint({
             'args': args,
-            'test_stats': {'loss': te_loss, 'ptloss': te_ptloss, 'consisloss': te_consisloss,
-                           'flowsum': te_flowsum, 'flowavg': te_flowavg,
+            'test_stats': {'stats': test_stats,
                            'niters': test_loader.niters, 'nruns': test_loader.nruns,
-                           'totaliters': test_loader.iteration_count()
+                           'totaliters': test_loader.iteration_count(),
+                           'ids': test_loader.ids,
                            },
         }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
@@ -359,23 +359,22 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
 
         # Train for one epoch
-        tr_loss, tr_ptloss, tr_consisloss, \
-            tr_flowsum, tr_flowavg = iterate(train_loader, model, tblogger, args.train_ipe,
-                                             mode='train', optimizer=optimizer, epoch=epoch+1)
+        train_stats = iterate(train_loader, model, tblogger, args.train_ipe,
+                           mode='train', optimizer=optimizer, epoch=epoch+1)
 
-        # Log values and gradients of the parameters (histogram)
-        # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
-        for tag, value in model.named_parameters():
-            tag = tag.replace('.', '/')
-            tblogger.histo_summary(tag, util.to_np(value.data), epoch + 1)
-            tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
+        # # Log values and gradients of the parameters (histogram)
+        # # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
+        # for tag, value in model.named_parameters():
+        #     tag = tag.replace('.', '/')
+        #     tblogger.histo_summary(tag, util.to_np(value.data), epoch + 1)
+        #     tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
 
         # Evaluate on validation set
-        val_loss, val_ptloss, val_consisloss, \
-            val_flowsum, val_flowavg = iterate(val_loader, model, tblogger, args.val_ipe,
-                                                   mode='val', epoch=epoch+1)
+        val_stats = iterate(val_loader, model, tblogger, args.val_ipe,
+                            mode='val', epoch=epoch+1)
 
         # Find best loss
+        val_loss = val_stats.loss
         is_best       = (val_loss.avg < best_val_loss)
         prev_best_loss  = best_val_loss
         prev_best_epoch = best_epoch
@@ -393,17 +392,15 @@ def main():
             'epoch': epoch+1,
             'args' : args,
             'best_loss'  : best_val_loss,
-            'train_stats': {'loss': tr_loss, 'ptloss': tr_ptloss,
-                            'consisloss': tr_consisloss,
-                            'flowsum': tr_flowsum, 'flowavg': tr_flowavg,
+            'train_stats': {'stats': train_stats,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
-                            'totaliters': train_loader.iteration_count()
+                            'totaliters': train_loader.iteration_count(),
+                            'ids': train_loader.ids,
                             },
-            'val_stats'  : {'loss': val_loss, 'ptloss': val_ptloss,
-                            'consisloss': val_consisloss,
-                            'flowsum': val_flowsum, 'flowavg': val_flowavg,
+            'val_stats'  : {'stats': val_stats,
                             'niters': val_loader.niters, 'nruns': val_loader.nruns,
-                            'totaliters': val_loader.iteration_count()
+                            'totaliters': val_loader.iteration_count(),
+                            'ids': val_loader.ids,
                             },
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
@@ -422,19 +419,18 @@ def main():
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                     collate_fn=test_dataset.collate_batch))
-    te_loss, te_ptloss, te_consisloss, \
-        te_flowsum, te_flowavg = iterate(test_loader, model, tblogger, len(test_loader),
-                                         mode='test', epoch=args.epochs)
+    test_stats = iterate(test_loader, model, tblogger, len(test_loader),
+                         mode='test', epoch=args.epochs)
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
                                                                          best_epoch))
 
     # Save final test error
     save_checkpoint({
         'args': args,
-        'test_stats': {'loss': te_loss, 'ptloss': te_ptloss, 'consisloss': te_consisloss,
-                       'flowsum': te_flowsum, 'flowavg': te_flowavg,
+        'test_stats': {'stats': test_stats,
                        'niters': test_loader.niters, 'nruns': test_loader.nruns,
-                       'totaliters': test_loader.iteration_count()
+                       'totaliters': test_loader.iteration_count(),
+                       'ids': test_loader.ids,
                        },
     }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
@@ -451,11 +447,19 @@ def iterate(data_loader, model, tblogger, num_iters,
 
     # Setup avg time & stats:
     data_time, fwd_time, bwd_time, viz_time  = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    lossm, ptlossm, consislossm = AverageMeter(), AverageMeter(), AverageMeter()
-    flowlossm_sum, flowlossm_avg = AverageMeter(), AverageMeter()
-    dissimposelossm, dissimdeltalossm = AverageMeter(), AverageMeter()
-    #flowlossm_mask_sum, flowlossm_mask_avg = AverageMeter(), AverageMeter()
-    consiserrorm = AverageMeter()
+
+    # Save all stats into a namespace
+    stats = argparse.Namespace()
+    stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
+    stats.dissimposeloss, stats.dissimdeltaloss = AverageMeter(), AverageMeter()
+    stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
+    stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
+    stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
+    stats.consiserr                             = AverageMeter()
+    if mode == 'test':
+        # Save the flow errors and poses if in "testing" mode
+        stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
+        stats.predposes, stats.predtransposes, stats.preddeltas, stats.ctrls = [], [], [], []
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -643,11 +647,11 @@ def iterate(data_loader, model, tblogger, num_iters,
             dissimdeltaloss[k] = currdissimdeltaloss.data[0]
 
         # Update stats
-        ptlossm.update(ptloss)
-        consislossm.update(consisloss)
-        lossm.update(loss.data[0])
-        dissimposelossm.update(dissimposeloss)
-        dissimdeltalossm.update(dissimdeltaloss)
+        stats.ptloss.update(ptloss)
+        stats.consisloss.update(consisloss)
+        stats.loss.update(loss.data[0])
+        stats.dissimposeloss.update(dissimposeloss)
+        stats.dissimdeltaloss.update(dissimdeltaloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -680,12 +684,32 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_only_da_for_flows:
             # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
             # account when computing the flow errors
-            flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
+            flowerr_sum, flowerr_avg, \
+                motionerr_sum, motionerr_avg,\
+                stillerr_sum, stillerr_avg,\
+                motion_err, motion_npt,\
+                still_err, still_npt         = compute_masked_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
         else:
-            flowloss_sum, flowloss_avg, _, _ = compute_flow_errors(predflows, flows)
+            flowerr_sum, flowerr_avg, \
+                motionerr_sum, motionerr_avg, \
+                stillerr_sum, stillerr_avg, \
+                motion_err, motion_npt, \
+                still_err, still_npt         = compute_masked_flow_errors(predflows, flows)
 
         # Update stats
-        flowlossm_sum.update(flowloss_sum); flowlossm_avg.update(flowloss_avg)
+        stats.flowerr_sum.update(flowerr_sum); stats.flowerr_avg.update(flowerr_avg)
+        stats.motionerr_sum.update(motionerr_sum); stats.motionerr_avg.update(motionerr_avg)
+        stats.stillerr_sum.update(stillerr_sum); stats.stillerr_avg.update(stillerr_avg)
+        if mode == 'test':
+            stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
+            stats.still_err.append(still_err); stats.still_npt.append(still_npt)
+
+        # Save poses if in test mode
+        if mode == 'test':
+            stats.predposes.append([x.data.cpu().float() for x in poses])
+            stats.predtransposes.append([x.data.cpu().float() for x in transposes])
+            stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])
+            stats.ctrls.append(ctrls.data.cpu().float())
 
         # Compute flow error per mask (if asked to)
         #if args.disp_err_per_mask:
@@ -699,7 +723,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         for k in xrange(args.seq_len):
             consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs().max()
             consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1].data, transposes[k].data)
-        consiserrorm.update(consiserror)
+        stats.consiserr.update(consiserror)
 
         # Display/Print frequency
         bsz = pts.size(0)
@@ -707,10 +731,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             ### Print statistics
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
-                        loss=lossm, ptloss=ptlossm, consisloss=consislossm,
-                        posedisloss=dissimposelossm, deltadisloss=dissimdeltalossm,
-                        flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg,
-                        consiserror=consiserrorm, bsz=bsz)
+                        stats=stats, bsz=bsz)
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and not args.use_gt_masks:
@@ -739,8 +760,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
                 mode+'-consiserror': consiserror.sum(),
                 mode+'-consiserrormax': consiserrormax.sum(),
-                mode+'-flowerrsum': flowloss_sum.sum()/bsz,
-                mode+'-flowerravg': flowloss_avg.sum()/bsz,
+                mode+'-flowerrsum': flowerr_sum.sum()/bsz,
+                mode+'-flowerravg': flowerr_avg.sum()/bsz,
+                mode+'-motionerrsum': motionerr_sum.sum()/bsz,
+                mode+'-motionerravg': motionerr_avg.sum()/bsz,
+                mode+'-stillerrsum': stillerr_sum.sum() / bsz,
+                mode+'-stillerravg': stillerr_avg.sum() / bsz,
             }
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
@@ -798,32 +823,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                         (initmask.data[id,k] - 1).abs().le(1e-5).sum()))
                 print('')
 
-                # ## Save stuff
-                # if mode == 'train':
-                #     savedata = {
-                #         'epoch': epoch + 1,
-                #         'args': args,
-                #         'sample': sample,
-                #         'maskdisp': maskdisp,
-                #         'depthdisp': depthdisp,
-                #         'flowdisp': flowdisp,
-                #         'predposes': poses,
-                #         'predmask': initmask,
-                #         'preddeltaposes': deltaposes,
-                #         'predtransposes': transposes,
-                #         'predcompdeltaposes': compdeltaposes,
-                #         'predpts': predpts,
-                #         'predflows': predflows,
-                #         'gtflows': flows,
-                #         'id': id,
-                #         'train_iter': num_train_iter,
-                #         'model_state_dict': model.state_dict(),
-                #         'optimizer_state_dict': optimizer.state_dict(),
-                #     }
-                #     savefile = args.save_dir + '/' + mode + '-stats' + str(iterct) + '.pth.tar'
-                #     torch.save(savedata, savefile)
-                #     print("Saved data at: " + savefile)
-
         # Measure viz time
         viz_time.update(time.time() - start)
 
@@ -831,38 +830,40 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
     print_stats(mode, epoch=epoch, curr=num_iters, total=num_iters,
                 samplecurr=data_loader.niters+1, sampletotal=len(data_loader),
-                loss=lossm, ptloss=ptlossm, consisloss=consislossm,
-                posedisloss=dissimposelossm, deltadisloss=dissimdeltalossm,
-                flowloss_sum=flowlossm_sum, flowloss_avg=flowlossm_avg,
-                consiserror=consiserrorm)
+                stats=stats)
     print('========================================================')
 
     # Return the loss & flow loss
-    return lossm, ptlossm, consislossm, \
-           flowlossm_sum, flowlossm_avg
+    return stats
 
 ### Print statistics
 def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
-                loss, ptloss, consisloss, posedisloss, deltadisloss,
-                flowloss_sum, flowloss_avg, consiserror, bsz=None):
+                stats, bsz=None):
     # Print loss
     bsz = args.batch_size if bsz is None else bsz
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], Batch size: {}, '
           'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
-        sampletotal, bsz, loss=loss))
+        sampletotal, bsz, loss=stats.loss))
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
-              'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '.format(
+              'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
+              'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.6f}/{:.6f}'
+            .format(
             1 + k * args.step_len,
-            ptloss.val[k], ptloss.avg[k], consisloss.val[k], consisloss.avg[k],
-            consiserror.val[k], consiserror.avg[k],
-            posedisloss.val[k], posedisloss.avg[k], deltadisloss.val[k], deltadisloss.avg[k],
-            flowloss_sum.val[k] / bsz, flowloss_sum.avg[k] / bsz,
-            flowloss_avg.val[k] / bsz, flowloss_avg.avg[k] / bsz))
+            stats.ptloss.val[k], stats.ptloss.avg[k],
+            stats.consisloss.val[k], stats.consisloss.avg[k],
+            stats.consiserr.val[k], stats.consiserr.avg[k],
+            stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
+            stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
+            stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
+            stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
+            stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,
+            stats.motionerr_avg.avg[k] / bsz, stats.stillerr_avg.avg[k] / bsz,
+        ))
 
 ### Load optimizer
 def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1e-4):
@@ -898,6 +899,48 @@ def compute_flow_errors(predflows, gtflows):
     loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
     # Return
     return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
+
+### Compute flow errors for moving / non-moving pts (flows are size: B x S x 3 x H x W)
+def compute_masked_flow_errors(predflows, gtflows):
+    batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
+    # Compute num pts not moving per mask
+    # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
+    motionmask = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows) # B x S x 1 x H x W
+    err = (predflows - gtflows).pow(2).sum(2) # B x S x 1 x H x W
+
+    # Compute errors for points that are supposed to move
+    motion_err = (err * motionmask).view(batch, seq, -1).sum(2) # Errors for only those points that are supposed to move
+    motion_npt = motionmask.view(batch, seq, -1).sum(2) # Num points that move (B x S)
+
+    # Compute errors for points that are supposed to not move
+    motionmask.eq_(0) # Mask out points that are not supposed to move
+    still_err = (err * motionmask).view(batch, seq, -1).sum(2)  # Errors for non-moving points
+    still_npt = motionmask.view(batch, seq, -1).sum(2)  # Num non-moving pts (B x S)
+
+    # Bwds compatibility to old error
+    full_err_avg  = (motion_err + still_err) / motion_npt
+    full_err_avg[full_err_avg != full_err_avg] = 0  # Clear out any Nans
+    full_err_avg[full_err_avg == np.inf] = 0  # Clear out any Infs
+    full_err_sum, full_err_avg = (motion_err + still_err).sum(0), full_err_avg.sum(0) # S, S
+
+    # Compute sum/avg stats
+    motion_err_avg = (motion_err / motion_npt)
+    motion_err_avg[motion_err_avg != motion_err_avg] = 0  # Clear out any Nans
+    motion_err_avg[motion_err_avg == np.inf] = 0      # Clear out any Infs
+    motion_err_sum, motion_err_avg = motion_err.sum(0), motion_err_avg.sum(0) # S, S
+
+    # Compute sum/avg stats
+    still_err_avg = (still_err / still_npt)
+    still_err_avg[still_err_avg != still_err_avg] = 0  # Clear out any Nans
+    still_err_avg[still_err_avg == np.inf] = 0  # Clear out any Infs
+    still_err_sum, still_err_avg = still_err.sum(0), still_err_avg.sum(0)  # S, S
+
+    # Return
+    return full_err_sum.cpu().float(), full_err_avg.cpu().float(), \
+           motion_err_sum.cpu().float(), motion_err_avg.cpu().float(), \
+           still_err_sum.cpu().float(), still_err_avg.cpu().float(), \
+           motion_err.cpu().float(), motion_npt.cpu().float(), \
+           still_err.cpu().float(), still_npt.cpu().float()
 
 ### Compute flow errors per mask (flows are size: B x S x 3 x H x W)
 def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):

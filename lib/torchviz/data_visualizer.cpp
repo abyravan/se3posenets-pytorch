@@ -1145,9 +1145,9 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
                    glNormal3f(data_normals_fl[id + 0*npts],
                               data_normals_fl[id + 1*npts],
                               data_normals_fl[id + 2*npts]);*/
-                   glVertex3f(data_ptcloud[id + 0*npts] + flow[id + 0*npts],
-                              data_ptcloud[id + 1*npts] + flow[id + 1*npts],
-                              data_ptcloud[id + 2*npts] + flow[id + 2*npts]);
+                   glVertex3f(initdata[id + 0*npts] + flow[id + 0*npts],
+                              initdata[id + 1*npts] + flow[id + 1*npts],
+                              initdata[id + 2*npts] + flow[id + 2*npts]);
                }
 
                if (showFTrackerNextPtCloud)

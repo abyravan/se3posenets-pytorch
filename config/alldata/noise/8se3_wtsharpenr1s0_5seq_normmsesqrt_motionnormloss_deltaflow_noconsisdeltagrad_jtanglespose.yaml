@@ -28,7 +28,6 @@ use-gt-poses:		  False
 use-gt-masks:		  False
 use-jt-angles:		  True
 use-jt-angles-trans: False
-no-consis-delta-grads: True
 
 # Mask options
 use-wt-sharpening: True
@@ -45,6 +44,7 @@ consis-wt:        10.0
 pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0
 loss-scale:       10000.0
+no-consis-delta-grads: True
 
 # Training options
 no-cuda:        False

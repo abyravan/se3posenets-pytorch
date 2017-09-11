@@ -1007,6 +1007,10 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
                                                use_jt_angles=use_jt_angles_trans, num_state=num_state)
+        # Options
+        self.use_jt_angles = use_jt_angles
+        self.use_jt_angles_trans = use_jt_angles_trans
+
     # Predict pose only
     def forward_only_pose(self, x):
         ptcloud, jtangles = x

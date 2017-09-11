@@ -241,6 +241,10 @@ def main():
     if args.reject_right_still:
         print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
+        if args.add_noise:
+            print("Adding noise to the depths, actual configs & ctrls")
+    noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.015, scale_d=True,
+                                                      std_j=0.02) if args.add_noise else None
     valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                state_labels=statelabels,
@@ -258,7 +262,8 @@ def main():
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=True, num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
-                                                                       use_only_da=args.use_only_da_for_flows)
+                                                                       use_only_da=args.use_only_da_for_flows,
+                                                                       noise_func=noise_func)
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train') # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')   # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

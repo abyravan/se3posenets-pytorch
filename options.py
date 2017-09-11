@@ -47,6 +47,8 @@ def setup_comon_options():
                         help='Reject examples where any joint of the left arm moves by >0.005 radians inter-frame. (default: False)')
     parser.add_argument('--reject-right-still', action='store_true', default=False,
                         help='Reject examples where all joints of the right arm move by <0.01 radians inter-frame. (default: False)')
+    parser.add_argument('--add-noise', action='store_true', default=False,
+                        help='Enable adding noise to the depths and the configs/ctrls. (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

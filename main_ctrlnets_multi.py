@@ -38,7 +38,6 @@ parser.add_argument('--pt-wt', default=1, type=float,
 parser.add_argument('--kstep-consis', action='store_true', default=False,
                     help='Consistency between t = 0 & t = k+1 instead of t = k & t = k+1 (default: False)')
 
-
 ################ MAIN
 #@profile
 def main():
@@ -221,6 +220,10 @@ def main():
     if args.reject_right_still:
         print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
+    if args.add_noise:
+        print("Adding noise to the depths, actual configs & ctrls")
+    noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.015,
+                                                      scale_d=True, std_j=0.02) if args.add_noise else None
     valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                state_labels=statelabels,
@@ -238,7 +241,8 @@ def main():
                                                                        camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
-                                                                       use_only_da=args.use_only_da_for_flows) # Need BWD flows / masks if using GT masks
+                                                                       use_only_da=args.use_only_da_for_flows,
+                                                                       noise_func=noise_func) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -793,6 +797,32 @@ def iterate(data_loader, model, tblogger, num_iters,
                         initmask.data[id,k].std(), initmask.data[id,k].view(-1).cpu().float().median(),
                         (initmask.data[id,k] - 1).abs().le(1e-5).sum()))
                 print('')
+
+                # ## Save stuff
+                # if mode == 'train':
+                #     savedata = {
+                #         'epoch': epoch + 1,
+                #         'args': args,
+                #         'sample': sample,
+                #         'maskdisp': maskdisp,
+                #         'depthdisp': depthdisp,
+                #         'flowdisp': flowdisp,
+                #         'predposes': poses,
+                #         'predmask': initmask,
+                #         'preddeltaposes': deltaposes,
+                #         'predtransposes': transposes,
+                #         'predcompdeltaposes': compdeltaposes,
+                #         'predpts': predpts,
+                #         'predflows': predflows,
+                #         'gtflows': flows,
+                #         'id': id,
+                #         'train_iter': num_train_iter,
+                #         'model_state_dict': model.state_dict(),
+                #         'optimizer_state_dict': optimizer.state_dict(),
+                #     }
+                #     savefile = args.save_dir + '/' + mode + '-stats' + str(iterct) + '.pth.tar'
+                #     torch.save(savedata, savefile)
+                #     print("Saved data at: " + savefile)
 
         # Measure viz time
         viz_time.update(time.time() - start)

@@ -499,6 +499,17 @@ def generate_baxter_sequence(dataset, idx):
 
 ############
 ### DATA LOADERS: FUNCTION TO LOAD DATA FROM DISK & TORCH DATASET CLASS
+def add_gaussian_noise(depths, configs, std_d=0.015,
+                       scale_d=True, std_j=0.02):
+    # Add random gaussian noise to the depths
+    noise_d = torch.randn(depths.size()).type_as(depths) * std_d # Sample from 0-mean, 1-std distribution & scale by the std
+    if scale_d:
+        noise_d.mul_((depths/2.5).clamp_(min=0.5, max=1.0)) # Scale the std.deviation essentially based on the depth
+    depths.add_(noise_d) # Add the noise to the depths
+
+    # Add control / config noise
+    noise_c = torch.randn(configs.size().mul_(std_j).clamp_(max=2*std_j, min=-2*std_j))
+    configs.add_(noise_c)
 
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
@@ -506,7 +517,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
                                    camera_extrinsics={}, camera_intrinsics={},
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
-                                   dathreshold=0.01, dawinsize=5, use_only_da=False):
+                                   dathreshold=0.01, dawinsize=5, use_only_da=False,
+                                   noise_func=None):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -594,6 +606,11 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                 controls[k] = state['actjtvel'][ctrl_ids] # state -> ctrl dimension
             elif ctrl_type == 'comacc':  # Right arm joint accelerations
                 controls[k] = state['comjtacc'] # ctrl dimension
+
+    # Add noise to the depths before we compute the point cloud
+    if noise_func is not None:
+        assert(ctrl_type == 'actdiffvel') # Since we add noise only to the configs
+        noise_func(depths, actconfigs)
 
     # Different control types
     dt = t[1:] - t[:-1] # Get proper dt which can vary between consecutive frames

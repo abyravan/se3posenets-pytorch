@@ -508,7 +508,7 @@ def add_gaussian_noise(depths, configs, std_d=0.015,
     depths.add_(noise_d) # Add the noise to the depths
 
     # Add control / config noise
-    noise_c = torch.randn(configs.size().mul_(std_j).clamp_(max=2*std_j, min=-2*std_j))
+    noise_c = torch.randn(configs.size()).mul_(std_j).clamp_(max=2*std_j, min=-2*std_j)
     configs.add_(noise_c)
 
 ### Load baxter sequence from disk

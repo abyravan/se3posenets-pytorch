@@ -46,7 +46,8 @@ use-sigmoid-mask:  False
 loss-type:        mse
 motion-norm-loss: False
 #delta-flow-loss:  False
-pt-wt:            1.0
+fwd-wt:           1.0
+bwd-wt:           1.0
 consis-wt:        0.1
 pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0

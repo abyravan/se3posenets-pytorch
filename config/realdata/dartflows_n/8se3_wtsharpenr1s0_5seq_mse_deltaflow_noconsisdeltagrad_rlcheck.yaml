@@ -1,0 +1,76 @@
+---
+# Dataset options
+data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-7_233102/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_02519/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_111150/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_134717/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_152749/]
+batch-size:   16
+num-workers:  8
+train-per:    0.7
+val-per:      0.1
+img-scale:    1e-3
+img-suffix:	  None
+step-len:     2
+seq-len:      5
+ctrl-type:    actdiffvel
+mean-dt:		  0.0698  #0.0698
+std-dt:		    0.00275 #0.0025
+da-winsize:   5
+da-threshold: 0.015
+use-only-da-for-flows: False
+reject-left-motion: True
+reject-right-still: True
+
+# Model options
+no-batch-norm:      False
+pre-conv:           False
+nonlin:             prelu
+se3-type:           se3aa
+pred-pivot:         False
+num-se3:            8
+init-transse3-iden: True
+init-posese3-iden:  True
+#decomp-model:       False
+local-delta-se3:    False
+use-ntfm-delta:     False
+wide-model:         True
+use-gt-poses:		  False
+use-gt-masks:		  False
+use-jt-angles:		  False
+use-jt-angles-trans: False
+
+# Mask options
+use-wt-sharpening: True
+sharpen-start-iter: 0
+sharpen-rate: 1.0
+use-sigmoid-mask:  False
+
+# Loss options
+loss-type:        mse
+motion-norm-loss: False
+delta-flow-loss:  True
+pt-wt:            1.0
+consis-wt:        0.1
+pose-dissim-wt:   0.0
+delta-dissim-wt:  0.0
+loss-scale:       10000.0
+no-consis-delta-grads: True
+
+# Training options
+no-cuda:        False
+use-pin-memory: False
+epochs:         50
+start-epoch:    0
+train-ipe:      2000
+val-ipe:        500
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: adam
+lr:           1e-4
+momentum:     0
+lr-decay:     0.1
+decay-epochs: 50
+
+# Display/Save options
+disp-freq: 25
+save-dir:  trained_nets/realdata/dartflows_n/8se3_wtsharpenr1s0_5seq_mse_deltaflow_noconsisdeltagrad_rlcheck
+disp-err-per-mask: False

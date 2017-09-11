@@ -499,13 +499,13 @@ def generate_baxter_sequence(dataset, idx):
 
 ############
 ### DATA LOADERS: FUNCTION TO LOAD DATA FROM DISK & TORCH DATASET CLASS
-def add_gaussian_noise(depths, configs, std_d=0.015,
+def add_gaussian_noise(depths, configs, std_d=0.02,
                        scale_d=True, std_j=0.02):
     # Add random gaussian noise to the depths
     noise_d = torch.randn(depths.size()).type_as(depths) * std_d # Sample from 0-mean, 1-std distribution & scale by the std
     if scale_d:
-        noise_d.mul_((depths/2.5).clamp_(min=0.5, max=1.0)) # Scale the std.deviation essentially based on the depth
-    depths.add_(noise_d) # Add the noise to the depths
+        noise_d.mul_((depths/2.5).clamp_(min=0.25, max=1.0)) # Scale the std.deviation essentially based on the depth
+    depths.add_(noise_d).clamp_(min=0) # Add the noise to the depths
 
     # Add control / config noise
     noise_c = torch.randn(configs.size()).mul_(std_j).clamp_(max=2*std_j, min=-2*std_j)

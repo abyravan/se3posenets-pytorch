@@ -1,6 +1,12 @@
 #include <TH/TH.h>
 #include <assert.h>
 #include <math.h>
+#include <stdbool.h>
+
+bool check_limits(const unsigned int r, const unsigned int c, const unsigned int maxr, const unsigned int maxc)
+{
+	return ((r >= 0) && (r < maxr) && (c >= 0) && (c <= maxc));
+}
 
 void compute_visibility_and_flows(
         const float *cloud1,
@@ -64,54 +70,53 @@ void compute_visibility_and_flows(
 
                 // Get the target depth & compute corresponding 3D point in the target
                 const unsigned int c1 = floor(csubpix);
-                const unsigned int c2 =  ceil(csubpix);
+                const unsigned int c2 = c1 + 1;
                 const unsigned int r1 = floor(rsubpix);
-                const unsigned int r2 =  ceil(rsubpix);
-                if (c2 == c1 || r2 == r1) // Special case - point projects onto itself, so no flow but it is visible
-                {
-                    // == Set visibility to true
-                    *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // visible
-                    continue;
-                }
+                const unsigned int r2 = r1 + 1;
 
                 // Compute interpolated weights & depth
                 float w = 0, z = 0;
+					 int ct = 0;
 
                 // 1,1
-                if (c1 >= 0 && c1 < ncols && r1 >= 0 && r1 < nrows && (fabs(zp - depth2[r1*cs[2] + c1*cs[3]]) < threshold))
+                if (check_limits(r1, c1, nrows, ncols) && (fabsf(zp - depth2[r1*cs[2] + c1*cs[3]]) < threshold))
                 {
                     float wt = (r2-rsubpix) * (c2-csubpix);
                     w += wt;
                     z += wt * depth2[r1*cs[2] + c1*cs[3]];
+						  ct++;
                 }
 
                 // 1,2
-                if (c1 >= 0 && c1 < ncols && r2 >= 0 && r2 < nrows && (fabs(zp - depth2[r2*cs[2] + c1*cs[3]]) < threshold))
+                if (check_limits(r2, c1, nrows, ncols) && (fabsf(zp - depth2[r2*cs[2] + c1*cs[3]]) < threshold))
                 {
                     float wt = (rsubpix-r1) * (c2-csubpix);
                     w += wt;
                     z += wt * depth2[r2*cs[2] + c1*cs[3]];
+						  ct++;
                 }
 
                 // 2,1
-                if (c2 >= 0 && c2 < ncols && r1 >= 0 && r1 < nrows && (fabs(zp - depth2[r1*cs[2] + c2*cs[3]]) < threshold))
+                if (check_limits(r1, c2, nrows, ncols) && (fabsf(zp - depth2[r1*cs[2] + c2*cs[3]]) < threshold))
                 {
                     float wt = (r2-rsubpix) * (csubpix-c1);
                     w += wt;
                     z += wt * depth2[r1*cs[2] + c2*cs[3]];
+						  ct++;
                 }
 
                 // 2,2
-                if (c2 >= 0 && c2 < ncols && r2 >= 0 && r2 < nrows && (fabs(zp - depth2[r2*cs[2] + c2*cs[3]]) < threshold))
+                if (check_limits(r2, c2, nrows, ncols) && (fabsf(zp - depth2[r2*cs[2] + c2*cs[3]]) < threshold))
                 {
                     float wt = (rsubpix-r1) * (csubpix-c1);
                     w += wt;
                     z += wt * depth2[r2*cs[2] + c2*cs[3]];
+						  ct++;
                 }
 
                 // Compute interpolated depth, flows & visibility
                 // In case none of the points are within the threshold, then w = 0 here
-                if (w > 0)
+                if (w > 0) //&& ct == 4)
                 {
                     // == Divide by total weight to get interpolated depth
                     z /= w;
@@ -128,9 +133,9 @@ void compute_visibility_and_flows(
                     float z1 = *(cloud1 + 2*cs[1] + valc);
 
                     // Flow from t1-t2
-                    *(flows12 + 0*cs[1] + valc) = x - x1;
-                    *(flows12 + 1*cs[1] + valc) = y - y1;
-                    *(flows12 + 2*cs[1] + valc) = z - z1;
+                    *(flows12 + 0*cs[1] + valc) = xp - x1;
+                    *(flows12 + 1*cs[1] + valc) = yp - y1;
+                    *(flows12 + 2*cs[1] + valc) = zp - z1;
                 }
             }
         }

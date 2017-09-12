@@ -50,7 +50,7 @@ no-cuda:        False
 use-pin-memory: False
 epochs:         50
 start-epoch:    0
-train-ipe:      2000
+train-ipe:      5000
 val-ipe:        500
 evaluate:       False
 seed:           100

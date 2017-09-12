@@ -25,15 +25,13 @@ void compute_visibility_and_flows(
         long nrows,
         long ncols)
 {
-    // Setup extra params
-    float sqthresh   = pow(threshold,2); // Threshold on squared distance
-    int winhalfsize  = floor(winsize/2.0); // -winhalfsize -> (-winhalfsize + winsize-1)
-
     // Project to get pixel in target image, check directly instead of going through a full projection step where we check for visibility
     // Iterate over the images and compute the data-associations (using the vertex map images)
     long b,r,c;
     for(b = 0; b < batchsize; b++)
     {
+        // Iterate over the depth image & compute flows
+        const float *depth2 = cloud2 + b*cs[0] + 2*cs[1];
         for(r = 0; r < nrows; r++)
         {
             for(c = 0; c < ncols; c++)
@@ -61,48 +59,65 @@ void compute_visibility_and_flows(
                 float zp  = T[8] * xi + T[9] * yi + T[10] * zi + T[11];
 
                 // Project target 3D point (in cam frame) onto canvas to get approx pixel location to search for DA
-                int cpix = (int) round((xp/zp)*fx + cx);
-                int rpix = (int) round((yp/zp)*fy + cy);
-                if (rpix < 0 || rpix >= nrows || cpix < 0 || cpix >= ncols) continue;
+                float csubpix = (xp/zp)*fx + cx;
+                float rsubpix = (yp/zp)*fy + cy;
 
-                // Check in a region around this point to see if you can find a match in the local vertices of frame t2
-                float mindist = HUGE_VALF;
-                int mintr = -1, mintc = -1;
-                int tr, tc;
-                for (tr = (rpix-winhalfsize); tr < (rpix-winhalfsize+winsize); tr++)
+                // Get the target depth & compute corresponding 3D point in the target
+                const unsigned int c1 = floor(csubpix);
+                const unsigned int c2 =  ceil(csubpix);
+                const unsigned int r1 = floor(rsubpix);
+                const unsigned int r2 =  ceil(rsubpix);
+                if (c2 == c1 || r2 == r1) // Special case - point projects onto itself, so no flow but it is visible
                 {
-                    for (tc = (cpix-winhalfsize); tc < (cpix-winhalfsize+winsize); tc++)
-                    {
-                        // Check limits
-                        if (tr < 0 || tr >= nrows || tc < 0 || tc >= ncols) continue;
-
-                        // Get target value
-                        long valtc = b*cs[0] + tr*cs[2] + tc*cs[3]; // Don't add stride along 3D dim
-                        float xt = *(local2 + 0*cs[1] + valtc);
-                        float yt = *(local2 + 1*cs[1] + valtc);
-                        float zt = *(local2 + 2*cs[1] + valtc);
-
-                        // Get link label for that target point
-                        unsigned char mt = *(label2 + b*ls[0] + tr*ls[2] + tc*ls[3]);
-
-                        // Compare only in the same mesh, if not continue
-                        if (mt != mi) continue;
-
-                        // Now check distance in local-coordinates
-                        // If this is closer than previous NN & also less than the outlier threshold, count for loss
-                        float dist = pow(xi-xt, 2) + pow(yi-yt, 2) + pow(zi-zt, 2);
-                        if ((dist < mindist) && (dist < sqthresh))
-                        {
-                            mindist = dist;
-                            mintr = tr;
-                            mintc = tc;
-                        }
-                    }
+                    // == Set visibility to true
+                    *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // visible
+                    continue;
                 }
 
-                // In case we found a match, update outputs
-                if(mintr != -1 && mintc != -1)
+                // Compute interpolated weights & depth
+                float w = 0, z = 0;
+
+                // 1,1
+                if (c1 >= 0 && c1 < ncols && r1 >= 0 && r1 < nrows && (fabs(zp - depth2[r1*cs[2] + c1*cs[3]]) < threshold))
                 {
+                    float wt = (r2-rsubpix) * (c2-csubpix);
+                    w += wt;
+                    z += wt * depth2[r1*cs[2] + c1*cs[3]];
+                }
+
+                // 1,2
+                if (c1 >= 0 && c1 < ncols && r2 >= 0 && r2 < nrows && (fabs(zp - depth2[r2*cs[2] + c1*cs[3]]) < threshold))
+                {
+                    float wt = (rsubpix-r1) * (c2-csubpix);
+                    w += wt;
+                    z += wt * depth2[r2*cs[2] + c1*cs[3]];
+                }
+
+                // 2,1
+                if (c2 >= 0 && c2 < ncols && r1 >= 0 && r1 < nrows && (fabs(zp - depth2[r1*cs[2] + c2*cs[3]]) < threshold))
+                {
+                    float wt = (r2-rsubpix) * (csubpix-c1);
+                    w += wt;
+                    z += wt * depth2[r1*cs[2] + c2*cs[3]];
+                }
+
+                // 2,2
+                if (c2 >= 0 && c2 < ncols && r2 >= 0 && r2 < nrows && (fabs(zp - depth2[r2*cs[2] + c2*cs[3]]) < threshold))
+                {
+                    float wt = (rsubpix-r1) * (csubpix-c1);
+                    w += wt;
+                    z += wt * depth2[r2*cs[2] + c2*cs[3]];
+                }
+
+                // Compute interpolated depth, flows & visibility
+                // In case none of the points are within the threshold, then w = 0 here
+                if (w > 0)
+                {
+                    // == Divide by total weight to get interpolated depth
+                    z /= w;
+                    float x = ((csubpix - cx)/fx) * z;
+                    float y = ((rsubpix - cy)/fy) * z;
+
                     // == Set visibility to true
                     *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // visible
 
@@ -112,16 +127,10 @@ void compute_visibility_and_flows(
                     float y1 = *(cloud1 + 1*cs[1] + valc);
                     float z1 = *(cloud1 + 2*cs[1] + valc);
 
-                    // DA Point @ t2
-                    long valtc = b*cs[0] + mintr*cs[2] + mintc*cs[3]; // Don't add stride along 3D dim
-                    float x2 = *(cloud2 + 0*cs[1] + valtc);
-                    float y2 = *(cloud2 + 1*cs[1] + valtc);
-                    float z2 = *(cloud2 + 2*cs[1] + valtc);
-
-                    // Flow = t2 - t1 (NOTE: All points that are BG or are not visible have zero flow)
-                    *(flows12 + 0*cs[1] + valc) = x2-x1;
-                    *(flows12 + 1*cs[1] + valc) = y2-y1;
-                    *(flows12 + 2*cs[1] + valc) = z2-z1;
+                    // Flow from t1-t2
+                    *(flows12 + 0*cs[1] + valc) = x - x1;
+                    *(flows12 + 1*cs[1] + valc) = y - y1;
+                    *(flows12 + 2*cs[1] + valc) = z - z1;
                 }
             }
         }
@@ -251,7 +260,7 @@ int ComputeFlowAndVisibility_Pts_float(
                                  fx, fy, cx, cy, threshold, winsize,
                                  batchsize, nrows, ncols);
 
-    // t+1 -> t (TODO: This can be efficient, as most of this is pre-computed in previous step)
+    // t+1 -> t
     compute_visibility_and_flows(cloud2_data, cloud1_data, local2_data, local1_data, label2_data, label1_data, poses1_data,
                                  bwdvisibility_data, bwdflows_data, cs, ls, ps,
                                  fx, fy, cx, cy, threshold, winsize,

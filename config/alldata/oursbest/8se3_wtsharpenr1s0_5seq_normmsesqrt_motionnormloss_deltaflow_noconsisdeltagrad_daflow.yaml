@@ -9,6 +9,8 @@ img-scale:    1e-4
 step-len:     2
 seq-len:      5
 ctrl-type:    actdiffvel
+da-threshold: 0.02
+use-only-da-for-flows: True
 
 # Model options
 no-batch-norm:      False
@@ -64,5 +66,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/alldata/oursbest/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_deltaflow_noconsisdeltagrad
+save-dir:  trained_nets/alldata/oursbest/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_deltaflow_noconsisdeltagrad_daflow
 disp-err-per-mask: False

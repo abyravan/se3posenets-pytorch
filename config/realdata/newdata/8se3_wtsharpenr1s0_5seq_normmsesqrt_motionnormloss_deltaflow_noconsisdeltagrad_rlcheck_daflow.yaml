@@ -1,9 +1,9 @@
 ---
 # Dataset options
-data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-7_233102/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_02519/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-8_134717/]
+data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_183851/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_203124/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_214259/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_230213/]
 batch-size:   16
 num-workers:  8
-train-per:    0.7
+train-per:    0.75
 val-per:      0.1
 img-scale:    1e-3
 img-suffix:	  None
@@ -13,8 +13,8 @@ ctrl-type:    actdiffvel
 mean-dt:		  0.0698  #0.0698
 std-dt:		  0.00275 #0.0025
 da-winsize:   5
-da-threshold: 0.015
-use-only-da-for-flows: False
+da-threshold: 0.02
+use-only-da-for-flows: True
 reject-left-motion: True
 reject-right-still: True
 
@@ -33,7 +33,7 @@ use-ntfm-delta:     False
 wide-model:         True
 use-gt-poses:		  False
 use-gt-masks:		  False
-use-jt-angles:		  True
+use-jt-angles:		  False
 use-jt-angles-trans: False
 
 # Mask options
@@ -56,9 +56,9 @@ no-consis-delta-grads: True
 # Training options
 no-cuda:        False
 use-pin-memory: False
-epochs:         50
+epochs:         20
 start-epoch:    0
-train-ipe:      2000
+train-ipe:      5000
 val-ipe:        500
 evaluate:       False
 seed:           100
@@ -72,5 +72,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 25
-save-dir:  trained_nets/realdata/olddata_fixed/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_deltaflow_noconsisdeltagrad_jtanglespose_rlcheck
+save-dir:  trained_nets/realdata/newdata/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_deltaflow_noconsisdeltagrad_rlcheck_daflow
 disp-err-per-mask: False

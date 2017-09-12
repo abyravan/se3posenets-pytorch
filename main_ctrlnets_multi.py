@@ -850,8 +850,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
-              'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.6f} ({:.6f}), '
-              'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.6f}/{:.6f}'
+              'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
+              'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
@@ -906,7 +906,7 @@ def compute_masked_flow_errors(predflows, gtflows):
     # Compute num pts not moving per mask
     # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
     motionmask = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows) # B x S x 1 x H x W
-    err = (predflows - gtflows).pow(2).sum(2) # B x S x 1 x H x W
+    err = (predflows - gtflows).mul_(1e2).pow(2).sum(2) # B x S x 1 x H x W
 
     # Compute errors for points that are supposed to move
     motion_err = (err * motionmask).view(batch, seq, -1).sum(2) # Errors for only those points that are supposed to move

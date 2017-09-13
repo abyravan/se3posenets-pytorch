@@ -217,15 +217,22 @@ def main():
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
-    # TODO: Batch along dim 1 instead of dim 0
-
-    # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory,
-                                        collate_fn=train_dataset.collate_batch))
-    val_loader   = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
-                                        num_workers=args.num_workers, pin_memory=args.use_pin_memory,
-                                        collate_fn=val_dataset.collate_batch))
+    if args.evaluate:
+        # Load only test loader
+        args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
+        sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+        test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+                                                     num_workers=args.num_workers, sampler=sampler,
+                                                     pin_memory=args.use_pin_memory,
+                                                     collate_fn=test_dataset.collate_batch))
+    else:
+        # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
+        train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
+                                                      num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                                      collate_fn=train_dataset.collate_batch))
+        val_loader = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
+                                                    num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                                    collate_fn=val_dataset.collate_batch))
 
     ########################
     ############ Load models & optimization stuff
@@ -295,7 +302,7 @@ def main():
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
         # Delete train and val loaders
-        del train_loader, val_loader
+        #del train_loader, val_loader
 
         # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')

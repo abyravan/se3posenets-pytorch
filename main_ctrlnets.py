@@ -14,6 +14,7 @@ import torch.optim
 import torch.utils.data
 from torch.autograd import Variable
 import torchvision
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 # Local imports
 import se3layers as se3nn

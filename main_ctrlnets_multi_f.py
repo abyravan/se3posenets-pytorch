@@ -31,14 +31,11 @@ import options
 parser = options.setup_comon_options()
 
 # Loss options
-parser.add_argument('--delta-flow-loss', action='store_true', default=False,
-                    help='Penalize only the current flow per unroll of the network rather than penalizing the entire flow for each unroll (default: False)')
+parser.add_argument('--backprop-only-first-delta', action='store_true', default=False,
+                    help='Backprop gradients only to the first delta. Switches from using delta-flow-loss to'
+                         'full-flow-loss with copied composed deltas if this is set (default: False)')
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
-
-# K-step consistency
-parser.add_argument('--kstep-consis', action='store_true', default=False,
-                    help='Consistency between t = 0 & t = k+1 instead of t = k & t = k+1 (default: False)')
 
 ################ MAIN
 #@profile
@@ -153,42 +150,16 @@ def main():
     # Loss parameters
     print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
         args.loss_scale, args.pt_wt, args.consis_wt))
-    print('Dissimilarity loss weights => POSE: {}, DELTA: {}'.format(
-        args.pose_dissim_wt, args.delta_dissim_wt))
-
-    # Soft-weight sharpening
-    if args.soft_wt_sharpening:
-        print('Using weight sharpening with soft-masking loss')
-        assert not args.use_sigmoid_mask, "Cannot set both soft weight sharpening and sigmoid mask options together"
-        args.use_wt_sharpening = True # We do weight sharpening!
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
         print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
             args.sharpen_start_iter, args.sharpen_rate))
-        assert not args.use_sigmoid_mask, "Cannot set both weight sharpening and sigmoid mask options together"
-    elif args.use_sigmoid_mask:
-        print('Using sigmoid to generate masks, treating each channel independently. A pixel can belong to multiple masks now')
-    else:
-        print('Using soft-max + weighted 3D transform loss to encourage mask prediction')
-        assert not args.motion_norm_loss, "Cannot use normalized-motion losses along with soft-masking"
-        if (args.loss_type.find('normmsesqrt') < 0):
-            assert not args.delta_flow_loss,  "Can only use delta-flow losses + soft-masking with Normalized MSE loss"
 
     # Loss type
-    delta_loss = ', Penalizing the delta-flow loss per unroll' if args.delta_flow_loss else ''
-    norm_motion = ''
-    if args.use_wt_sharpening or args.use_sigmoid_mask:
-        norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
+    delta_loss = ', Penalizing the delta-flow loss per unroll'
+    norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
     print('3D loss type: ' + args.loss_type + norm_motion + delta_loss)
-
-    # NTFM3D-Delta
-    if args.use_ntfm_delta:
-        print('Using the variant of NTFM3D that computes a weighted avg. flow per point using the SE3 transforms')
-
-    # Decomp model
-    if args.decomp_model:
-        assert args.seq_len > 1, "Decomposed pose/mask encoders can be used only with multi-step models"
 
     # Wide model
     if args.wide_model:
@@ -199,11 +170,6 @@ def main():
 
     if args.use_jt_angles_trans:
         print("Using Jt angles as input to the transition model")
-
-    if args.kstep_consis:
-        print("Using k-step consistency loss")
-
-    # TODO: Add option for using encoder pose for tfm t2
 
     # DA threshold / winsize
     print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_threshold,
@@ -365,13 +331,6 @@ def main():
                            mode='train', optimizer=optimizer, epoch=epoch+1)
         train_ids += train_stats.data_ids
 
-        # # Log values and gradients of the parameters (histogram)
-        # # NOTE: Doing this in the loop makes the stats file super large / tensorboard processing slow
-        # for tag, value in model.named_parameters():
-        #     tag = tag.replace('.', '/')
-        #     tblogger.histo_summary(tag, util.to_np(value.data), epoch + 1)
-        #     tblogger.histo_summary(tag + '/grad', util.to_np(value.grad), epoch + 1)
-
         # Evaluate on validation set
         val_stats = iterate(val_loader, model, tblogger, args.val_ipe,
                             mode='val', epoch=epoch+1)
@@ -460,7 +419,6 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr                             = AverageMeter()
-    stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
@@ -486,10 +444,10 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
     # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
-    ptpredlayer = se3nn.NTfm3DDelta if args.use_ntfm_delta else se3nn.NTfm3D
+    ptpredlayer = se3nn.NTfm3D
 
     # Type of loss (mixture of experts = wt sharpening or sigmoid)
-    mex_loss = (args.use_wt_sharpening or args.use_sigmoid_mask) and (not args.soft_wt_sharpening)
+    mex_loss = True
 
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
@@ -504,7 +462,6 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
-        stats.data_ids.append(sample['id'])
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -539,16 +496,19 @@ def iterate(data_loader, model, tblogger, num_iters,
                 p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
             poses.append(p)
 
-        # Make next-pose predictions & corresponding 3D point predictions using the transition model
-        # We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
-        deltaposes, transposes = [], []
-        compdeltaposes = []
+        ## Make next-pose predictions & corresponding 3D point predictions using the transition model
+        ## We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
+        ## NOTE: Here, each step is independent of the previous and we do not want to backprop across the chains.
+        ## NOTE: We also need to make copies of the deltas and compose them over time. Again, the key is that we do not
+        ## have any chains between the deltas - for delta_k, delta_0->k-1 is a fixed input, not a variable
+        deltaposes, transposes, compdeltaposes = [], [], []
         for k in xrange(args.seq_len):
-            # Get current pose
+            # Get current pose (backwards graph only connects to encoder through poses[0])
+            # No gradient feedback within multiple steps of the transition model
             if (k == 0):
-                pose = poses[0] # Use initial pose
+                pose = poses[0] # Use initial pose (NOTE: We want to backprop to the pose model here)
             else:
-                pose = transposes[k-1] # Use previous predicted pose
+                pose = util.to_var(transposes[k-1].data.clone(), requires_grad=False) # Use previous predicted pose (NOTE: This is a copy with the graph cut)
 
             # Predict next pose based on curr pose, control
             delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k])
@@ -556,108 +516,87 @@ def iterate(data_loader, model, tblogger, num_iters,
             transposes.append(trans)
 
             # Compose the deltas over time (T4 = T4 * T3^-1 * T3 * T2^-1 * T2 * T1^-1 * T1 = delta_4 * delta_3 * delta_2 * T1
-            if (k == 0):
-                compdeltaposes.append(delta)
-            else:
-                compdeltaposes.append(se3nn.ComposeRtPair()(delta, compdeltaposes[k-1])) # delta_full = delta_curr * delta_prev
+            # NOTE: This is only used if backprop-only-first-delta is set. Otherwise we use the deltas directly
+            if args.backprop_only_first_delta:
+                if (k == 0):
+                    compdeltaposes.append(delta) # This keeps the graph intact
+                else:
+                    prevcompdelta = util.to_var(compdeltaposes[k-1].data.clone(), requires_grad=False) # Cut graph here, no gradient feedback in transition model
+                    compdeltaposes.append(se3nn.ComposeRtPair()(delta, prevcompdelta)) # delta_full = delta_curr * delta_prev
 
         # Now compute the losses across the sequence
         # We use point loss in the FWD dirn and Consistency loss between poses
-        # For the point loss, we use the initial point cloud and mask &
-        # predict in a sequence based on the predicted changes in poses
         predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
-        dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        #dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         for k in xrange(args.seq_len):
-            # Get current point cloud
-            if (k == 0):
-                currpts = pts[:,0]  # Use initial point cloud
+            ### Make the 3D point predictions and set up loss
+            # Separate between using the full gradient & gradient only for the first delta pose
+            if args.backprop_only_first_delta:
+                # Predict transformed 3D points
+                # We back-propagate only to the first predicted delta, so we break the graph between the later deltas and the predicted 3D points
+                compdelta = compdeltaposes[k] if (k == 0) else util.to_var(compdeltaposes[k].data.clone(), requires_grad=False)
+                nextpts = ptpredlayer()(pts[:,0], initmask, compdelta)
+
+                # Setup inputs & targets for loss
+                # NOTE: These losses are correct for the masks, but for any delta other than the first, the errors are
+                # not correct since we will have a credit assignment problem where each step's delta has to optimize for the complete errors
+                # So we only backprop to the first delta
+                inputs = nextpts - pts[:,0]
+                targets = fwdflows[:,k]
             else:
-                currpts = predpts[k-1]  # Use previous predicted point cloud
+                # Predict transformed 3D points
+                # We do not want to backpropagate across the chain of predicted points so we break the graph here
+                currpts = pts[:,0] if (k == 0) else util.to_var(predpts[k-1].data.clone(), requires_grad=False)
+                nextpts = ptpredlayer()(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
 
-            # Predict transformed point cloud based on the previous point cloud & new delta-transform
-            if args.delta_flow_loss:
-                nextpts = ptpredlayer()(currpts, initmask, deltaposes[k])
+                # Setup inputs & targets for loss
+                # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
+                # and compare that against the predicted flows for that step alone!
+                # TODO: This still is wrong as "currpts" will be wrong if at the previous timestep the deltas were incorrect.
+                # TODO: So the gradients will not be totally correct since even though we look at delta-flow errors here, the points which
+                # TODO: are transformed to compute those errors are not correct which can lead to incorrect motion predictions
+                inputs = nextpts - currpts  # Delta flow for that step (note that gradients only go to the mask & deltas)
+                targets = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1])  # Flow for those points in that step alone!
+            predpts.append(nextpts) # Save predicted pts
+
+            ### 3D loss
+            # If motion-normalized loss, pass in GT flows
+            if args.motion_norm_loss:
+                motion  = targets # Use either delta-flows or full-flows
+                currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
+                                                                     loss_type=args.loss_type, wts=fwdvis[:, k])
             else:
-                nextpts = ptpredlayer()(pts[:,0], initmask, compdeltaposes[k])
-            predpts.append(nextpts)
+                currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
 
-            # Compute 3D point loss
-            # For soft mask model, compute losses without predicting points (using composed transforms). Otherwise use predicted pts
-            if not mex_loss:
-                # For weighted 3D transform loss, it is enough to set the mask values of not-visible pixels to all zeros
-                # These pixels will end up having zero loss then
-                vismask = initmask * fwdvis[:, k] # Set all not-visible pixels to 0 mask, = 0 loss
+            ### Consistency loss (between t & t+1)
+            # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
+            # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
+            delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
+            nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
+            currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
 
-                # Use the weighted 3D transform loss, do not use explicitly predicted points
-                if (args.loss_type.find('normmsesqrt') >= 0):
-                    if args.delta_flow_loss:
-                        # Transform from pt_k-1 -> pt_k & check against error w.r.t current step's flows
-                        tgtflows = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1]) # Flow for those points in that step alone!
-                        currptloss = pt_wt * se3nn.Weighted3DTransformNormLoss()(currpts, vismask,
-                                                                                 deltaposes[k], tgtflows)
-                    else:
-                        # Transform from pt_0 -> pt_k & check against error w.r.t full flows
-                        currptloss = pt_wt * se3nn.Weighted3DTransformNormLoss()(pts[:,0], vismask,
-                                                                                 compdeltaposes[k], fwdflows[:,k])
-                else:
-                    currptloss = pt_wt * se3nn.Weighted3DTransformLoss()(currpts, vismask, deltaposes[k], tarpts[:, k])  # Weighted point loss!
-            else:
-                # Choose inputs & target for losses. Normalized MSE losses operate on flows, others can work on 3D points
-                if args.delta_flow_loss:
-                    # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
-                    # and compare that against the predicted flows for that step alone!
-                    inputs  = nextpts - currpts # Delta flow for that step
-                    targets = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1]) # Flow for those points in that step alone!
-                else:
-                    inputs, targets = [nextpts-pts[:,0], tarpts[:,k]-pts[:,0]] if (args.loss_type == 'normmsesqrt') else [nextpts, tarpts[:,k]]
-                # If motion-normalized loss, pass in GT flows
-                if args.motion_norm_loss:
-                    motion  = targets if args.delta_flow_loss else fwdflows[:,k] # Use either delta-flows or full-flows
-                    currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                         loss_type=args.loss_type, wts=fwdvis[:, k])
-                else:
-                    currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
-
-            # Compute pose consistency loss
-            if args.kstep_consis:
-                # Consistency between t = 0 & t = k+1 always
-                if args.no_consis_delta_grads:
-                    delta = util.to_var(compdeltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
-                else:
-                    delta = compdeltaposes[k]  # Don't break the graph
-                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[0])  # pose_k = pose_k * pose_0^-1 * pose_0
-                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
-            else:
-                # Consistency between t & t+1 always
-                if args.no_consis_delta_grads:
-                    delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
-                    nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
-                    currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
-                else:
-                    currconsisloss = consis_wt * ctrlnets.BiMSELoss(transposes[k], poses[k+1])  # Enforce consistency between pose predicted by encoder & pose from transition model
-
-            # Add a loss for pose dis-similarity & delta dis-similarity
-            dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
-            currdissimposeloss  = dissimpose_wt * ctrlnets.DisSimilarityLoss(poses[k][:,1:],
-                                                                             poses[k+1][:,1:],
-                                                                             size_average=True)  # Enforce dis-similarity in pose space
-            currdissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltaposes[k][:,1:],
-                                                                      identfm.expand_as(deltaposes[k][:,1:]),
-                                                                      size_average=True) # Change in pose > 0
+            # # Add a loss for pose dis-similarity & delta dis-similarity
+            # dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
+            # currdissimposeloss  = dissimpose_wt * ctrlnets.DisSimilarityLoss(poses[k][:,1:],
+            #                                                                  poses[k+1][:,1:],
+            #                                                                  size_average=True)  # Enforce dis-similarity in pose space
+            # currdissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltaposes[k][:,1:],
+            #                                                           identfm.expand_as(deltaposes[k][:,1:]),
+            #                                                           size_average=True) # Change in pose > 0
 
             # Append to total loss
-            loss += currptloss + currconsisloss + currdissimposeloss + currdissimdeltaloss
+            loss += currptloss + currconsisloss # + currdissimposeloss + currdissimdeltaloss
             ptloss[k]     = currptloss.data[0]
             consisloss[k] = currconsisloss.data[0]
-            dissimposeloss[k]  = currdissimposeloss.data[0]
-            dissimdeltaloss[k] = currdissimdeltaloss.data[0]
+            #dissimposeloss[k]  = currdissimposeloss.data[0]
+            #dissimdeltaloss[k] = currdissimdeltaloss.data[0]
 
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
         stats.loss.update(loss.data[0])
-        stats.dissimposeloss.update(dissimposeloss)
-        stats.dissimdeltaloss.update(dissimdeltaloss)
+        #stats.dissimposeloss.update(dissimposeloss)
+        #stats.dissimdeltaloss.update(dissimdeltaloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -762,10 +701,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-consisloss': consisloss.sum(),
-                mode+'-dissimposeloss': dissimposeloss.sum(),
-                mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
-                mode+'-consiserror': consiserror.sum(),
-                mode+'-consiserrormax': consiserrormax.sum(),
+                #mode+'-dissimposeloss': dissimposeloss.sum(),
+                #mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
+                mode+'-consiserr': consiserror.sum(),
+                mode+'-consiserrmax': consiserrormax.sum(),
                 mode+'-flowerrsum': flowerr_sum.sum()/bsz,
                 mode+'-flowerravg': flowerr_avg.sum()/bsz,
                 mode+'-motionerrsum': motionerr_sum.sum()/bsz,
@@ -855,7 +794,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
-              'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
+              #'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
@@ -863,8 +802,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.ptloss.val[k], stats.ptloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
-            stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
-            stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
+            #stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
+            #stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
             stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,
@@ -888,23 +827,6 @@ def save_checkpoint(state, is_best, savedir='.', filename='checkpoint.pth.tar'):
     torch.save(state, savefile)
     if is_best:
         shutil.copyfile(savefile, savedir + '/model_best.pth.tar')
-
-### Compute flow errors (flows are size: B x S x 3 x H x W)
-def compute_flow_errors(predflows, gtflows):
-    batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
-    # Compute num pts not moving per mask
-    # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
-    num_pts_d = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows).view(batch,seq,-1).sum(2) # B x seq
-    num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).type_as(gtflows).sum(0)
-    # Compute loss across batch
-    loss_sum_d = (predflows - gtflows).pow(2).view(batch,seq,-1).sum(2)  # Flow error for current step (B x seq)
-    # Compute avg loss per example in the batch
-    loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[loss_avg_d != loss_avg_d] = 0  # Clear out any Nans
-    loss_avg_d[loss_avg_d == np.inf] = 0  # Clear out any Infs
-    loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
-    # Return
-    return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
 
 ### Compute flow errors for moving / non-moving pts (flows are size: B x S x 3 x H x W)
 def compute_masked_flow_errors(predflows, gtflows):
@@ -947,23 +869,6 @@ def compute_masked_flow_errors(predflows, gtflows):
            still_err_sum.cpu().float(), still_err_avg.cpu().float(), \
            motion_err.cpu().float(), motion_npt.cpu().float(), \
            still_err.cpu().float(), still_npt.cpu().float()
-
-### Compute flow errors per mask (flows are size: B x S x 3 x H x W)
-def compute_flow_errors_per_mask(predflows, gtflows, gtmasks):
-    batch, seq, nse3 = predflows.size(0), predflows.size(1), gtmasks.size(2)  # B x S x 3 x H x W
-    # Compute num pts not moving per mask
-    num_pts_d = gtmasks.type_as(gtflows).view(batch, seq, nse3, -1).sum(3)
-    num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).type_as(gtflows).sum(0)
-    # Compute loss across batch
-    err  = (predflows - gtflows).pow(2).sum(2).unsqueeze(2).expand_as(gtmasks) # Flow error for current step (B x S x K x H x W)
-    loss_sum_d = (err * gtmasks).view(batch, seq, nse3, -1).sum(3) # Flow error sum for all masks in entire sequence per dataset
-    # Compute avg loss per example in the batch
-    loss_avg_d = loss_sum_d / num_pts_d
-    loss_avg_d[loss_avg_d != loss_avg_d] = 0 # Clear out any Nans
-    loss_avg_d[loss_avg_d == np.inf]     = 0 # Clear out any Infs
-    loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0)
-    # Return
-    return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
 
 ### Normalize image
 def normalize_img(img, min=-0.01, max=0.01):

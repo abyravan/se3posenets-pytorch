@@ -9,7 +9,6 @@ img-scale:    1e-4
 step-len:     2
 seq-len:      5
 ctrl-type:    actdiffvel
-use-only-da-for-flows: False
 da-threshold: 0.01
 da-winsize:   5
 

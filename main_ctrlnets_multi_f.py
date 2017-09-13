@@ -285,6 +285,9 @@ def main():
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
                   .format(args.resume, checkpoint['epoch'], num_train_iter))
+            best_epoch = checkpoint['best_epoch'] if hasattr(checkpoint, 'best_epoch') else 0
+            print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
+                                                                                 best_epoch))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
@@ -319,7 +322,9 @@ def main():
 
     ########################
     ############ Train / Validate
-    best_val_loss, best_epoch = float("inf"), 0
+    best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], 0
+    if args.resume != '' and hasattr(checkpoint, "best_epoch"):
+        best_epoch = checkpoint['best_epoch']
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
     train_ids, val_ids = [], []
     for epoch in range(args.start_epoch, args.epochs):
@@ -355,6 +360,7 @@ def main():
             'epoch': epoch+1,
             'args' : args,
             'best_loss'  : best_val_loss,
+            'best_epoch' : best_epoch,
             'train_stats': {'stats': train_stats,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
                             'totaliters': train_loader.iteration_count(),

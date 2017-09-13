@@ -419,6 +419,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr                             = AverageMeter()
+    stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
@@ -462,6 +463,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
+        stats.data_ids.append(sample['id'])
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension

@@ -9,6 +9,7 @@ img-scale:    1e-4
 step-len:     2
 seq-len:      5
 ctrl-type:    actdiffvel
+use-only-da-for-flows: False
 da-threshold: 0.01
 da-winsize:   5
 
@@ -39,13 +40,11 @@ use-sigmoid-mask:  False
 # Loss options
 loss-type:        mse
 motion-norm-loss: False
-delta-flow-loss:  True
 pt-wt:            1.0
 consis-wt:        0.1
 pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0
 loss-scale:       10000.0
-no-consis-delta-grads: True
 
 # Training options
 no-cuda:        False
@@ -66,5 +65,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/oursbest/8se3_wtsharpenr1s0_5seq_mse_deltaflow_noconsisdeltagrad_jtanglespose
+save-dir:  trained_nets/alldata/oursbestfixed/8se3_wtsharpenr1s0_5seq_mse_jtanglespose
 disp-err-per-mask: False

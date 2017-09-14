@@ -15,7 +15,8 @@ import ctrlnets
 class Encoder(nn.Module):
     def __init__(self, num_ctrl, pre_conv=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu',
-                 wide=False, se2_data=False):
+                 wide=False, se2_data=False, num_state=0,
+                 use_jt_angles=False, use_lstm=False):
         super(Encoder, self).__init__()
 
         ###### Choose type of convolution
@@ -61,49 +62,93 @@ class Encoder(nn.Module):
                                 nn.Linear(self.ctn[0], self.ctn[1]) # Predict the SE3s from the conv-output
                            )
 
-        ###### Joint encoder
-        self.jtencoder = nn.Sequential(
-                                nn.Linear(self.celem + self.ctn[1], 256),
-                                ctrlnets.get_nonlinearity(nonlinearity),
-                                nn.Linear(256, self.celem),
-                                ctrlnets.get_nonlinearity(nonlinearity),
-                           )
+        ###### Jt angle encoder
+        self.use_jt_angles = use_jt_angles
+        jdim = 0
+        if self.use_jt_angles:
+            jdim = 256
+            self.jtangleencoder = nn.Sequential(
+                nn.Linear(num_state, 128),
+                ctrlnets.get_nonlinearity(nonlinearity),
+                nn.Linear(128, 256),
+                ctrlnets.get_nonlinearity(nonlinearity),
+            )
 
-    def forward(self, x):
-        # Run conv-encoder to generate embedding
-        p, c = x # pts, ctrl
-
-        if self.se2_data:
-            c1 = self.conv1(p)
-            c2 = self.conv2(c1)
-            c3 = self.conv3(c2)
-            c4 = self.conv4(c3)
-
-            # Run ctrl-encoder
-            l = self.ctrlencoder(c)
-
-            # Combine the two & run jt encoder
-            j = torch.cat([c4.view(-1, self.celem), l.view(-1, self.ctn[1])], 1)  # Cat
-            e = self.jtencoder(j)  # Combined output
-
-            # Return jt encoder output
-            return e.view(-1, self.chn[3], 7, 10), [c1, c2, c3, c4]
+        ###### Hidden layer (either a single step or LSTM)
+        self.combined1 = nn.Sequential(
+            nn.Linear(self.celem + self.ctn[1] + jdim, 256),
+            ctrlnets.get_nonlinearity(nonlinearity)
+        )
+        self.use_lstm = use_lstm
+        if self.use_lstm:
+            self.hiddenlayer = nn.LSTM(256, 256)
+            self.hiddenstate = ()  # Hidden state for LSTM
         else:
-            c1 = self.conv1(p)
-            c2 = self.conv2(c1)
-            c3 = self.conv3(c2)
-            c4 = self.conv4(c3)
-            c5 = self.conv5(c4)
+            self.hiddenlayer = nn.Linear(256, 256)
+        self.combined2 = nn.Sequential(
+            nn.Linear(256, self.celem),
+            ctrlnets.get_nonlinearity(nonlinearity),
+        )
 
-            # Run ctrl-encoder
-            l = self.ctrlencoder(c)
+        # ###### Joint encoder
+        # self.jtencoder = nn.Sequential(
+        #                         nn.Linear(self.celem + self.ctn[1], 256),
+        #                         ctrlnets.get_nonlinearity(nonlinearity),
+        #                         nn.Linear(256, self.celem),
+        #                         ctrlnets.get_nonlinearity(nonlinearity),
+        #                    )
 
-            # Combine the two & run jt encoder
-            j = torch.cat([c5.view(-1, self.celem), l.view(-1, self.ctn[1])], 1) # Cat
-            e = self.jtencoder(j) # Combined output
+    def forward(self, x, reset_hidden_state=False):
+        # Run conv-encoder to generate embedding
+        p, j, c = x # pts, ctrl
 
-            # Return jt encoder output
-            return e.view(-1,self.chn[4],7,10), [c1,c2,c3,c4,c5]
+        # if self.se2_data:
+        #     c1 = self.conv1(p)
+        #     c2 = self.conv2(c1)
+        #     c3 = self.conv3(c2)
+        #     c4 = self.conv4(c3)
+        #
+        #     # Run ctrl-encoder
+        #     l = self.ctrlencoder(c)
+        #
+        #     # Combine the two & run jt encoder
+        #     j = torch.cat([c4.view(-1, self.celem), l.view(-1, self.ctn[1])], 1)  # Cat
+        #     e = self.jtencoder(j)  # Combined output
+        #
+        #     # Return jt encoder output
+        #     return e.view(-1, self.chn[3], 7, 10), [c1, c2, c3, c4]
+        # else:
+        c1 = self.conv1(p)
+        c2 = self.conv2(c1)
+        c3 = self.conv3(c2)
+        c4 = self.conv4(c3)
+        c5 = self.conv5(c4)
+        pe = c5.view(-1, self.celem)
+
+        # Run ctrl-encoder
+        ce = self.ctrlencoder(c)
+
+        # Run jtangle-encoder & combine encoding
+        if self.use_jt_angles:
+            je = self.jtangleencoder(j)  # Encode jt angles
+            e = torch.cat([pe, je, ce], 1)  # Concatenate encoded vectors
+        else:
+            e = torch.cat([pe, ce], 1)  # Concatenate encoded vectors
+
+        # Use the hidden layer network (either single-step or LSTM)
+        h1 = self.combined1(e)
+        if self.use_lstm:
+            if reset_hidden_state:  # Reset the LSTM hidden state to all zeros
+                self.hiddenstate = (Variable(torch.zeros(1, h1.size(0), h1.size(1)).type_as(p.data)),
+                                    Variable(torch.zeros(1, h1.size(0), h1.size(1)).type_as(p.data)))  # Seq length = 1
+            ls, self.hiddenstate = self.hiddenlayer(h1.unsqueeze(0), self.hiddenstate)
+            ls = ls.squeeze()
+        else:
+            ls = self.hiddenlayer(h1)
+        h2 = self.combined2(ls)
+
+        # Return jt encoder output
+        return h2.view(-1,self.chn[4],7,10), [c1,c2,c3,c4,c5]
 
 ####################################
 ### Mask Encoder (single encoder that takes a depth image and predicts segmentation masks)
@@ -256,12 +301,14 @@ class SE3Model(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_transse3_iden = False,
-                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1, wide=False, se2_data=False):
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1, wide=False, se2_data=False,
+                 num_state=0, use_jt_angles=False, use_lstm=False):
         super(SE3Model, self).__init__()
 
         # Initialize the pose-mask model
         self.encoder     = Encoder(num_ctrl=num_ctrl, input_channels=input_channels, use_bn=use_bn, pre_conv=pre_conv,
-                                   nonlinearity=nonlinearity, wide=wide, se2_data=se2_data)
+                                   nonlinearity=nonlinearity, wide=wide, se2_data=se2_data, num_state=num_state,
+                                   use_jt_angles=use_jt_angles, use_lstm=use_lstm)
         self.maskdecoder = MaskDecoder(num_se3=num_se3, pre_conv=pre_conv, use_bn=use_bn, nonlinearity=nonlinearity,
                                        use_wt_sharpening=use_wt_sharpening, sharpen_start_iter=sharpen_start_iter,
                                        sharpen_rate=sharpen_rate, wide=wide, se2_data=se2_data)
@@ -270,17 +317,21 @@ class SE3Model(nn.Module):
                                                 nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden)
 
     # Forward pass through the model
-    def forward(self, x, train_iter=0):
+    def forward(self, x, reset_hidden_state=False, train_iter=0):
         # Get input vars
-        ptcloud_1, ctrl_1 = x
+        ptcloud_1, jtangles_1, ctrl_1 = x
 
         # Get delta-pose & mask predictions
-        state_1        = self.encoder([ptcloud_1, ctrl_1])
+        state_1        = self.encoder([ptcloud_1, jtangles_1, ctrl_1], reset_hidden_state=False)
         mask_1         = self.maskdecoder(state_1, train_iter=train_iter)
         deltapose_t_12 = self.deltase3decoder(state_1[0])
 
+        # Predict 3D points
+        predpts_1 = se3nn.NTfm3D()(ptcloud_1, mask_1, deltapose_t_12)
+        flows_12  = predpts_1 - ptcloud_1 # Return flows
+
         # Return outputs
-        return [deltapose_t_12, mask_1]
+        return flows_12, [deltapose_t_12, mask_1]
 
 ####################################
 ### SE3-OnlyPose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict

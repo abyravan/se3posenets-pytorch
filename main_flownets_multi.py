@@ -20,6 +20,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 import data
 import ctrlnets
 import flownets
+import se3nets
 import util
 from util import AverageMeter, Tee, DataEnumerator
 
@@ -38,6 +39,8 @@ parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
                     help='Use angles of all joints as inputs to the networks (default: False)')
+parser.add_argument('--use-se3-nets', action='store_true', default=False,
+                    help='Use SE3 nets instead of flow nets (default: False)')
 
 ################ MAIN
 #@profile
@@ -141,6 +144,11 @@ def main():
     args.baxter_labels = data.read_statelabels_file(load_dir + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
     args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
+
+    # SE3 stuff
+    assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
+    args.se3_dim = ctrlnets.get_se3_dimension(args.se3_type, args.pred_pivot)
+    print('Predicting {} SE3s of type: {}. Dim: {}'.format(args.num_se3, args.se3_type, args.se3_dim))
 
     # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
@@ -246,10 +254,20 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    model = flownets.FlowNet(num_ctrl=args.num_ctrl, num_state=args.num_state_net,
-                             input_channels=3, use_bn=args.batch_norm, pre_conv=args.pre_conv,
-                             nonlinearity=args.nonlin, init_flow_iden=args.init_flow_iden,
-                             use_jt_angles=args.use_jt_angles, use_lstm=(args.seq_len>1))
+    if args.use_se3_nets:
+        model = se3nets.SE3Model(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                        init_transse3_iden=args.init_transse3_iden,
+                        use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                        wide=args.wide_model, se2_data=False, use_jt_angles=args.use_jt_angles,
+                        num_state=args.num_state_net, use_lstm=(args.seq_len > 1))
+    else:
+        model = flownets.FlowNet(num_ctrl=args.num_ctrl, num_state=args.num_state_net,
+                                 input_channels=3, use_bn=args.batch_norm, pre_conv=args.pre_conv,
+                                 nonlinearity=args.nonlin, init_flow_iden=args.init_flow_iden,
+                                 use_jt_angles=args.use_jt_angles, use_lstm=(args.seq_len>1))
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -461,6 +479,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         ### Run a FWD pass through the network (multi-step)
         predflows, predpts, flowloss, loss = [], [], torch.zeros(args.seq_len), 0
+        deltaposes, masks = [], []
         for k in xrange(args.seq_len):
             # Get current input to network
             if (k == 0):
@@ -469,7 +488,14 @@ def iterate(data_loader, model, tblogger, num_iters,
                 currpts = predpts[k-1]
 
             # Make flow prediction
-            flows = model([currpts, jtangles[:,k], ctrls[:,k]], reset_hidden_state=(k==0)) # Reset hidden state at start of sequence
+            if args.use_se3_nets:
+                flows, [deltapose, mask] = model([currpts, jtangles[:,k], ctrls[:,k]],
+                                                 reset_hidden_state=(k==0),
+                                                 train_iter = num_train_iter) # Reset hidden state at start of sequence
+                deltaposes.append(deltapose)
+                masks.append(mask)
+            else:
+                flows = model([currpts, jtangles[:,k], ctrls[:,k]], reset_hidden_state=(k==0)) # Reset hidden state at start of sequence
             nextpts = currpts + flows  # Add flow to get next prediction
 
             # Append to list of predictions
@@ -592,11 +618,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                    predflows_t.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
                                                         nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
-
                 # Show as an image summary
-                info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
-                         mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
-                }
+                info = {mode + '-depths': util.to_np(depthdisp.unsqueeze(0)),
+                        mode + '-flows': util.to_np(flowdisp.unsqueeze(0)),
+                        }
+                if args.use_se3_nets:
+                    maskdisp = torchvision.utils.make_grid(
+                        torch.cat([masks[0].data.narrow(0, id, 1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                        nrow=args.num_se3, normalize=True, range=(0, 1))
+                    info[mode+ '-masks'] = util.to_np(maskdisp.narrow(0,0,1))
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 

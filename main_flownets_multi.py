@@ -297,7 +297,8 @@ def main():
 
     ########################
     ############ Train / Validate
-    best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], 0
+    best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], \
+                                0 if args.resume == '' else checkpoint['bext_epoch']
     if args.resume != '' and hasattr(checkpoint, "best_epoch"):
         best_epoch = checkpoint['best_epoch']
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
@@ -349,7 +350,7 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, savedir=args.save_dir)
+        }, is_best, savedir=args.save_dir, filename='checkpoint_{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders

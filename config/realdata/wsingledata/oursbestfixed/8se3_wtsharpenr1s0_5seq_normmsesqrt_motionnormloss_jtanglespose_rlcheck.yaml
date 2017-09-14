@@ -72,5 +72,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/realdata/oursbestfixed_new/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_jtanglespose_rlcheck
+save-dir:  trained_nets/realdata/wsingledata/oursbestfixed/8se3_wtsharpenr1s0_5seq_normmsesqrt_motionnormloss_jtanglespose_rlcheck
 disp-err-per-mask: False

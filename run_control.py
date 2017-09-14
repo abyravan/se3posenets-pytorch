@@ -50,7 +50,7 @@ import se3layers as se3nn
 import data
 import ctrlnets
 import util
-from util import AverageMeter
+from util import AverageMeter, Tee
 
 ##########
 # Parse arguments
@@ -89,6 +89,8 @@ parser.add_argument('--ctrl-mag-decay', default=0.99, type=float, metavar='W',
                     help='Decay the control magnitude by scaling by this weight after each iter (default: 0.99)')
 parser.add_argument('--loss-scale', default=1000, type=float, metavar='WT',
                     help='Scaling factor for the loss (default: 1000)')
+parser.add_argument('--loss-threshold', default=0, type=float, metavar='EPS',
+                    help='Threshold for convergence check based on the losses (default: 0)')
 
 # TODO: Add criteria for convergence
 
@@ -99,6 +101,8 @@ parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='disables CUDA training (default: False)')
 parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
+parser.add_argument('--num-configs', type=int, default=-1, metavar='N',
+                    help='Num configs to test. <=0 = all (default: all)')
 
 # Display/Save options
 parser.add_argument('-s', '--save-dir', default='', type=str,
@@ -116,7 +120,13 @@ def main():
         pargs.save_dir = checkpoint_dir + '/planlogs/'
     print('Saving planning logs at: ' + pargs.save_dir)
     util.create_dir(pargs.save_dir)  # Create directory
-    tblogger = util.TBLogger(pargs.save_dir + '/planlogs/')  # Start tensorboard logger
+    tblogger = util.TBLogger(pargs.save_dir + '/logs/')  # Start tensorboard logger
+
+    # Create logfile to save prints
+    logfile   = open(pargs.save_dir + '/logfile.txt', 'w')
+    errorfile = open(pargs.save_dir + '/errorlog.txt', 'w')
+    backup = sys.stdout
+    sys.stdout = Tee(sys.stdout, logfile)
 
     # Set seed
     torch.manual_seed(pargs.seed)
@@ -261,6 +271,7 @@ def main():
     ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
     print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
 
+    '''
     # Get cam data
     args.cam_extrinsics = data.read_cameradata_file(data_path + '/cameradata.txt') # TODO: BWDs compatibility
     args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
@@ -285,202 +296,309 @@ def main():
                                   start_id, goal_id, pargs.goal_horizon))
     start_sample = test_dataset[start_id]
     goal_sample  = test_dataset[goal_id]
-
+    
     # Get the joint angles
     start_angles = start_sample['actconfigs'][0]
     goal_angles  = goal_sample['actconfigs'][0]
-    if pargs.only_top4_jts:
-        assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
-        print('Controlling only top 4 joints')
-        goal_angles[4:] = start_angles[4:]
-    elif pargs.only_top6_jts:
-        assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
-        print('Controlling only top 6 joints')
-        goal_angles[6:] = start_angles[6:]
-    elif pargs.ctrl_specific_jts is not '':
-        print('Setting targets only for joints: {}. All other joints have zero error'
-              ' but can be controlled'.format(pargs.ctrl_specific_jts))
-        ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-        for k in xrange(7):
-            if k not in ctrl_jts:
-                goal_angles[k] = start_angles[k]
+    '''
 
-    ########################
-    ############ Get start & goal point clouds, predict poses & masks
-    # Initialize problem
-    start_pts, da_goal_pts = torch.zeros(1,3,args.img_ht,args.img_wd), torch.zeros(1,3,args.img_ht,args.img_wd)
-    pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
+    #########
+    # SOME TEST CONFIGS:
+    # TODO: Get more challenging test configs by moving arm physically
+    start_angles_all = torch.FloatTensor(
+        [
+         [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
+         [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+         [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
+         [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+         [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+         [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+         [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
+         [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+         [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
+        ]
+        )
+    goal_angles_all  = torch.FloatTensor(
+        [
+         [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
+         [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+         [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
+         [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
+         [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+         [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+         [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+         [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+         [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
+         [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+         [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
+        ]
+        )
 
-    # Get full goal point cloud
-    goal_pts, _  = generate_ptcloud(goal_angles)
+    # Iterate over test configs
+    num_configs = start_angles_all.size(0)
+    if pargs.num_configs > 0:
+        num_configs = min(start_angles_all.size(0), pargs.num_configs)
+    print("Running tests over {} configs".format(num_configs))
+    iterstats = []
+    init_errors, final_errors = [], []
+    for k in xrange(num_configs):
+        # Get start/goal angles
+        print("========================================")
+        print("========== STARTING TEST: {} ===========".format(k))
+        start_angles = start_angles_all[k].clone()
+        goal_angles  = goal_angles_all[k].clone()
 
-    #### Predict start/goal poses and masks
-    print('Predicting start/goal poses and masks')
-    if args.use_jt_angles or args.seq_len > 1:
-        sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
-        tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
-    else:
-        sinp = util.to_var(start_pts.type(deftype))
-        tinp = util.to_var(goal_pts.type(deftype))
-
-    if args.use_gt_masks: # GT masks are provided!
-        _, start_rlabels = generate_ptcloud(start_angles)
-        _, goal_rlabels  = generate_ptcloud(goal_angles)
-        start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
-        goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
-        start_poses = posemaskpredfn(sinp)
-        goal_poses  = posemaskpredfn(tinp)
-    else:
-        start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
-        goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
-
-    # Display the masks as an image summary
-    maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
-                                                     0).cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                           nrow=args.num_se3, normalize=True, range=(0, 1))
-    info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
-    for tag, images in info.items():
-        tblogger.image_summary(tag, images, 0)
-
-    # Render the poses
-    # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
-    start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
-    pangolin.initialize_poses(start_poses_f[0].numpy(), goal_poses_f[0].numpy())
-
-    # Print error
-    print('Initial jt angle error:')
-    full_deg_error = (start_angles-goal_angles) * (180.0/np.pi) # Full error in degrees
-    print(full_deg_error.view(7,1))
-
-    ########################
-    ############ Run the controller
-    # Init stuff
-    ctrl_mag = pargs.max_ctrl_mag
-    angles, deg_errors = torch.FloatTensor(pargs.max_iter+1, 7), torch.FloatTensor(pargs.max_iter+1, 7)
-    angles[0], deg_errors[0] = start_angles, full_deg_error
-    ctrl_grads, ctrls  = torch.FloatTensor(pargs.max_iter, args.num_ctrl), torch.FloatTensor(pargs.max_iter, args.num_ctrl)
-    losses = torch.FloatTensor(pargs.max_iter)
-
-    # Init vars for all items
-    init_ctrl_v  = util.to_var(torch.zeros(1,args.num_ctrl).type(deftype), requires_grad=True) # Need grad w.r.t this
-    goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
-
-    # Plots for errors and loss
-    fig, axes = plt.subplots(2, 1)
-    fig.show()
-
-    # Run the controller
-    gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    for it in xrange(pargs.max_iter):
-        # Print
-        print('\n #####################')
-
-        # Get current point cloud
-        start = time.time()
-        curr_angles = angles[it]
-        curr_pts, curr_rlabels = generate_ptcloud(curr_angles)
-        curr_pts = curr_pts.type(deftype)
-        gen_time.update(time.time() - start)
-
-        # Predict poses and masks
-        start = time.time()
-        if args.use_jt_angles or args.seq_len > 1:
-            inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
-        else:
-            inp = util.to_var(curr_pts)
-        if args.use_gt_masks:
-            curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
-            curr_poses = posemaskpredfn(inp)
-        else:
-            curr_poses, curr_masks = posemaskpredfn(inp, train_iter=num_train_iter)
-        curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
-        posemask_time.update(time.time() - start)
-
-        # Render poses and masks using Pangolin
-        start = time.time()
-        _, curr_labels = curr_masks_f.max(dim=1)
-        curr_labels_f = curr_labels.float()
-        pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
-
-        # Show masks using tensor flow
-        if (it % args.disp_freq) == 0:
-            maskdisp = torchvision.utils.make_grid(curr_masks.data.cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                                       nrow=args.num_se3, normalize=True, range=(0, 1))
-            info = {'curr masks': util.to_np(maskdisp.narrow(0, 0, 1))}
-            for tag, images in info.items():
-                tblogger.image_summary(tag, images, it)
-        viz_time.update(time.time() - start)
-
-        # Run one step of the optimization (controls are always zeros, poses change)
-        start = time.time()
-        ctrl_grad, loss = optimize_ctrl(model=model.transitionmodel,
-                                        poses=curr_poses, ctrl=init_ctrl_v,
-                                        angles=angles[it].view(1,-1),
-                                        goal_poses=goal_poses_v)
-        optim_time.update(time.time() - start)
-        ctrl_grads[it] = ctrl_grad.cpu().float() # Save this
-
-        # Set last 3 joint's controls to zero
+        # Set based on options
         if pargs.only_top4_jts:
-            ctrl_grad[4:] = 0
+            assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
+            print('Controlling only top 4 joints')
+            goal_angles[4:] = start_angles[4:]
         elif pargs.only_top6_jts:
-            ctrl_grad[6:] = 0
+            assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
+            print('Controlling only top 6 joints')
+            goal_angles[6:] = start_angles[6:]
+        elif pargs.ctrl_specific_jts is not '':
+            print('Setting targets only for joints: {}. All other joints have zero error'
+                  ' but can be controlled'.format(pargs.ctrl_specific_jts))
+            ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
+            for k in xrange(7):
+                if k not in ctrl_jts:
+                    goal_angles[k] = start_angles[k]
 
-        # Get the control direction and scale it by max control magnitude
-        start = time.time()
-        if ctrl_mag > 0:
-            ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2) # Dirn
-            curr_ctrl = ctrl_dirn * ctrl_mag # Scale dirn by mag
-            ctrl_mag *= pargs.ctrl_mag_decay # Decay control magnitude
+        ########################
+        ############ Get start & goal point clouds, predict poses & masks
+        # Initialize problem
+        start_pts, da_goal_pts = torch.zeros(1,3,args.img_ht,args.img_wd), torch.zeros(1,3,args.img_ht,args.img_wd)
+        pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
+
+        # Get full goal point cloud
+        goal_pts, _  = generate_ptcloud(goal_angles)
+
+        #### Predict start/goal poses and masks
+        print('Predicting start/goal poses and masks')
+        if args.use_jt_angles or args.seq_len > 1:
+            sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
+            tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
         else:
-            curr_ctrl = ctrl_grad.cpu().float()
+            sinp = util.to_var(start_pts.type(deftype))
+            tinp = util.to_var(goal_pts.type(deftype))
 
-        # Apply control (simple velocity integration)
-        next_angles = curr_angles - (curr_ctrl * dt)
+        if args.use_gt_masks: # GT masks are provided!
+            _, start_rlabels = generate_ptcloud(start_angles)
+            _, goal_rlabels  = generate_ptcloud(goal_angles)
+            start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
+            goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
+            start_poses = posemaskpredfn(sinp)
+            goal_poses  = posemaskpredfn(tinp)
+        else:
+            start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
+            goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
 
-        # Save stuff
-        losses[it]       = loss
-        ctrls[it]        = curr_ctrl
-        angles[it+1]     = next_angles
-        deg_errors[it+1] = (next_angles-goal_angles)*(180.0/np.pi)
+        # Display the masks as an image summary
+        maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
+                                                         0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                               nrow=args.num_se3, normalize=True, range=(0, 1))
+        info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
+        for tag, images in info.items():
+            tblogger.image_summary(tag, images, 0)
 
-        # Print losses and errors
-        print('Control Iter: {}/{}, Loss: {}'.format(it+1, pargs.max_iter, loss))
-        print('Joint angle errors in degrees: ',
-              torch.cat([deg_errors[it+1].unsqueeze(1), full_deg_error.unsqueeze(1)], 1))
+        # Render the poses
+        # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
+        start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
+        pangolin.initialize_poses(start_poses_f[0].numpy(), goal_poses_f[0].numpy())
 
-        # Plot the errors & loss
-        if (it % 4) == 0:
-            axes[0].set_title("Iter: {}, Jt angle errors".format(it + 1))
-            axes[0].plot(deg_errors.numpy()[:it+1])
-            axes[1].set_title("Iter: {}, Loss".format(it + 1))
-            axes[1].plot(losses.numpy()[:it+1])
-            fig.canvas.draw()  # Render
-            plt.pause(0.01)
-        if (it % args.disp_freq) == 0: # Clear now and then
-            for ax in axes:
-                ax.cla()
+        # Print error
+        print('Initial jt angle error:')
+        full_deg_error = (start_angles-goal_angles) * (180.0/np.pi) # Full error in degrees
+        print(full_deg_error.view(7,1))
+        init_errors.append(full_deg_error.view(1,7))
 
-        # Finish
-        rest_time.update(time.time() - start)
-        print('Gen: {:.3f}({:.3f}), PoseMask: {:.3f}({:.3f}), Viz: {:.3f}({:.3f}),'
-              ' Optim: {:.3f}({:.3f}), Rest: {:.3f}({:.3f})'.format(
-            gen_time.val, gen_time.avg, posemask_time.val, posemask_time.avg,
-            viz_time.val, viz_time.avg, optim_time.val, optim_time.avg,
-            rest_time.val, rest_time.avg))
+        ########################
+        ############ Run the controller
+        # Init stuff
+        ctrl_mag = pargs.max_ctrl_mag
+        angles, deg_errors = [start_angles], [full_deg_error.view(1,7)]
+        ctrl_grads, ctrls  = [], []
+        losses = []
 
-    # Print final stats
-    print('=========== FINISHED ============')
-    print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
-    print('Final angle errors in degrees: ')
-    print(deg_errors[-1].view(7,1))
+        # Init vars for all items
+        init_ctrl_v  = util.to_var(torch.zeros(1,args.num_ctrl).type(deftype), requires_grad=True) # Need grad w.r.t this
+        goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
 
-    # Save stats and exit
-    stats = {'args': args, 'pargs': pargs, 'data_path': data_path, 'start_id': start_id,
-             'goal_id': goal_id, 'start_angles': start_angles, 'goal_angles': goal_angles,
-             'angles': angles, 'ctrls': ctrls, 'predctrls': ctrl_grads, 'deg_errors': deg_errors,
-             'losses': losses}
+        # Plots for errors and loss
+        fig, axes = plt.subplots(2, 1)
+        fig.show()
+
+        # Run the controller for max_iter iterations
+        gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+        conv_iter = pargs.max_iter
+        for it in xrange(pargs.max_iter):
+            # Print
+            print('\n #####################')
+
+            # Get current point cloud
+            start = time.time()
+            curr_angles = angles[it]
+            curr_pts, curr_rlabels = generate_ptcloud(curr_angles)
+            curr_pts = curr_pts.type(deftype)
+            gen_time.update(time.time() - start)
+
+            # Predict poses and masks
+            start = time.time()
+            if args.use_jt_angles or args.seq_len > 1:
+                inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
+            else:
+                inp = util.to_var(curr_pts)
+            if args.use_gt_masks:
+                curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
+                curr_poses = posemaskpredfn(inp)
+            else:
+                curr_poses, curr_masks = posemaskpredfn(inp, train_iter=num_train_iter)
+            curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
+            posemask_time.update(time.time() - start)
+
+            # Render poses and masks using Pangolin
+            start = time.time()
+            _, curr_labels = curr_masks_f.max(dim=1)
+            curr_labels_f = curr_labels.float()
+            pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
+
+            # Show masks using tensor flow
+            if (it % args.disp_freq) == 0:
+                maskdisp = torchvision.utils.make_grid(curr_masks.data.cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                                           nrow=args.num_se3, normalize=True, range=(0, 1))
+                info = {'curr masks': util.to_np(maskdisp.narrow(0, 0, 1))}
+                for tag, images in info.items():
+                    tblogger.image_summary(tag, images, it)
+            viz_time.update(time.time() - start)
+
+            # Run one step of the optimization (controls are always zeros, poses change)
+            start = time.time()
+            ctrl_grad, loss = optimize_ctrl(model=model.transitionmodel,
+                                            poses=curr_poses, ctrl=init_ctrl_v,
+                                            angles=angles[it].view(1,-1),
+                                            goal_poses=goal_poses_v)
+            optim_time.update(time.time() - start)
+            ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
+
+            # Set last 3 joint's controls to zero
+            if pargs.only_top4_jts:
+                ctrl_grad[4:] = 0
+            elif pargs.only_top6_jts:
+                ctrl_grad[6:] = 0
+
+            # Get the control direction and scale it by max control magnitude
+            start = time.time()
+            if ctrl_mag > 0:
+                ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2) # Dirn
+                curr_ctrl = ctrl_dirn * ctrl_mag # Scale dirn by mag
+                ctrl_mag *= pargs.ctrl_mag_decay # Decay control magnitude
+            else:
+                curr_ctrl = ctrl_grad.cpu().float()
+
+            # Apply control (simple velocity integration)
+            next_angles = curr_angles - (curr_ctrl * dt)
+
+            # Save stuff
+            losses.append(loss)
+            ctrls.append(curr_ctrl)
+            angles.append(next_angles)
+            deg_errors.append((next_angles-goal_angles).view(1,7)*(180.0/np.pi))
+
+            # Print losses and errors
+            print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k, num_configs, it+1, pargs.max_iter, loss))
+            print('Joint angle errors in degrees: ',
+                  torch.cat([deg_errors[-1].view(7,1), full_deg_error.unsqueeze(1)], 1))
+
+            # Plot the errors & loss
+            colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
+            labels = []
+            if ((it % 4) == 0) or (loss < pargs.loss_threshold):
+                conv = "Converged" if (loss < pargs.loss_threshold) else ""
+                axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k, num_configs,
+                                                                                             (it + 1), loss)) + conv)
+                for j in xrange(7):
+                    axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
+                    labels.append("Jt-{}".format(j))
+                # I'm basically just demonstrating several different legend options here...
+                axes[0].legend(labels, ncol=4, loc='upper center',
+                               bbox_to_anchor=[0.5, 1.1],
+                               columnspacing=1.0, labelspacing=0.0,
+                               handletextpad=0.0, handlelength=1.5,
+                               fancybox=True, shadow=True)
+                axes[1].set_title("Iter: {}, Loss".format(it + 1))
+                axes[1].plot(losses, color='k')
+                fig.canvas.draw()  # Render
+                plt.pause(0.01)
+            if (it % args.disp_freq) == 0: # Clear now and then
+                for ax in axes:
+                    ax.cla()
+
+            # Finish
+            rest_time.update(time.time() - start)
+            print('Gen: {:.3f}({:.3f}), PoseMask: {:.3f}({:.3f}), Viz: {:.3f}({:.3f}),'
+                  ' Optim: {:.3f}({:.3f}), Rest: {:.3f}({:.3f})'.format(
+                gen_time.val, gen_time.avg, posemask_time.val, posemask_time.avg,
+                viz_time.val, viz_time.avg, optim_time.val, optim_time.avg,
+                rest_time.val, rest_time.avg))
+
+            # Check for convergence in pose space
+            if loss < pargs.loss_threshold:
+                print("*****************************************")
+                print('Control Iter: {}/{}, Loss: {} less than threshold'.format(it + 1, pargs.max_iter,
+                                                                                 loss, pargs.loss_threshold))
+                conv_iter = it+1
+                print("*****************************************")
+                break
+
+        # Print final stats
+        print('=========== FINISHED ============')
+        print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
+        print('Final angle errors in degrees: ')
+        print(deg_errors[-1].view(7,1))
+        final_errors.append(deg_errors[-1])
+
+        # Print final error in stats file
+        if conv_iter == pargs.max_iter:
+            conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
+        else:
+            conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
+        errorfile.write(("Test: {}, ".format(k)) + conv)
+        for j in xrange(len(start_angles)):
+            errorfile.write("{}, {}, {}, {}\n".format(start_angles[j], goal_angles[j],
+                                                    full_deg_error[j], deg_errors[-1][0,j]))
+        errorfile.write("\n")
+
+        # Save stats and exit
+        iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
+                          'angles': angles, 'ctrls': ctrls,
+                          'predctrls': ctrl_grads,
+                          'deg_errors': deg_errors, 'losses': losses})
+
+    # Print all errors
+    i_err, f_err = torch.cat(init_errors,0), torch.cat(final_errors,0)
+    print("------------ INITIAL ERRORS -------------")
+    print(i_err)
+    print("------------- FINAL ERRORS --------------")
+    print(f_err)
+    num_top6_strict = (f_err[:,:6] < 1.5).sum(1).eq(6).sum()
+    num_top4_strict = (f_err[:,:4] < 1.5).sum(1).eq(4).sum()
+    num_top6_relax  = ((f_err[:,:4] < 1.5).sum(1).eq(4) *
+                       (f_err[:,[4,5]] < 3.0).sum(1).eq(2)).sum()
+    print("------ Top 6 jts strict: {}/{}, relax: {}/{}. Top 4 jts strict: {}/{}".format(
+        num_top6_strict, num_configs, num_top6_relax, num_configs, num_top4_strict, num_configs
+    ))
+
+    # Save stats across all iterations
+    stats = {'args': args, 'pargs': pargs, 'data_path': data_path, 'start_angles_all': start_angles_all,
+             'goal_angles_all': goal_angles_all, 'iterstats': iterstats, 'finalerrors': final_errors,
+             'num_top6_strict': num_top6_strict, 'num_top4_strict': num_top4_strict,
+             'num_top6_relax': num_top6_relax}
     torch.save(stats, pargs.save_dir + '/planstats.pth.tar')
+    logfile.close()
+    errorfile.close()
 
     # TODO: Save errors to file for easy reading??
 

@@ -1835,6 +1835,54 @@ void PangolinViz::update_masklabels_and_poses(const float *curr_masks, const flo
 
 //////////////////////////////
 ///
+/// \brief Updated predicted masks & Curr poses for SE3-Control
+///
+void PangolinViz::update_real_curr(const float *curr_angles,
+                                   const float *curr_ptcloud,
+                                   const float *curr_poses,
+                                   const float *curr_masks)
+{
+    // Update PCL viewer
+    boost::mutex::scoped_lock update_lock(data->dataMutex);
+
+    // Memcpy vars
+    memcpy(data->current_jts,     curr_angles,  7 * sizeof(float));
+    memcpy(data->currinput_cloud, curr_ptcloud, data->imgHeight * data->imgWidth * 3 * sizeof(float));
+    memcpy(data->currmask_img,    curr_masks,   data->imgHeight * data->imgWidth * sizeof(float));
+    memcpy(data->curr_poses,      curr_poses,   data->nSE3 * 12 * sizeof(float));
+    assert(!updated_masks && "Check code - frame has not been saved after updating the masks previously");
+    updated_masks = true;
+
+    // Unlock mutex so that display happens
+    update_lock.unlock();
+}
+
+//////////////////////////////
+///
+/// \brief Updated predicted masks & Curr poses for SE3-Control
+///
+void PangolinViz::update_real_init(const float *start_angles, const float *start_ptcloud,
+                                   const float *start_poses, const float *start_masks,
+                                   const float *goal_angles, const float *goal_ptcloud,
+                                   const float *goal_poses, const float *goal_masks)
+{
+    // Update PCL viewer
+    boost::mutex::scoped_lock update_lock(data->dataMutex);
+
+    // Memcpy vars
+    memcpy(data->init_jts,    start_angles,  7 * sizeof(float));
+    memcpy(data->final_jts,   goal_angles,   7 * sizeof(float));
+    memcpy(data->init_poses,  start_poses,   data->nSE3 * 12 * sizeof(float));
+    memcpy(data->tar_poses,   goal_poses,    data->nSE3 * 12 * sizeof(float));
+    memcpy(data->init_cloud,  start_ptcloud, data->imgHeight * data->imgWidth * 3 * sizeof(float));
+    memcpy(data->final_cloud, goal_ptcloud,  data->imgHeight * data->imgWidth * 3 * sizeof(float));
+
+    // Unlock mutex so that display happens
+    update_lock.unlock();
+}
+
+//////////////////////////////
+///
 /// \brief Start saving rendered frames to disk
 ///
 void PangolinViz::start_saving_frames(const std::string framesavedir)

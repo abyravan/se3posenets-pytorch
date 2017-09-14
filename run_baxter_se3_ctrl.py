@@ -181,42 +181,49 @@ def load_checkpoint(filename):
 
 #### Setup model with trained params
 def setup_model(checkpoint, args, use_cuda=False):
-    # Create a model
-    if args.seq_len == 1:
-        if args.use_gt_masks:
-            model = ctrlnets.SE3OnlyPoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                              se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                              input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                              init_posese3_iden=False, init_transse3_iden=False,
-                                              use_wt_sharpening=args.use_wt_sharpening,
-                                              sharpen_start_iter=args.sharpen_start_iter,
-                                              sharpen_rate=args.sharpen_rate, pre_conv=False,
-                                              wide=args.wide_model)  # TODO: pre-conv
-            posemaskpredfn = model.posemodel.forward
-        elif args.use_gt_poses:
-            assert False, "No need to run tests with GT poses provided"
-        else:
-            model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                          se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                          input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                          init_posese3_iden=False, init_transse3_iden=False,
-                                          use_wt_sharpening=args.use_wt_sharpening,
-                                          sharpen_start_iter=args.sharpen_start_iter,
-                                          sharpen_rate=args.sharpen_rate, pre_conv=False,
-                                          wide=args.wide_model)  # TODO: pre-conv
-            posemaskpredfn = model.posemaskmodel.forward
-    else:
-        model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                               se3_type=args.se3_type, use_pivot=args.pred_pivot,
-                                               use_kinchain=False,
-                                               input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                               init_posese3_iden=args.init_posese3_iden,
-                                               init_transse3_iden=args.init_transse3_iden,
-                                               use_wt_sharpening=args.use_wt_sharpening,
-                                               sharpen_start_iter=args.sharpen_start_iter,
-                                               sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                                               decomp_model=args.decomp_model, wide=args.wide_model)
-        posemaskpredfn = model.forward_pose_mask
+    # # Create a model
+    # if args.seq_len == 1:
+    #     if args.use_gt_masks:
+    #         model = ctrlnets.SE3OnlyPoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    #                                           se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+    #                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+    #                                           init_posese3_iden=False, init_transse3_iden=False,
+    #                                           use_wt_sharpening=args.use_wt_sharpening,
+    #                                           sharpen_start_iter=args.sharpen_start_iter,
+    #                                           sharpen_rate=args.sharpen_rate, pre_conv=False,
+    #                                           wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+    #                                           use_jt_angles_trans=args.use_jt_angles_trans,
+    #                                           num_state=args.num_state_net)  # TODO: pre-conv
+    #         posemaskpredfn = model.posemodel.forward
+    #     elif args.use_gt_poses:
+    #         assert False, "No need to run tests with GT poses provided"
+    #     else:
+    #         model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    #                                       se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+    #                                       input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+    #                                       init_posese3_iden=False, init_transse3_iden=False,
+    #                                       use_wt_sharpening=args.use_wt_sharpening,
+    #                                       sharpen_start_iter=args.sharpen_start_iter,
+    #                                       sharpen_rate=args.sharpen_rate, pre_conv=False,
+    #                                       wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+    #                                       use_jt_angles_trans=args.use_jt_angles_trans,
+    #                                       num_state=args.num_state_net)  # TODO: pre-conv
+    #         posemaskpredfn = model.posemaskmodel.forward
+    # else:
+    model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                           se3_type=args.se3_type, use_pivot=args.pred_pivot,
+                                           use_kinchain=False,
+                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                           init_posese3_iden=args.init_posese3_iden,
+                                           init_transse3_iden=args.init_transse3_iden,
+                                           use_wt_sharpening=args.use_wt_sharpening,
+                                           sharpen_start_iter=args.sharpen_start_iter,
+                                           sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                                           decomp_model=args.decomp_model, wide=args.wide_model,
+                                           use_jt_angles=args.use_jt_angles,
+                                           use_jt_angles_trans=args.use_jt_angles_trans,
+                                           num_state=args.num_state_net)
+    posemaskpredfn = model.forward_pose_mask
     if use_cuda:
         model.cuda()  # Convert to CUDA if enabled
 
@@ -232,22 +239,42 @@ def setup_model(checkpoint, args, use_cuda=False):
     # Return model & fwd function
     return model, posemaskpredfn
 
+def read_jt_angles(dataset, id, num_state=7):
+    seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
+
+    # Setup memory
+    sequence = data.generate_baxter_sequence(dataset, id)  # Get the file paths
+    actconfigs = torch.FloatTensor(seq_len + 1, num_state)  # Actual data is same as state dimension
+
+    # Load sequence
+    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
+    for k in xrange(len(sequence)):
+        # Get data table
+        s = sequence[k]
+
+        # Load configs
+        state = data.read_baxter_state_file(s['state1'])
+        actconfigs[k] = state['actjtpos']  # state dimension
+
+    return {"actconfigs": actconfigs}
+
 #### Dataset for getting test case
 def setup_test_dataset(args):
     ########################
     ############ Get the data
     # Get datasets (TODO: Make this path variable)
-    data_path = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/'
+    load_dir = '/home/barun/Projects/newdata/session_2017-9-12_201115/'
 
     # Get dimensions of ctrl & state
     try:
-        statelabels, ctrllabels = data.read_statectrllabels_file(data_path + "/statectrllabels.txt")
-        print("Reading state/ctrl joint labels from: " + data_path + "/statectrllabels.txt")
+        statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+        print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
     except:
-        statelabels = data.read_statelabels_file(data_path + '/statelabels.txt')['frames']
+        statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
         ctrllabels = statelabels  # Just use the labels
+        trackerlabels = []
         print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-    args.num_state, args.num_ctrl = len(statelabels), len(ctrllabels)
+    args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
     print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
 
     # Find the IDs of the controlled joints in the state vector
@@ -256,25 +283,19 @@ def setup_test_dataset(args):
     ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
     print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
 
-    # Get cam data
-    #args.cam_extrinsics = data.read_cameradata_file(data_path + '/cameradata.txt')  # TODO: BWDs compatibility
-    #args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-    #                                                                           args.cam_intrinsics)  # TODO: BWDs compatibility
-    baxter_data = data.read_recurrent_baxter_dataset(data_path, 'sub',
-                                                     step_len=1, seq_len=1,
-                                                     train_per=args.train_per, val_per=args.val_per)
-    disk_read_func = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht=240,#args.img_ht,
-                                                                      img_wd=320,#args.img_wd,
-                                                                      img_scale=1e-4,#args.img_scale,
-                                                                      ctrl_type='actdiffvel',
-                                                                      num_ctrl=7,#args.num_ctrl,
-                                                                      num_state=7,#args.num_state,
-                                                                      mesh_ids=args.mesh_ids,
-                                                                      ctrl_ids = ctrlids_in_state,
-                                                                      camera_extrinsics=args.cam_extrinsics,
-                                                                      camera_intrinsics=args.cam_intrinsics)
+    ## TODO: We have skipped checking for examples with left arm motion (or) right arm still
+    valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
+                                                               mean_dt=args.mean_dt, std_dt=args.std_dt,
+                                                               reject_left_motion=False,
+                                                               reject_right_still=False)
+    baxter_data = data.read_recurrent_baxter_dataset(load_dir, 'sub',
+                                                     step_len=args.step_len, seq_len=args.seq_len,
+                                                     train_per=args.train_per, val_per=args.val_per,
+                                                     valid_filter=valid_filter)
+    disk_read_func = lambda d, i: read_jt_angles(d, i, num_state=args.num_state)
     test_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
-    return test_dataset
+
+    return test_dataset, ctrlids_in_state
 
 def create_config(angles):
     joints = ['right_s0', 'right_s1', 'right_e0', 'right_e1', 'right_w0', 'right_w1', 'right_w2']
@@ -369,6 +390,13 @@ class SE3PoseSpaceOptimizer(object):
         if not hasattr(self.args, "num_state"):
             self.args.num_state = self.args.num_ctrl
 
+        if not hasattr(self.args, "use_full_jt_angles"):
+            self.args.use_full_jt_angles = True
+        if self.args.use_full_jt_angles:
+            self.args.num_state_net = self.args.num_state
+        else:
+            self.args.num_state_net = self.args.num_ctrl
+
         # Setup model
         self.model, self.posemaskfn = setup_model(self.checkpoint, self.args, self.pargs.cuda)
 
@@ -379,7 +407,7 @@ class SE3PoseSpaceOptimizer(object):
 
         ########################
         # Setup dataset
-        self.dataset = setup_test_dataset(self.args)
+        self.dataset, self.ctrlids_in_state = setup_test_dataset(self.args)
 
     ## Get goal / start joint angles
     def setup_start_goal_angles(self):
@@ -393,8 +421,10 @@ class SE3PoseSpaceOptimizer(object):
         goal_sample  = self.dataset[goal_id]
 
         # Get the joint angles
-        start_angles = start_sample['actconfigs'][0]
-        goal_angles = goal_sample['actconfigs'][0]
+        start_full_angles = start_sample['actconfigs'][0]
+        goal_full_angles = goal_sample['actconfigs'][0]
+        start_angles = start_full_angles[self.ctrlids_in_state]
+        goal_angles  = goal_full_angles[self.ctrlids_in_state]
         if self.pargs.only_top4_jts:
             assert not self.pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
             print('Controlling only top 4 joints')
@@ -412,11 +442,11 @@ class SE3PoseSpaceOptimizer(object):
                     goal_angles[k] = start_angles[k]
 
         # Initialize the pangolin viewer
-        start_pts, da_goal_pts = torch.zeros(1, 3, self.args.img_ht, self.args.img_wd), torch.zeros(1, 3, self.args.img_ht, self.args.img_wd)
-        pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
+        #start_pts, da_goal_pts = torch.zeros(1, 3, self.args.img_ht, self.args.img_wd), torch.zeros(1, 3, self.args.img_ht, self.args.img_wd)
+        #pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
 
         # Return
-        return start_angles, goal_angles, start_id, goal_id
+        return start_angles, goal_angles, start_id, goal_id, start_full_angles, goal_full_angles
 
     ## Compute pose & masks
     def predict_pose_masks(self, config, pts, tbtopic='Mask'):
@@ -429,12 +459,12 @@ class SE3PoseSpaceOptimizer(object):
         else:
             poses, masks = self.posemaskfn([util.to_var(pts.type(self.deftype)), config_v], train_iter=self.num_train_iter)
 
-        ## Display the masks as an image summary
-        maskdisp = torchvision.utils.make_grid(masks.data.cpu().view(-1, 1, self.args.img_ht, self.args.img_wd),
-                                               nrow=self.args.num_se3, normalize=True, range=(0, 1))
-        info = {tbtopic: util.to_np(maskdisp.narrow(0, 0, 1))}
-        for tag, images in info.items():
-            self.tblogger.image_summary(tag, images, 0)
+        # ## Display the masks as an image summary
+        # maskdisp = torchvision.utils.make_grid(masks.data.cpu().view(-1, 1, self.args.img_ht, self.args.img_wd),
+        #                                        nrow=self.args.num_se3, normalize=True, range=(0, 1))
+        # info = {tbtopic: util.to_np(maskdisp.narrow(0, 0, 1))}
+        # for tag, images in info.items():
+        #     self.tblogger.image_summary(tag, images, 0)
 
         return poses, masks
 
@@ -625,19 +655,19 @@ def main():
     jc = SE3ControlPositionMode(pargs.limb)
     rospy.on_shutdown(jc.clean_shutdown) # register shutdown callback
 
-    # If real robot, set left arm to default position
-    if pargs.real_robot:
-        lc = SE3ControlPositionMode("left")
-        print("Moving left arm to default position...")
-        lc.move_to_pos({
-            "left_e0": -0.309864,
-            "left_e1":  1.55201,
-            "left_s0":  0.341311,
-            "left_s1":  0.0310631,
-            "left_w0":  0.083602,
-            "left_w1":  0.766607,
-            "left_w2":  0.00076699,
-        })
+    # # If real robot, set left arm to default position
+    # if pargs.real_robot:
+    #     lc = SE3ControlPositionMode("left")
+    #     print("Moving left arm to default position...")
+    #     lc.move_to_pos({
+    #         "left_e0": -0.309864,
+    #         "left_e1":  1.55201,
+    #         "left_s0":  0.341311,
+    #         "left_s1":  0.0310631,
+    #         "left_w0":  0.083602,
+    #         "left_w1":  0.766607,
+    #         "left_w2":  0.00076699,
+    #     })
 
     ###### Setup controller (load trained net)
     se3optim = SE3PoseSpaceOptimizer(pargs)
@@ -645,7 +675,32 @@ def main():
     deftype  = se3optim.deftype
 
     # Initialize start & goal config
-    start_angles, goal_angles, start_id, goal_id = se3optim.setup_start_goal_angles()
+    start_angles, goal_angles, start_id, goal_id, \
+    start_full_angles, goal_full_angles = se3optim.setup_start_goal_angles()
+    curr_full_angles = start_full_angles.clone()
+
+    #########
+    # SOME TEST CONFIGS:
+    # 66305 (works perfectly for all joints!)
+    start_angles = torch.FloatTensor([ 0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328])
+    goal_angles  = torch.FloatTensor([4.1391e-01, -4.5127e-01, 8.9605e-01,  1.1968e+00, -4.4754e-05,  8.8374e-01, 6.2656e-02])
+
+    # 31000 (Doesn't work :()
+    #start_angles = torch.FloatTensor([0.5052, -0.4135, 1.0945,  1.6024,  1.0821, -0.6957, -0.2535])
+    #goal_angles  = torch.FloatTensor([0.0880, -0.3266, 0.8092,  1.1611,  0.2845,  0.5481, -0.4666])
+
+    # 41000 (Kinda OK, joint 4 still stays at errors of ~7 degrees)
+    #start_angles = torch.FloatTensor([-0.6730,  0.5814,  1.3403,  1.7309, -0.4106,  0.4301, -1.7868])
+    #goal_angles  = torch.FloatTensor([-0.0374, -0.2891,  1.2771,  1.4422, -0.4017,  0.9142, -0.7823])
+
+    # 51000 (Has issues with 4,5)
+    #start_angles = torch.FloatTensor([ 0.3525, -0.1269,  1.1656,  1.3804,  0.1220,  0.3742, -0.1250])
+    #goal_angles  = torch.FloatTensor([ 0.4959, -0.2184,  1.2100,  1.8197,  0.3975, -0.7801,  0.2076])
+
+    # Print error
+    print('Initial jt angle error:')
+    full_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)  # Full error in degrees
+    print(full_deg_error.view(se3optim.args.num_ctrl, 1))
 
     ###### Setup subscriber to depth images if using real robot
     if pargs.real_robot:
@@ -665,7 +720,11 @@ def main():
         goal_pts, _ = generate_ptcloud(goal_angles, se3optim.args)
 
     # Compute goal poses
-    goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
+    if se3optim.args.use_full_jt_angles:
+        curr_full_angles[se3optim.ctrlids_in_state] = goal_angles # Only the controlled joints move
+        goal_poses, goal_masks = se3optim.predict_pose_masks(curr_full_angles, goal_pts, 'Goal Mask')
+    else:
+        goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
 
     ###### Start stuff
     # Set start position, get observation
@@ -676,17 +735,26 @@ def main():
         start_pts, _ = generate_ptcloud(start_angles, se3optim.args)
 
     # Compute goal poses
-    start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
+    if se3optim.args.use_full_jt_angles:
+        curr_full_angles[se3optim.ctrlids_in_state] = start_angles # Only the controlled joints move
+        start_poses, start_masks = se3optim.predict_pose_masks(curr_full_angles, start_pts, 'Start Mask')
+    else:
+        start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
 
     # Render the poses
     # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
+    start_masks_f, goal_masks_f = start_masks.data.cpu().float(), goal_masks.data.cpu().float()
+    _, start_labels = start_masks_f.max(dim=1); start_labels_f = start_labels.float()
+    _, goal_labels  = goal_masks_f.max(dim=1);  goal_labels_f  = goal_labels.float()
     start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
-    pangolin.initialize_poses(start_poses_f[0].numpy(), goal_poses_f[0].numpy())
-
-    # Print error
-    print('Initial jt angle error:')
-    full_deg_error = (start_angles - goal_angles) * (180.0/np.pi) # Full error in degrees
-    print(full_deg_error.view(se3optim.args.num_ctrl,1))
+    pangolin.update_real_init(start_angles.numpy(),
+                              start_pts[0].numpy(),
+                              start_poses_f[0].numpy(),
+                              start_labels_f.numpy(),
+                              goal_angles.numpy(),
+                              goal_pts[0].numpy(),
+                              goal_poses_f[0].numpy(),
+                              goal_labels_f.numpy())
 
     ###### Run the controller
     # Init stuff
@@ -726,8 +794,11 @@ def main():
 
         # Predict poses and masks
         start = time.time()
-
-        curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
+        if se3optim.args.use_full_jt_angles:
+            curr_full_angles[se3optim.ctrlids_in_state] = goal_angles  # Only the controlled joints move
+            curr_poses, curr_masks = se3optim.predict_pose_masks(curr_full_angles, curr_pts, 'Curr Mask')
+        else:
+            curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
         curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
 
         posemask_time.update(time.time() - start)
@@ -736,8 +807,12 @@ def main():
         start = time.time()
 
         _, curr_labels = curr_masks_f.max(dim=1)
+        curr_pts_f = curr_pts.cpu().float()
         curr_labels_f = curr_labels.float()
-        pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
+        pangolin.update_real_curr(curr_angles.numpy(),
+                                  curr_pts_f[0].numpy(),
+                                  curr_poses_f[0].numpy(),
+                                  curr_labels_f.numpy())
 
         viz_time.update(time.time() - start)
 

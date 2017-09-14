@@ -57,6 +57,14 @@ cdef extern from "pangoviz.hpp":
         void update_masklabels_and_poses(const float *curr_masks,
                                          const float *curr_poses);
 
+        void update_real_curr(const float *curr_angles, const float *curr_ptcloud,
+                              const float *curr_poses, const float *curr_masks);
+
+        void update_real_init(const float *start_angles, const float *start_ptcloud,
+                              const float *start_poses, const float *start_masks,
+                              const float *goal_angles, const float *goal_ptcloud,
+                              const float *goal_poses, const float *goal_masks);
+
         void start_saving_frames(const string framesavedir);
 
         void stop_saving_frames();
@@ -169,6 +177,34 @@ cdef class PyPangolinViz:
         # Run CPP code
         self.pangoviz.update_masklabels_and_poses(&curr_masks[0,0,0],
                                                   &curr_poses[0,0,0])
+
+    def update_real_curr(self, np.ndarray[np.float32_t, ndim=1] curr_angles,
+                               np.ndarray[np.float32_t, ndim=3] curr_ptcloud,
+                               np.ndarray[np.float32_t, ndim=3] curr_poses,
+                               np.ndarray[np.float32_t, ndim=3] curr_masks):
+        # Run CPP code
+        self.pangoviz.update_real_curr(&curr_angles[0],
+                                       &curr_ptcloud[0,0,0],
+                                       &curr_poses[0,0,0],
+                                       &curr_masks[0,0,0])
+
+    def update_real_init(self, np.ndarray[np.float32_t, ndim=1] start_angles,
+                               np.ndarray[np.float32_t, ndim=3] start_ptcloud,
+                               np.ndarray[np.float32_t, ndim=3] start_poses,
+                               np.ndarray[np.float32_t, ndim=3] start_masks,
+                               np.ndarray[np.float32_t, ndim=1] goal_angles,
+                               np.ndarray[np.float32_t, ndim=3] goal_ptcloud,
+                               np.ndarray[np.float32_t, ndim=3] goal_poses,
+                               np.ndarray[np.float32_t, ndim=3] goal_masks):
+        # Run CPP code
+        self.pangoviz.update_real_init(&start_angles[0],
+                                       &start_ptcloud[0,0,0],
+                                       &start_poses[0,0,0],
+                                       &start_masks[0,0,0],
+                                       &goal_angles[0],
+                                       &goal_ptcloud[0,0,0],
+                                       &goal_poses[0,0,0],
+                                       &goal_masks[0,0,0])
 
     def start_saving_frames(self, string framesavedir):
         # Run CPP code

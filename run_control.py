@@ -162,54 +162,61 @@ def main():
         args.mean_dt = args.step_len * (1.0/30.0)
         args.std_dt  = 0.005 # Default params
 
+    if not hasattr(args, "use_full_jt_angles"):
+        args.use_full_jt_angles = True
+    if args.use_full_jt_angles:
+        args.num_state_net = args.num_state
+    else:
+        args.num_state_net = args.num_ctrl
+
     ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
     ## TODO: Or allow pangolin to change the args later
 
-    # Create a model
-    if args.seq_len == 1:
-        if args.use_gt_masks:
-            model = ctrlnets.SE3OnlyPoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                              se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                              input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                              init_posese3_iden=False, init_transse3_iden=False,
-                                              use_wt_sharpening=args.use_wt_sharpening,
-                                              sharpen_start_iter=args.sharpen_start_iter,
-                                              sharpen_rate=args.sharpen_rate, pre_conv=False,
-                                              wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                                              use_jt_angles_trans=args.use_jt_angles_trans,
-                                              num_state=args.num_state)  # TODO: pre-conv
-            posemaskpredfn = model.posemodel.forward
-        elif args.use_gt_poses:
-            assert False, "No need to run tests with GT poses provided"
-        else:
-            model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                          se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                                          input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                                          init_posese3_iden=False, init_transse3_iden=False,
-                                          use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                                          sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model,
-                                          use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                                          num_state=args.num_state) # TODO: pre-conv
-            posemaskpredfn = model.posemaskmodel.forward
-    else:
-        if args.use_gt_masks:
-            modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
-        elif args.use_gt_poses:
-            assert False, "No need to run tests with GT poses provided"
-        else:
-            modelfn = ctrlnets.MultiStepSE3PoseModel
-        model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                        init_posese3_iden=args.init_posese3_iden,
-                        init_transse3_iden=args.init_transse3_iden,
-                        use_wt_sharpening=args.use_wt_sharpening,
-                        sharpen_start_iter=args.sharpen_start_iter,
-                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                        decomp_model=args.decomp_model, wide=args.wide_model,
-                        use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                        num_state=args.num_state)
-        posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
+    # # Create a model
+    # if args.seq_len == 1:
+    #     if args.use_gt_masks:
+    #         model = ctrlnets.SE3OnlyPoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    #                                           se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+    #                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+    #                                           init_posese3_iden=False, init_transse3_iden=False,
+    #                                           use_wt_sharpening=args.use_wt_sharpening,
+    #                                           sharpen_start_iter=args.sharpen_start_iter,
+    #                                           sharpen_rate=args.sharpen_rate, pre_conv=False,
+    #                                           wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+    #                                           use_jt_angles_trans=args.use_jt_angles_trans,
+    #                                           num_state=args.num_state_net)  # TODO: pre-conv
+    #         posemaskpredfn = model.posemodel.forward
+    #     elif args.use_gt_poses:
+    #         assert False, "No need to run tests with GT poses provided"
+    #     else:
+    #         model = ctrlnets.SE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    #                                       se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+    #                                       input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+    #                                       init_posese3_iden=False, init_transse3_iden=False,
+    #                                       use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+    #                                       sharpen_rate=args.sharpen_rate, pre_conv=False, wide=args.wide_model,
+    #                                       use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+    #                                       num_state=args.num_state_net) # TODO: pre-conv
+    #         posemaskpredfn = model.posemaskmodel.forward
+    # else:
+    #     if args.use_gt_masks:
+    #         modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
+    #     elif args.use_gt_poses:
+    #         assert False, "No need to run tests with GT poses provided"
+    #     else:
+    modelfn = ctrlnets.MultiStepSE3PoseModel
+    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                    se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                    input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                    init_posese3_iden=args.init_posese3_iden,
+                    init_transse3_iden=args.init_transse3_iden,
+                    use_wt_sharpening=args.use_wt_sharpening,
+                    sharpen_start_iter=args.sharpen_start_iter,
+                    sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                    decomp_model=args.decomp_model, wide=args.wide_model,
+                    use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                    num_state=args.num_state_net)
+    posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
 

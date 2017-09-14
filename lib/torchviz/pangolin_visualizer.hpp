@@ -315,6 +315,15 @@ class PangolinViz
 
         void stop_saving_frames();
 
+        // Real data
+        void update_real_curr(const float *curr_angles, const float *curr_ptcloud,
+                              const float *curr_poses, const float *curr_masks);
+
+        void update_real_init(const float *start_angles, const float *start_ptcloud,
+                              const float *start_poses, const float *start_masks,
+                              const float *goal_angles, const float *goal_ptcloud,
+                              const float *goal_poses, const float *goal_masks);
+
     private:
         boost::shared_ptr<LuaData> data;
         boost::shared_ptr<boost::thread> pangolin_gui_thread;

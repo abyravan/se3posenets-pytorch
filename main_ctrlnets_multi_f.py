@@ -36,6 +36,8 @@ parser.add_argument('--backprop-only-first-delta', action='store_true', default=
                          'full-flow-loss with copied composed deltas if this is set (default: False)')
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
+parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
+                    help='Use angles of all joints as inputs to the networks (default: False)')
 
 ################ MAIN
 #@profile
@@ -126,6 +128,7 @@ def main():
     # if we need to choose the vals in the state vector for the control
     ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
     print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+    args.ctrlids_in_state = ctrlids_in_state
 
     # Compute intrinsic grid
     args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
@@ -237,6 +240,13 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
+    if args.use_full_jt_angles:
+        print('Using full state')
+        args.num_state_net = args.num_state
+    else:
+        print('Using state of controllable joints')
+        args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
+
     if args.se2_data:
         print('Using the smaller multi-step SE2-Pose-Model')
     else:
@@ -263,7 +273,7 @@ def main():
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state)
+                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -482,11 +492,16 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Currently batchsize is the outer dimension
         pts      = util.to_var(sample['points'].type(deftype), requires_grad=train)
         ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=train)
-        jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
         fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         fwdvis   = util.to_var(sample['fwdvisibilities'].type(deftype), requires_grad=False)
         tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
+
+        # Get jt angles
+        if args.use_full_jt_angles:
+            jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
+        else:
+            jtangles = util.to_var(sample['actconfigs'][:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)

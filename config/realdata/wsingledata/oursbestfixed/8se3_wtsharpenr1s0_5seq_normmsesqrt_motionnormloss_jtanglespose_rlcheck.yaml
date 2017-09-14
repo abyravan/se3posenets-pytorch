@@ -56,9 +56,9 @@ backprop-only-first-delta: False
 # Training options
 no-cuda:        False
 use-pin-memory: False
-epochs:         20
+epochs:         40
 start-epoch:    0
-train-ipe:      5000
+train-ipe:      2500
 val-ipe:        500
 evaluate:       False
 seed:           100

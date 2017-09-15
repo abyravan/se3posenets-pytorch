@@ -468,7 +468,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_full_jt_angles:
             jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
         else:
-            jtangles = util.to_var(sample['actconfigs'][:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
+            jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)

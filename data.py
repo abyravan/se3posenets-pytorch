@@ -527,6 +527,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
     actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
+    actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl) # Ids in actual data belonging to commanded data
     comconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Commanded data is same as control dimension
     controls   = torch.FloatTensor(seq_len, num_ctrl)      # Commanded data is same as control dimension
     poses      = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
@@ -552,6 +553,21 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     if num_tracker > 0:
         trackerconfigs = torch.FloatTensor(seq_len + 1, num_tracker)  # Tracker data is same as tracker dimension
 
+    ##### Read the ctrl ids & extrinsics file
+    # Get dimensions of ctrl & state
+    try:
+        statelabels, ctrllabels, _ = read_statectrllabels_file(dataset["path"] + "/../statectrllabels.txt")
+    except:
+        statelabels = read_statelabels_file(dataset["path"] + '/../statelabels.txt')['frames']
+        ctrllabels = statelabels  # Just use the labels
+
+    # Find the IDs of the controlled joints in the state vector
+    # We need this if we have state dimension > ctrl dimension and
+    # if we need to choose the vals in the state vector for the control
+    ctrl_ids = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+    camera_extrinsics = read_cameradata_file(dataset["path"] + '/../cameradata.txt')
+
+    #####
     # Load sequence
     t = torch.linspace(0, seq_len*step_len*(1.0/30.0), seq_len+1).view(seq_len+1,1) # time stamp
     for k in xrange(len(sequence)):
@@ -569,6 +585,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         state = read_baxter_state_file(s['state1'])
         actconfigs[k] = state['actjtpos'] # state dimension
         comconfigs[k] = state['comjtpos'] # ctrl dimension
+        actctrlconfigs[k] = state['actjtpos'][ctrl_ids] # Get states for control IDs
         if state['timestamp'] is not None:
             t[k] = state['timestamp']
 
@@ -651,7 +668,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
             'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses,
-            'dt': dt}
+            'dt': dt, 'actctrlconfigs': actctrlconfigs}
     if compute_bwdflows:
         data['masks']           = masks
         data['bwdflows']        = bwdflows

@@ -393,6 +393,20 @@ def main():
     # Delete train and val data loaders
     del train_loader, val_loader
 
+    # Load best model for testing (not latest one)
+    print("=> loading best model from '{}'".format(args.save_dir + "/model_best.pth.tar"))
+    checkpoint = torch.load(args.save_dir + "/model_best.pth.tar")
+    num_train_iter = checkpoint['train_iter']
+    try:
+        model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)
+    except:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    print("=> loaded best checkpoint (epoch {}, train iter {})"
+          .format(checkpoint['epoch'], num_train_iter))
+    best_epoch = checkpoint['best_epoch'] if hasattr(checkpoint, 'best_epoch') else 0
+    print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
+                                                                         best_epoch))
+
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')

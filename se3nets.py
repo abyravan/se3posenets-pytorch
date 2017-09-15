@@ -322,7 +322,7 @@ class SE3Model(nn.Module):
         ptcloud_1, jtangles_1, ctrl_1 = x
 
         # Get delta-pose & mask predictions
-        state_1        = self.encoder([ptcloud_1, jtangles_1, ctrl_1], reset_hidden_state=False)
+        state_1        = self.encoder([ptcloud_1, jtangles_1, ctrl_1], reset_hidden_state=reset_hidden_state)
         mask_1         = self.maskdecoder(state_1, train_iter=train_iter)
         deltapose_t_12 = self.deltase3decoder(state_1[0])
 

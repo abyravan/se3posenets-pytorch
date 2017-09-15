@@ -334,7 +334,8 @@ def main():
 
     ########################
     ############ Train / Validate
-    best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], 0
+    best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], \
+                                0 if args.resume == '' else checkpoint['bext_epoch']
     if args.resume != '' and hasattr(checkpoint, "best_epoch"):
         best_epoch = checkpoint['best_epoch']
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
@@ -442,6 +443,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Save the flow errors and poses if in "testing" mode
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
         stats.predposes, stats.predtransposes, stats.preddeltas, stats.ctrls = [], [], [], []
+        stats.poses = []
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -680,6 +682,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             stats.predtransposes.append([x.data.cpu().float() for x in transposes])
             stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])
             stats.ctrls.append(ctrls.data.cpu().float())
+            stats.poses.append(sample['poses'])
 
         # Compute flow error per mask (if asked to)
         #if args.disp_err_per_mask:

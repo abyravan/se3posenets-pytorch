@@ -378,12 +378,12 @@ def main():
 
         #### Predict start/goal poses and masks
         print('Predicting start/goal poses and masks')
-        if args.use_jt_angles or args.seq_len > 1:
-            sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
-            tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
-        else:
-            sinp = util.to_var(start_pts.type(deftype))
-            tinp = util.to_var(goal_pts.type(deftype))
+        #if args.use_jt_angles or args.seq_len > 1:
+        sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
+        tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
+        #else:
+        #    sinp = util.to_var(start_pts.type(deftype))
+        #    tinp = util.to_var(goal_pts.type(deftype))
 
         if args.use_gt_masks: # GT masks are provided!
             _, start_rlabels = generate_ptcloud(start_angles)
@@ -447,10 +447,10 @@ def main():
 
             # Predict poses and masks
             start = time.time()
-            if args.use_jt_angles or args.seq_len > 1:
-                inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
-            else:
-                inp = util.to_var(curr_pts)
+            #if args.use_jt_angles or args.seq_len > 1:
+            inp = [util.to_var(curr_pts), util.to_var(curr_angles.view(1, -1).type(deftype))]
+            #else:
+            #    inp = util.to_var(curr_pts)
             if args.use_gt_masks:
                 curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
                 curr_poses = posemaskpredfn(inp)
@@ -508,7 +508,7 @@ def main():
             deg_errors.append((next_angles-goal_angles).view(1,7)*(180.0/np.pi))
 
             # Print losses and errors
-            print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k, num_configs, it+1, pargs.max_iter, loss))
+            print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, it+1, pargs.max_iter, loss))
             print('Joint angle errors in degrees: ',
                   torch.cat([deg_errors[-1].view(7,1), full_deg_error.unsqueeze(1)], 1))
 
@@ -517,7 +517,7 @@ def main():
             labels = []
             if ((it % 4) == 0) or (loss < pargs.loss_threshold):
                 conv = "Converged" if (loss < pargs.loss_threshold) else ""
-                axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k, num_configs,
+                axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k+1, num_configs,
                                                                                              (it + 1), loss)) + conv)
                 for j in xrange(7):
                     axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
@@ -565,7 +565,7 @@ def main():
             conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
         else:
             conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
-        errorfile.write(("Test: {}, ".format(k)) + conv)
+        errorfile.write(("Test: {}, ".format(k+1)) + conv)
         for j in xrange(len(start_angles)):
             errorfile.write("{}, {}, {}, {}\n".format(start_angles[j], goal_angles[j],
                                                     full_deg_error[j], deg_errors[-1][0,j]))

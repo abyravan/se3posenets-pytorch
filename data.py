@@ -555,17 +555,18 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     ##### Read the ctrl ids & extrinsics file
     # Get dimensions of ctrl & state
+    load_dir =  dataset["path"] if (dataset.has_key('subdirs')) else dataset["path"] + "/../"
     try:
-        statelabels, ctrllabels, _ = read_statectrllabels_file(dataset["path"] + "/../statectrllabels.txt")
+        statelabels, ctrllabels, _ = read_statectrllabels_file(load_dir + "/statectrllabels.txt")
     except:
-        statelabels = read_statelabels_file(dataset["path"] + '/../statelabels.txt')['frames']
+        statelabels = read_statelabels_file(load_dir + '/statelabels.txt')['frames']
         ctrllabels = statelabels  # Just use the labels
 
     # Find the IDs of the controlled joints in the state vector
     # We need this if we have state dimension > ctrl dimension and
     # if we need to choose the vals in the state vector for the control
     ctrl_ids = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
-    camera_extrinsics = read_cameradata_file(dataset["path"] + '/../cameradata.txt')
+    camera_extrinsics = read_cameradata_file(load_dir + '/cameradata.txt')
 
     #####
     # Load sequence

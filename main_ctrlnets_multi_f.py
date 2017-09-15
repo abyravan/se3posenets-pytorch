@@ -335,7 +335,7 @@ def main():
     ########################
     ############ Train / Validate
     best_val_loss, best_epoch = float("inf") if args.resume == '' else checkpoint['best_loss'], \
-                                0 if args.resume == '' else checkpoint['bext_epoch']
+                                0 if args.resume == '' else checkpoint['best_epoch']
     if args.resume != '' and hasattr(checkpoint, "best_epoch"):
         best_epoch = checkpoint['best_epoch']
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data

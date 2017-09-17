@@ -237,7 +237,8 @@ def main():
                                                                        #ctrl_ids=ctrlids_in_state,
                                                                        #camera_extrinsics = args.cam_extrinsics,
                                                                        #camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
+                                                                       compute_bwdflows=args.use_gt_masks,
+                                                                       #num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                                        use_only_da=args.use_only_da_for_flows,
                                                                        noise_func=noise_func) # Need BWD flows / masks if using GT masks

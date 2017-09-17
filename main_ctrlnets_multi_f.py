@@ -575,7 +575,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Now compute the losses across the sequence
         # We use point loss in the FWD dirn and Consistency loss between poses
         predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
-        #dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         for k in xrange(args.seq_len):
             ### Make the 3D point predictions and set up loss
             # Separate between using the full gradient & gradient only for the first delta pose
@@ -623,28 +623,28 @@ def iterate(data_loader, model, tblogger, num_iters,
             nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
 
-            # # Add a loss for pose dis-similarity & delta dis-similarity
-            # dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
-            # currdissimposeloss  = dissimpose_wt * ctrlnets.DisSimilarityLoss(poses[k][:,1:],
-            #                                                                  poses[k+1][:,1:],
-            #                                                                  size_average=True)  # Enforce dis-similarity in pose space
-            # currdissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltaposes[k][:,1:],
-            #                                                           identfm.expand_as(deltaposes[k][:,1:]),
-            #                                                           size_average=True) # Change in pose > 0
+            # Add a loss for pose dis-similarity & delta dis-similarity
+            dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
+            currdissimposeloss  = dissimpose_wt * ctrlnets.DisSimilarityLoss(poses[k][:,1:],
+                                                                             poses[k+1][:,1:],
+                                                                             size_average=True)  # Enforce dis-similarity in pose space
+            currdissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltaposes[k][:,1:],
+                                                                      identfm.expand_as(deltaposes[k][:,1:]),
+                                                                      size_average=True) # Change in pose > 0
 
             # Append to total loss
             loss += currptloss + currconsisloss # + currdissimposeloss + currdissimdeltaloss
             ptloss[k]     = currptloss.data[0]
             consisloss[k] = currconsisloss.data[0]
-            #dissimposeloss[k]  = currdissimposeloss.data[0]
-            #dissimdeltaloss[k] = currdissimdeltaloss.data[0]
+            dissimposeloss[k]  = currdissimposeloss.data[0]
+            dissimdeltaloss[k] = currdissimdeltaloss.data[0]
 
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
         stats.loss.update(loss.data[0])
-        #stats.dissimposeloss.update(dissimposeloss)
-        #stats.dissimdeltaloss.update(dissimdeltaloss)
+        stats.dissimposeloss.update(dissimposeloss)
+        stats.dissimdeltaloss.update(dissimdeltaloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -755,8 +755,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-consisloss': consisloss.sum(),
-                #mode+'-dissimposeloss': dissimposeloss.sum(),
-                #mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
+                mode+'-dissimposeloss': dissimposeloss.sum(),
+                mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
                 mode+'-consiserr': consiserror.sum(),
                 mode+'-consiserrmax': consiserrormax.sum(),
                 mode+'-flowerrsum': flowerr_sum.sum()/bsz,
@@ -848,7 +848,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
-              #'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
+              'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
@@ -856,8 +856,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.ptloss.val[k], stats.ptloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
-            #stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
-            #stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
+            stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
+            stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
             stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,

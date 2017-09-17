@@ -1,13 +1,5 @@
 # Global imports
 import _init_paths
-import argparse
-import os
-import sys
-import shutil
-import time
-import numpy as np
-import matplotlib.pyplot as plt
-import random
 
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
 img_ht, img_wd, img_scale = 240, 320, 1e-4
@@ -23,11 +15,19 @@ savedir = 'temp'  # TODO: Fix this!
 
 # Load pangolin visualizer library
 from torchviz import pangoviz
-
 pangolin = pangoviz.PyPangolinViz(seq_len, img_ht, img_wd, img_scale, num_se3,
                                   cam_intrinsics['fx'], cam_intrinsics['fy'],
                                   cam_intrinsics['cx'], cam_intrinsics['cy'],
                                   dt, oldgrippermodel, savedir)
+
+import argparse
+import os
+import sys
+import shutil
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+import random
 
 ##########
 # NOTE: When importing torch before initializing the pangolin window, I get the error:
@@ -376,6 +376,8 @@ def main():
         # Run the controller for max_iter iterations
         gen_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
         conv_iter = pargs.max_iter
+        inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
+        status, prev_loss = 0, np.float("inf")
         for it in xrange(pargs.max_iter):
             # Print
             print('\n #####################')
@@ -421,6 +423,8 @@ def main():
 
             # Run one step of the optimization (controls are always zeros, poses change)
             start = time.time()
+            if args.use_se3_nets:
+                init_ctrl_v.data.uniform_(-0.1, 0.1)
             ctrl_grad, loss = optimize_ctrl(model=model, pts = curr_pts,
                                             ctrl = init_ctrl_v,
                                             angles=angles[it].view(1, -1),
@@ -438,6 +442,8 @@ def main():
             # Get the control direction and scale it by max control magnitude
             start = time.time()
             if ctrl_mag > 0:
+                #if args.use_se3_nets:
+                #    ctrl_grad = init_ctrl_v.data.cpu() - 0.1 * ctrl_grad.cpu().float() # Take a step in control dirn
                 ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2)  # Dirn
                 curr_ctrl = ctrl_dirn * ctrl_mag  # Scale dirn by mag
                 ctrl_mag *= pargs.ctrl_mag_decay  # Decay control magnitude
@@ -445,6 +451,10 @@ def main():
                 curr_ctrl = ctrl_grad.cpu().float()
 
             # Apply control (simple velocity integration)
+            #if args.use_se3_nets:
+            #    next_angles = curr_angles + (curr_ctrl * dt)
+            #    next_angles = next_angles.squeeze()
+            #else:
             next_angles = curr_angles - (curr_ctrl * dt)
 
             # Save stuff
@@ -454,7 +464,8 @@ def main():
             deg_errors.append((next_angles - goal_angles).view(1, 7) * (180.0 / np.pi))
 
             # Print losses and errors
-            print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k + 1, num_configs, it + 1, pargs.max_iter, loss))
+            print('Test: {}/{}, Ctr: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k + 1, num_configs, inc_ctr, max_ctr,
+                                                                                  it + 1, pargs.max_iter, loss))
             print('Joint angle errors in degrees: ',
                   torch.cat([deg_errors[-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
 
@@ -499,6 +510,23 @@ def main():
                 print("*****************************************")
                 break
 
+            # Check loss increase
+            if (loss > prev_loss):
+                inc_ctr += 1
+                if inc_ctr == max_ctr:
+                    print("************* FAILED *****************")
+                    print(
+                    'Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(
+                        it + 1, pargs.max_iter,
+                        loss, pargs.loss_threshold))
+                    status = -1
+                    conv_iter = it + 1
+                    print("*****************************************")
+                    break
+            else:
+                inc_ctr = max(inc_ctr - 1, 0)  # Reset
+            prev_loss = loss
+
         # Print final stats
         print('=========== FINISHED ============')
         print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
@@ -507,7 +535,9 @@ def main():
         final_errors.append(deg_errors[-1])
 
         # Print final error in stats file
-        if conv_iter == pargs.max_iter:
+        if status == -1:
+            conv = "Final Loss: {}, Failed after {} iterations \n".format(losses[-1], conv_iter)
+        elif conv_iter == pargs.max_iter:
             conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
         else:
             conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
@@ -521,7 +551,7 @@ def main():
         iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
                           'angles': angles, 'ctrls': ctrls,
                           'predctrls': ctrl_grads,
-                          'deg_errors': deg_errors, 'losses': losses})
+                          'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors, 0), torch.cat(final_errors, 0)
@@ -564,7 +594,7 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
         ctrl_1 = util.to_var(ctrl.data, requires_grad=True)
         angles_1 = util.to_var(angles.type_as(pts), requires_grad=False)
         if args.use_se3_nets:
-            pred_flows, _ = model([pts_1, angles_1, ctrl_1])
+            pred_flows, _ = model([pts_1, angles_1, ctrl_1], train_iter=num_train_iter)
         else:
             pred_flows = model([pts_1, angles_1, ctrl_1])
 
@@ -602,7 +632,11 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
 
         # FWD pass
         if args.use_se3_nets:
-            pred_flows_p, [masks_p, deltaposes_p] = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True, train_iter=num_train_iter)
+            pred_flows_p, [deltaposes_p, masks_p] = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True, train_iter=num_train_iter)
+            _, curr_labels = masks_p.data.max(dim=1)
+            curr_labels_f = curr_labels.cpu().float()
+            curr_poses_f = deltaposes_p.data.cpu().float()
+            pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
         else:
             pred_flows_p = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True)
 

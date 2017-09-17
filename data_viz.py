@@ -3,7 +3,9 @@ import argparse
 args = argparse.Namespace()
 #args.data = ['/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-2_182257/']
 #args.data = ['../data/session_2017-9-7_233102/']
-args.data = ['../data/session_2017-9-8_152749/']
+#args.data = ['../data/session_2017-9-8_152749/']
+#args.data = ['../data/session_2017-9-13_225254/']
+args.data = ['../data/session_2017-9-14_174138/']
 args.img_suffix = ''
 args.step_len = 2
 args.seq_len = 100

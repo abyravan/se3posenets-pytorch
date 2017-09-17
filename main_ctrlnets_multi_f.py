@@ -224,6 +224,10 @@ def main():
         # Load only test loader
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+        # torch.manual_seed(args.seed)
+        # if args.cuda:
+        #     torch.cuda.manual_seed(args.seed)
+        # sampler = torch.utils.data.dataloader.RandomSampler(test_dataset) # Random sampler
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                                      num_workers=args.num_workers, sampler=sampler,
                                                      pin_memory=args.use_pin_memory,
@@ -444,6 +448,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
         stats.predposes, stats.predtransposes, stats.preddeltas, stats.ctrls = [], [], [], []
         stats.poses = []
+        # stats.predmasks, stats.masks = [], []
+        # stats.gtflows, stats.predflows = [], []
+        # stats.pts = []
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -683,6 +690,11 @@ def iterate(data_loader, model, tblogger, num_iters,
             stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])
             stats.ctrls.append(ctrls.data.cpu().float())
             stats.poses.append(sample['poses'])
+            # stats.predmasks.append(initmask.data.cpu().float())
+            # stats.masks.append(sample['masks'][:,0])
+            # stats.predflows.append(predflows.cpu())
+            # stats.gtflows.append(flows.cpu())
+            # stats.pts.append(sample['points'][:,0])
 
         # Compute flow error per mask (if asked to)
         #if args.disp_err_per_mask:

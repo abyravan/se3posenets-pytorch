@@ -227,6 +227,10 @@ def main():
         # Load only test loader
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+        # torch.manual_seed(args.seed)
+        # if args.cuda:
+        #     torch.cuda.manual_seed(args.seed)
+        # sampler = torch.utils.data.dataloader.RandomSampler(test_dataset) # Random sampler
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                                      num_workers=args.num_workers, sampler=sampler,
                                                      pin_memory=args.use_pin_memory,
@@ -431,6 +435,9 @@ def iterate(data_loader, model, tblogger, num_iters,
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
+        # stats.poses, stats.predmasks, stats.masks = [], [], []
+        # stats.gtflows, stats.predflows = [], []
+        # stats.pts = []
 
     # Switch model modes
     train = True if (mode == 'train') else False
@@ -574,6 +581,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         if mode == 'test':
             stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
             stats.still_err.append(still_err); stats.still_npt.append(still_npt)
+            # if args.use_se3_nets:
+            #     stats.predmasks.append(torch.cat([x.data.cpu().float().unsqueeze(1) for x in masks]))
+            #     stats.masks.append(sample['masks'][:, 0])
+            # stats.predflows.append(predflows_t.cpu())
+            # stats.gtflows.append(flows_t.cpu())
+            # stats.pts.append(sample['points'][:,0])
 
         # Display/Print frequency
         bsz = pts.size(0)

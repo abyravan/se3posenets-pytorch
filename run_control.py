@@ -434,6 +434,8 @@ def main():
         # Run the controller for max_iter iterations
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
         conv_iter = pargs.max_iter
+        inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
+        status, prev_loss = 0, np.float("inf")
         for it in xrange(pargs.max_iter):
             # Print
             print('\n #####################')
@@ -508,7 +510,8 @@ def main():
             deg_errors.append((next_angles-goal_angles).view(1,7)*(180.0/np.pi))
 
             # Print losses and errors
-            print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, it+1, pargs.max_iter, loss))
+            print('Test: {}/{}, Ctr: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, inc_ctr, max_ctr,
+                                                                                  it+1, pargs.max_iter, loss))
             print('Joint angle errors in degrees: ',
                   torch.cat([deg_errors[-1].view(7,1), full_deg_error.unsqueeze(1)], 1))
 
@@ -553,6 +556,21 @@ def main():
                 print("*****************************************")
                 break
 
+            # Check loss increase
+            if (loss > prev_loss):
+                inc_ctr += 1
+                if inc_ctr == max_ctr:
+                    print("************* FAILED *****************")
+                    print('Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(it + 1, pargs.max_iter,
+                                                                                     loss, pargs.loss_threshold))
+                    status = -1
+                    conv_iter = it + 1
+                    print("*****************************************")
+                    break
+            else:
+                inc_ctr = max(inc_ctr-1, 0) # Reset
+            prev_loss = loss
+
         # Print final stats
         print('=========== FINISHED ============')
         print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
@@ -561,7 +579,9 @@ def main():
         final_errors.append(deg_errors[-1])
 
         # Print final error in stats file
-        if conv_iter == pargs.max_iter:
+        if status == -1:
+            conv = "Final Loss: {}, Failed after {} iterations \n".format(losses[-1], conv_iter)
+        elif conv_iter == pargs.max_iter:
             conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
         else:
             conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
@@ -575,7 +595,7 @@ def main():
         iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
                           'angles': angles, 'ctrls': ctrls,
                           'predctrls': ctrl_grads,
-                          'deg_errors': deg_errors, 'losses': losses})
+                          'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors,0), torch.cat(final_errors,0)

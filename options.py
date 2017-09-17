@@ -49,6 +49,8 @@ def setup_comon_options():
                         help='Reject examples where all joints of the right arm move by <0.01 radians inter-frame. (default: False)')
     parser.add_argument('--add-noise', action='store_true', default=False,
                         help='Enable adding noise to the depths and the configs/ctrls. (default: False)')
+    parser.add_argument('--add-noise-data', default=[], required=False,
+                        action='append', metavar='DIRS', help='noise setting per dataset. has to correspond to number in --data [a,b,c...]')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

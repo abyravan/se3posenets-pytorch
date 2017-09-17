@@ -9,14 +9,16 @@ sources = ['src/ntfm3d_cpu.c',
            'src/wt3dtfmloss_cpu.c',
            'src/wt3dtfmnormloss_cpu.c',
            'src/computeflowandvisibility_cpu.c',
-           'src/computeflowandvisibility_pts_cpu.c']
+           'src/computeflowandvisibility_pts_cpu.c',
+		   'src/add_noise_edge_cpu.c']
 headers = ['src/ntfm3d_cpu.h',
            'src/ntfm3ddelta_cpu.h',
            'src/project3dpts_cpu.h',
            'src/wt3dtfmloss_cpu.h',
            'src/wt3dtfmnormloss_cpu.h',
            'src/computeflowandvisibility_cpu.h',
-           'src/computeflowandvisibility_pts_cpu.h']
+           'src/computeflowandvisibility_pts_cpu.h',
+		   'src/add_noise_edge_cpu.h']
 defines = []
 with_cuda = False
 

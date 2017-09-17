@@ -69,36 +69,78 @@ def main():
         torch.cuda.manual_seed(args.seed)
 
     # Get default options & camera intrinsics
-    load_dir = args.data[0] #args.data.split(',,')[0]
-    try:
-        # Read from file
-        intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
-        print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-        if args.se2_data:
-            args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
-        else:
-            args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
-        args.img_scale = 1.0 / intrinsics['s']  # Scale of the image (use directly from the data)
+    args.cam_intrinsics = []
+    for k in xrange(len(args.data)):
+        load_dir = args.data[k] #args.data.split(',,')[0]
+        try:
+            # Read from file
+            intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
+            print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
+            if args.se2_data:
+                args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
+            else:
+                args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
+            args.img_scale = 1.0 / intrinsics['s']  # Scale of the image (use directly from the data)
 
-        # Setup camera intrinsics
-        sc = float(args.img_ht) / intrinsics['ht']  # Scale factor for the intrinsics
-        args.cam_intrinsics = {'fx': intrinsics['fx'] * sc,
-                               'fy': intrinsics['fy'] * sc,
-                               'cx': intrinsics['cx'] * sc,
-                               'cy': intrinsics['cy'] * sc}
-        print("Scale factor for the intrinsics: {}".format(sc))
-    except:
-        print("Could not read intrinsics file, reverting to default settings")
-        args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
-        args.cam_intrinsics = {'fx': 589.3664541825391 / 2,
-                               'fy': 589.3664541825391 / 2,
-                               'cx': 320.5 / 2,
-                               'cy': 240.5 / 2}
-    print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(args.img_ht, args.img_wd,
-                                                                                args.cam_intrinsics['fx'],
-                                                                                args.cam_intrinsics['fy'],
-                                                                                args.cam_intrinsics['cx'],
-                                                                                args.cam_intrinsics['cy']))
+            # Setup camera intrinsics
+            sc = float(args.img_ht) / intrinsics['ht']  # Scale factor for the intrinsics
+            cam_intrinsics = {'fx': intrinsics['fx'] * sc,
+                              'fy': intrinsics['fy'] * sc,
+                              'cx': intrinsics['cx'] * sc,
+                              'cy': intrinsics['cy'] * sc}
+            print("Scale factor for the intrinsics: {}".format(sc))
+        except:
+            print("Could not read intrinsics file, reverting to default settings")
+            args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
+            cam_intrinsics = {'fx': 589.3664541825391 / 2,
+                              'fy': 589.3664541825391 / 2,
+                              'cx': 320.5 / 2,
+                              'cy': 240.5 / 2}
+        print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(args.img_ht, args.img_wd,
+                                                                                    cam_intrinsics['fx'],
+                                                                                    cam_intrinsics['fy'],
+                                                                                    cam_intrinsics['cx'],
+                                                                                    cam_intrinsics['cy']))
+
+        # Compute intrinsic grid
+        cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
+                                                                              cam_intrinsics)
+
+        # Compute intrinsics
+        cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
+
+        # Get dimensions of ctrl & state
+        try:
+            statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+            print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
+        except:
+            statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
+            ctrllabels = statelabels  # Just use the labels
+            trackerlabels = []
+            print("Could not read statectrllabels file. Reverting to labels in statelabels file")
+        #args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
+        #print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
+        args.num_ctrl = len(ctrllabels)
+        print('Num ctrl: {}'.format(args.num_ctrl))
+
+        # Find the IDs of the controlled joints in the state vector
+        # We need this if we have state dimension > ctrl dimension and
+        # if we need to choose the vals in the state vector for the control
+        ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+        print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+
+        # Add to list of intrinsics
+        args.cam_intrinsics.append(cam_intrinsics)
+        args.cam_extrinsics.append(cam_extrinsics)
+        args.ctrl_ids.append(ctrlids_in_state)
+
+    # Data noise
+    if not hasattr(args.add_noise_data) or (len(args.add_noise_data) == 0):
+        args.add_noise_data = [False for k in xrange(len(args.args.data))] # By default, no noise
+    else:
+        assert(len(args.data) == len(args.add_noise_data))
+    if hasattr(args.add_noise) and args.add_noise: # BWDs compatibility
+        args.add_noise_data = [True for k in xrange(len(args.data))]
 
     # Get mean/std deviations of dt for the data
     if args.mean_dt == 0:
@@ -114,36 +156,13 @@ def main():
         print("Using passed in mean & std.deviation values. Mean DT: {}, Std DT: {}".format(
             args.mean_dt, args.std_dt))
 
-    # Get dimensions of ctrl & state
-    try:
-        statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
-        print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
-    except:
-        statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
-        ctrllabels = statelabels  # Just use the labels
-        trackerlabels = []
-        print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-    args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
-    print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
-
-    # Find the IDs of the controlled joints in the state vector
-    # We need this if we have state dimension > ctrl dimension and
-    # if we need to choose the vals in the state vector for the control
-    ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
-    print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
-    args.ctrlids_in_state = ctrlids_in_state
-
-    # Compute intrinsic grid
-    args.cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-                                                                               args.cam_intrinsics)
     # Image suffix
     args.img_suffix = '' if (args.img_suffix == 'None') else args.img_suffix # Workaround since we can't specify empty string in the yaml
     print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
 
     # Read mesh ids and camera data
-    args.baxter_labels = data.read_statelabels_file(load_dir + '/statelabels.txt')
+    args.baxter_labels = data.read_statelabels_file(args.data[0] + '/statelabels.txt')
     args.mesh_ids      = args.baxter_labels['meshIds']
-    args.cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
@@ -196,8 +215,10 @@ def main():
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
     if args.add_noise:
         print("Adding noise to the depths, actual configs & ctrls")
-    noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
-                                                      scale_d=True, std_j=0.02) if args.add_noise else None
+    noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
+                                                     defprob=0.005, noisestd=0.005)
+    #noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
+    #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
     valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                state_labels=statelabels,
@@ -206,13 +227,19 @@ def main():
     baxter_data     = data.read_recurrent_baxter_dataset(args.data, args.img_suffix,
                                                          step_len = args.step_len, seq_len = args.seq_len,
                                                          train_per = args.train_per, val_per = args.val_per,
-                                                         valid_filter = valid_filter)
+                                                         valid_filter = valid_filter,
+                                                         cam_extrinsics=args.cam_extrinsics,
+                                                         cam_intrinsics=args.cam_intrinsics,
+                                                         ctrl_ids=args.ctrl_ids,
+                                                         add_noise=args.add_noise_data)
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
                                                                        img_scale = args.img_scale, ctrl_type = args.ctrl_type,
-                                                                       num_ctrl=args.num_ctrl, num_state=args.num_state,
-                                                                       mesh_ids = args.mesh_ids, ctrl_ids=ctrlids_in_state,
-                                                                       camera_extrinsics = args.cam_extrinsics,
-                                                                       camera_intrinsics = args.cam_intrinsics,
+                                                                       num_ctrl=args.num_ctrl,
+                                                                       #num_state=args.num_state,
+                                                                       mesh_ids = args.mesh_ids,
+                                                                       #ctrl_ids=ctrlids_in_state,
+                                                                       #camera_extrinsics = args.cam_extrinsics,
+                                                                       #camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=args.use_gt_masks, num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                                        use_only_da=args.use_only_da_for_flows,
@@ -248,11 +275,9 @@ def main():
     ############ Load models & optimization stuff
 
     if args.use_full_jt_angles:
-        print('Using full state')
-        args.num_state_net = args.num_state
-    else:
-        print('Using state of controllable joints')
-        args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
+        assert(False, "Can only use as many jt angles as the control dimension")
+    print('Using state of controllable joints')
+    args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
     print('Using multi-step Flow-Model')
 
@@ -486,10 +511,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
         # Get jt angles
-        if args.use_full_jt_angles:
-            jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
-        else:
-            jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
+        #if args.use_full_jt_angles:
+        #    jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
+        #else:
+        jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)

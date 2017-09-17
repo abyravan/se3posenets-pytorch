@@ -364,7 +364,8 @@ def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
 
 ### Helper functions for reading the data directories & loading train/test files
 def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, train_per=0.6, val_per=0.15,
-                                  valid_filter=None):
+                                  valid_filter=None, cam_intrinsics=[], cam_extrinsics =[],
+                                  ctrl_ids=[], add_noise=[]):
     # Get all the load directories
     if type(load_dirs) == str: # BWDs compatibility
         load_dirs = load_dirs.split(',,')  # Get all the load directories
@@ -418,7 +419,11 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                                    'datahist': np.cumsum(numdata),
                                    'train'   : [0, ndirtrain - 1],
                                    'val'     : [ndirtrain, ndirtrain + ndirval - 1],
-                                   'test'    : [ndirtrain + ndirval, ndirs - 1]}
+                                   'test'    : [ndirtrain + ndirval, ndirs - 1]},
+                       'camintrinsics': cam_intrinsics[len(datasets)],
+                       'camextrinsics': cam_extrinsics[len(datasets)],
+                       'ctrlids': ctrl_ids[len(datasets)],
+                       'addnoise': add_noise[len(datasets)],
                        }  # start & end inclusive
             datasets.append(dataset)
         else:
@@ -460,7 +465,12 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                                'ids'    : validids,
                                'train'  : [0, ntrain - 1],
                                'val'    : [ntrain, ntrain + nval - 1],
-                               'test'   : [ntrain + nval, nvalid - 1]}  # start & end inclusive
+                               'test'   : [ntrain + nval, nvalid - 1],  # start & end inclusive
+                               'camintrinsics': cam_intrinsics[len(datasets)],
+                               'camextrinsics': cam_extrinsics[len(datasets)],
+                               'ctrlids': ctrl_ids[len(datasets)],
+                               'addnoise': add_noise[len(datasets)],
+                               }
                     datasets.append(dataset)
 
     return datasets
@@ -511,22 +521,36 @@ def add_gaussian_noise(depths, configs, std_d=0.02,
     noise_c = torch.randn(configs.size()).mul_(std_j).clamp_(max=2*std_j, min=-2*std_j)
     configs.add_(noise_c)
 
+def add_edge_based_noise(depths, zthresh=0.04, edgeprob=0.35,
+                         defprob=0.005, noisestd=0.005):
+    depths_n = depths.clone()
+    se3layers.AddNoise_float(depths,    # input depth (unchanged)
+                             depths_n,  # noisy depth
+                             zthresh,   # zthresh
+                             edgeprob,  # edgeprob
+                             defprob,   # def prob
+                             noisestd)  # noise std
+    return depths_n
+
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                   ctrl_type='actdiffvel', num_ctrl=7, num_state=7,
-                                   mesh_ids=torch.Tensor(), ctrl_ids=torch.LongTensor(),
-                                   camera_extrinsics={}, camera_intrinsics={},
+                                   ctrl_type='actdiffvel', num_ctrl=7,
+                                   #num_state=7,
+                                   mesh_ids=torch.Tensor(),
+                                   #ctrl_ids=torch.LongTensor(),
+                                   #camera_extrinsics={}, camera_intrinsics=[],
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
                                    dathreshold=0.01, dawinsize=5, use_only_da=False,
                                    noise_func=None):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
+    camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
 
     # Setup memory
     sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
+    #actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
     actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl) # Ids in actual data belonging to commanded data
     comconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Commanded data is same as control dimension
     controls   = torch.FloatTensor(seq_len, num_ctrl)      # Commanded data is same as control dimension
@@ -546,27 +570,12 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Setup vars for color image
     if load_color:
         rgbs = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)
-        actvels = torch.FloatTensor(seq_len + 1, num_state)        # Actual data is same as state dimension
+        actctrlvels = torch.FloatTensor(seq_len + 1, num_ctrl)     # Actual data is same as state dimension
         comvels = torch.FloatTensor(seq_len + 1, num_ctrl)         # Commanded data is same as control dimension
 
     # Setup vars for tracker data
     if num_tracker > 0:
         trackerconfigs = torch.FloatTensor(seq_len + 1, num_tracker)  # Tracker data is same as tracker dimension
-
-    ##### Read the ctrl ids & extrinsics file
-    # Get dimensions of ctrl & state
-    load_dir =  dataset["path"] if (dataset.has_key('subdirs')) else dataset["path"] + "/../"
-    try:
-        statelabels, ctrllabels, _ = read_statectrllabels_file(load_dir + "/statectrllabels.txt")
-    except:
-        statelabels = read_statelabels_file(load_dir + '/statelabels.txt')['frames']
-        ctrllabels = statelabels  # Just use the labels
-
-    # Find the IDs of the controlled joints in the state vector
-    # We need this if we have state dimension > ctrl dimension and
-    # if we need to choose the vals in the state vector for the control
-    ctrl_ids = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
-    camera_extrinsics = read_cameradata_file(load_dir + '/cameradata.txt')
 
     #####
     # Load sequence
@@ -584,7 +593,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
         # Load configs
         state = read_baxter_state_file(s['state1'])
-        actconfigs[k] = state['actjtpos'] # state dimension
+        #actconfigs[k] = state['actjtpos'] # state dimension
         comconfigs[k] = state['comjtpos'] # ctrl dimension
         actctrlconfigs[k] = state['actjtpos'][ctrl_ids] # Get states for control IDs
         if state['timestamp'] is not None:
@@ -593,7 +602,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Load RGB
         if load_color:
             rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
-            actvels[k] = state['actjtvel']
+            actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
             comvels[k] = state['comjtvel']
 
         # Load tracker data
@@ -626,14 +635,16 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                 controls[k] = state['comjtacc'] # ctrl dimension
 
     # Add noise to the depths before we compute the point cloud
-    if noise_func is not None:
+    if (noise_func is not None) and dataset['addnoise']:
         assert(ctrl_type == 'actdiffvel') # Since we add noise only to the configs
-        noise_func(depths, actconfigs)
+        depths_n = noise_func(depths)
+        depths.copy_(depths_n) # Replace by noisy depths
+        #noise_func(depths, actctrlconfigs)
 
     # Different control types
     dt = t[1:] - t[:-1] # Get proper dt which can vary between consecutive frames
     if ctrl_type == 'actdiffvel':
-        controls = (actconfigs[1:seq_len+1][:, ctrl_ids] - actconfigs[0:seq_len][:, ctrl_ids]) / dt # state -> ctrl dimension
+        controls = (actctrlconfigs[1:seq_len+1] - actctrlconfigs[0:seq_len]) / dt # state -> ctrl dimension
     elif ctrl_type == 'comdiffvel':
         controls = (comconfigs[1:seq_len+1, :] - comconfigs[0:seq_len, :]) / dt # ctrl dimension
 
@@ -668,7 +679,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
-            'controls': controls, 'actconfigs': actconfigs, 'comconfigs': comconfigs, 'poses': poses,
+            'controls': controls, 'comconfigs': comconfigs, 'poses': poses,
             'dt': dt, 'actctrlconfigs': actctrlconfigs}
     if compute_bwdflows:
         data['masks']           = masks
@@ -677,7 +688,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     if load_color:
         data['rgbs']   = rgbs
         data['labels'] = labels
-        data['actvels'] = actvels
+        data['actctrlvels'] = actctrlvels
         data['comvels'] = comvels
     if num_tracker > 0:
         data['trackerconfigs'] = trackerconfigs

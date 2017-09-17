@@ -135,11 +135,11 @@ def main():
         args.ctrl_ids.append(ctrlids_in_state)
 
     # Data noise
-    if not hasattr(args.add_noise_data) or (len(args.add_noise_data) == 0):
+    if not hasattr(args, "add_noise_data") or (len(args.add_noise_data) == 0):
         args.add_noise_data = [False for k in xrange(len(args.args.data))] # By default, no noise
     else:
         assert(len(args.data) == len(args.add_noise_data))
-    if hasattr(args.add_noise) and args.add_noise: # BWDs compatibility
+    if hasattr(args, "add_noise") and args.add_noise: # BWDs compatibility
         args.add_noise_data = [True for k in xrange(len(args.data))]
 
     # Get mean/std deviations of dt for the data

@@ -67,6 +67,7 @@ def main():
 
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
+    args.state_labels = []
     for k in xrange(len(args.data)):
         load_dir = args.data[k] #args.data.split(',,')[0]
         try:
@@ -130,6 +131,7 @@ def main():
         args.cam_intrinsics.append(cam_intrinsics)
         args.cam_extrinsics.append(cam_extrinsics)
         args.ctrl_ids.append(ctrlids_in_state)
+        args.state_labels.append(statelabels)
 
     # Data noise
     if not hasattr(args, "add_noise_data") or (len(args.add_noise_data) == 0):
@@ -216,9 +218,8 @@ def main():
     #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
     noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
                                                      defprob=0.005, noisestd=0.005)
-    valid_filter = lambda p, n, st, se: data.valid_data_filter(p, n, st, se,
+    valid_filter = lambda p, n, st, se, slab: data.valid_data_filter(p, n, st, se, slab,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
-                                                               state_labels=statelabels,
                                                                reject_left_motion=args.reject_left_motion,
                                                                reject_right_still=args.reject_right_still)
     baxter_data     = data.read_recurrent_baxter_dataset(args.data, args.img_suffix,
@@ -228,6 +229,7 @@ def main():
                                                          cam_extrinsics=args.cam_extrinsics,
                                                          cam_intrinsics=args.cam_intrinsics,
                                                          ctrl_ids=args.ctrl_ids,
+                                                         state_labels=args.state_labels,
                                                          add_noise=args.add_noise_data)
     disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
                                                                        img_scale = args.img_scale, ctrl_type = args.ctrl_type,

@@ -311,8 +311,9 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
 
 ### Function that filters the data based - mainly for the real data where we need to check dts
 ### and other related stuff.
-def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
-                      state_labels=[], reject_left_motion=False,
+def valid_data_filter(path, nexamples, step, seq, state_labels,
+                      mean_dt, std_dt,
+                      reject_left_motion=False,
                       reject_right_still=False):
     try:
         ## Read the meta-data to get "timestamps"
@@ -365,7 +366,7 @@ def valid_data_filter(path, nexamples, step, seq, mean_dt, std_dt,
 ### Helper functions for reading the data directories & loading train/test files
 def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, train_per=0.6, val_per=0.15,
                                   valid_filter=None, cam_intrinsics=[], cam_extrinsics =[],
-                                  ctrl_ids=[], add_noise=[]):
+                                  ctrl_ids=[], add_noise=[], state_labels=[]):
     # Get all the load directories
     if type(load_dirs) == str: # BWDs compatibility
         load_dirs = load_dirs.split(',,')  # Get all the load directories
@@ -444,7 +445,8 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                     # and returns a set of ids such that the sequence of examples from that id
                     # to id + seq*step are valid
                     if valid_filter is not None:
-                        validids = valid_filter(path, nexamples, step_len, seq_len)
+                        validids = valid_filter(path, nexamples, step_len, seq_len,
+                                                state_labels[len(datasets)])
                     else:
                         validids = range(0, nexamples) # Is just the same as ids, all samples are valid
                     nvalid = len(validids)

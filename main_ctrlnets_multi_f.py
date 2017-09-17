@@ -66,7 +66,7 @@ def main():
         torch.cuda.manual_seed(args.seed)
 
     # Get default options & camera intrinsics
-    args.cam_intrinsics = []
+    args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
     for k in xrange(len(args.data)):
         load_dir = args.data[k] #args.data.split(',,')[0]
         try:
@@ -271,8 +271,7 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
-    if args.use_full_jt_angles:
-        assert(False, "Can only use as many jt angles as the control dimension")
+    assert(not args.use_full_jt_angles, "Can only use as many jt angles as the control dimension")
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 

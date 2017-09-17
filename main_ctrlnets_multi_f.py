@@ -812,10 +812,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                     for n in xrange(args.num_se3):
                         # Pose_1 (GT/Pred)
                         if n < gtpose.size(0):
-                            util.draw_3d_frame(gtdepth, gtpose[n],     [0,0,1], args.cam_intrinsics, pixlength=15.0) # GT pose: Blue
-                        util.draw_3d_frame(gtdepth, predpose[n],   [0,1,0], args.cam_intrinsics, pixlength=15.0) # Pred pose: Green
+                            util.draw_3d_frame(gtdepth, gtpose[n],     [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
+                        util.draw_3d_frame(gtdepth, predpose[n],   [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
                         if predposet is not None:
-                            util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics, pixlength=15.0)  # Transition model pred pose: Red
+                            util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
                     depths.append(gtdepth)
                 depthdisp = torch.cat(depths, 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 320*seq_len+1 image)
 

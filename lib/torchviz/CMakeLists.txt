@@ -327,3 +327,9 @@ add_library(pangodataviz
              data_visualizer.cpp
              src/render/renderer.cpp)
 target_link_libraries(pangodataviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
+
+# Real-Ctrl Visualizer
+add_library(realctrlviz
+             realctrl_visualizer.cpp
+             src/render/renderer.cpp)
+target_link_libraries(realctrlviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})

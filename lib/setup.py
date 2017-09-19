@@ -141,7 +141,20 @@ ext_modules = [
                                      '--compiler-options',
                                      "'-fPIC'"]},
         include_dirs = ['/usr/local/include/eigen3', '/usr/local/cuda/include', 'torchviz/src/']
-    )
+    ),
+    Extension(
+        "torchviz.realctrlviz",                                # the extension name
+        sources=['torchviz/realctrlviz.pyx'],
+        language='c++',
+        extra_objects=[curr_path + "/torchviz/build/librealctrlviz.so"],
+        extra_compile_args={'gcc': ["-Wno-unused-function", "-D_GLIBCXX_USE_CXX11_ABI=0"],
+                            'nvcc': ['-arch=sm_35',
+                                     '--ptxas-options=-v',
+                                     '-c',
+                                     '--compiler-options',
+                                     "'-fPIC'"]},
+        include_dirs = ['/usr/local/include/eigen3', '/usr/local/cuda/include', 'torchviz/src/']
+    ),
 ]
 
 setup(

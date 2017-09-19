@@ -274,7 +274,7 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
-    assert(not args.use_full_jt_angles, "Can only use as many jt angles as the control dimension")
+    assert not args.use_full_jt_angles, "Can only use as many jt angles as the control dimension"
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 

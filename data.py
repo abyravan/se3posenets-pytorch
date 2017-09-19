@@ -507,7 +507,7 @@ def generate_baxter_sequence(dataset, idx):
                         'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png'}
         stepid += step  # Get flow from start image to the next step
         ct += 1  # Increment counter
-    return sequence
+    return sequence, path
 
 ############
 ### DATA LOADERS: FUNCTION TO LOAD DATA FROM DISK & TORCH DATASET CLASS
@@ -550,7 +550,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
 
     # Setup memory
-    sequence = generate_baxter_sequence(dataset, id)  # Get the file paths
+    sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
     #actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
     actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl) # Ids in actual data belonging to commanded data
@@ -578,6 +578,12 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Setup vars for tracker data
     if num_tracker > 0:
         trackerconfigs = torch.FloatTensor(seq_len + 1, num_tracker)  # Tracker data is same as tracker dimension
+
+    ## Read camera extrinsics (can be separate per dataset now!)
+    try:
+        camera_extrinsics = read_cameradata_file(path + '/cameradata.txt')
+    except:
+        pass # Can use default cam extrinsics for the entire dataset
 
     #####
     # Load sequence

@@ -324,7 +324,10 @@ def main():
             checkpoint       = torch.load(args.resume)
             loadargs         = checkpoint['args']
             args.start_epoch = checkpoint['epoch']
-            num_train_iter   = checkpoint['train_iter']
+            if args.reset_train_iter:
+                num_train_iter   = 0 # Reset to 0
+            else:
+                num_train_iter   = checkpoint['train_iter']
             try:
                 model.load_state_dict(checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
             except:

@@ -157,6 +157,8 @@ def setup_comon_options():
                         metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
     parser.add_argument('--disp-err-per-mask', action='store_true', default=False,
                         help='Display flow error per mask channel. (default: False)')
+    parser.add_argument('--reset-train-iter', action='store_true', default=False,
+                        help='Reset num_train_iter to 0 -> for weight sharpening (default: False)')
 
     # Return
     return parser

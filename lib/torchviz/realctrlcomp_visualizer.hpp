@@ -47,12 +47,12 @@ public:
     bool init_done;
 
     // Input, target & current pts for display
-    unsigned char *init_rgb, *curr_rgb, *final_rgb, *init_rgba;
-    float *init_cloud, *curr_cloud, *final_cloud;
-    float *initnorm_cloud, *currnorm_cloud, *finalnorm_cloud;
-    float *init_masks, *curr_masks, *final_masks;
-    float *init_poses, *curr_poses, *final_poses;
-    float *init_jts, *curr_jts, *final_jts;
+    unsigned char *init_rgb, *curr_rgb, *curr_rgb_bp, *final_rgb, *init_rgba;
+    float *init_cloud, *curr_cloud, *curr_cloud_bp, *final_cloud;
+    float *initnorm_cloud, *currnorm_cloud, *currnorm_cloud_bp, *finalnorm_cloud;
+    float *init_masks, *curr_masks, *curr_masks_bp, *final_masks;
+    float *init_poses, *curr_poses, *curr_poses_bp, *final_poses;
+    float *init_jts, *curr_jts, *curr_jts_bp, *final_jts;
     float *curr_labels;
     int nSE3;
     std::string savedir;
@@ -61,6 +61,10 @@ public:
     std::vector<float> pose_errors;
     std::vector<std::vector<float> > pose_errors_indiv;
     std::vector<std::vector<float> > deg_errors;
+
+    std::vector<float> pose_errors_bp;
+    std::vector<std::vector<float> > pose_errors_indiv_bp;
+    std::vector<std::vector<float> > deg_errors_bp;
 
     // DA stuff
     std::vector<dart::SE3> mesh_transforms;
@@ -90,15 +94,18 @@ public:
         init_rgb   = new unsigned char[3 * imgHeight * imgWidth];
         init_rgba  = new unsigned char[4 * imgHeight * imgWidth];
         curr_rgb   = new unsigned char[3 * imgHeight * imgWidth];
+        curr_rgb_bp   = new unsigned char[3 * imgHeight * imgWidth];
         final_rgb  = new unsigned char[3 * imgHeight * imgWidth];
         memset(init_rgb,  0, 3 * imgHeight * imgWidth * sizeof(unsigned char));
         memset(init_rgba,  0, 4 * imgHeight * imgWidth * sizeof(unsigned char));
         memset(curr_rgb,  0, 3 * imgHeight * imgWidth * sizeof(unsigned char));
+        memset(curr_rgb_bp,  0, 3 * imgHeight * imgWidth * sizeof(unsigned char));
         memset(final_rgb, 0, 3 * imgHeight * imgWidth * sizeof(unsigned char));
 
         // Input / Target / Current clouds
         init_cloud   = new float[3 * imgHeight * imgWidth];
         curr_cloud   = new float[3 * imgHeight * imgWidth];
+        curr_cloud_bp   = new float[3 * imgHeight * imgWidth];
         final_cloud  = new float[3 * imgHeight * imgWidth];
         memset(init_cloud,  0, 3 * imgHeight * imgWidth * sizeof(float));
         memset(curr_cloud,  0, 3 * imgHeight * imgWidth * sizeof(float));
@@ -107,35 +114,43 @@ public:
         // Input / Target / Current clouds - Normals
         initnorm_cloud   = new float[3 * imgHeight * imgWidth];
         currnorm_cloud   = new float[3 * imgHeight * imgWidth];
+        currnorm_cloud_bp   = new float[3 * imgHeight * imgWidth];
         finalnorm_cloud  = new float[3 * imgHeight * imgWidth];
         memset(initnorm_cloud,  0, 3 * imgHeight * imgWidth * sizeof(float));
         memset(currnorm_cloud,  0, 3 * imgHeight * imgWidth * sizeof(float));
+        memset(currnorm_cloud_bp,  0, 3 * imgHeight * imgWidth * sizeof(float));
         memset(finalnorm_cloud, 0, 3 * imgHeight * imgWidth * sizeof(float));
 
         // Init masks
         init_masks   = new float[nSE3 * imgHeight * imgWidth];
         curr_masks   = new float[nSE3 * imgHeight * imgWidth];
+        curr_masks_bp   = new float[nSE3 * imgHeight * imgWidth];
         final_masks  = new float[nSE3 * imgHeight * imgWidth];
         curr_labels  = new float[imgHeight * imgWidth];
         memset(init_masks,  0, nSE3 * imgHeight * imgWidth * sizeof(float));
         memset(curr_masks,  0, nSE3 * imgHeight * imgWidth * sizeof(float));
+        memset(curr_masks_bp,  0, nSE3 * imgHeight * imgWidth * sizeof(float));
         memset(final_masks, 0, nSE3 * imgHeight * imgWidth * sizeof(float));
         memset(curr_labels,  0, imgHeight * imgWidth * sizeof(float));
 
         // Init poses
         init_poses   = new float [nSE3 * 12];
         curr_poses   = new float [nSE3 * 12];
+        curr_poses_bp   = new float [nSE3 * 12];
         final_poses  = new float [nSE3 * 12];
         memset(init_poses,  0, nSE3 * 12 * sizeof(float));
         memset(curr_poses,  0, nSE3 * 12 * sizeof(float));
+        memset(curr_poses_bp,  0, nSE3 * 12 * sizeof(float));
         memset(final_poses, 0, nSE3 * 12 * sizeof(float));
 
         // Input / Target / Current jts
         init_jts  = new float[7];
         curr_jts  = new float[7];
+        curr_jts_bp  = new float[7];
         final_jts = new float[7];
         memset(init_jts,  0, 7 * sizeof(float));
         memset(curr_jts,  0, 7 * sizeof(float));
+        memset(curr_jts_bp,  0, 7 * sizeof(float));
         memset(final_jts, 0, 7 * sizeof(float));
 
         // GT render data
@@ -151,27 +166,36 @@ public:
         memcpy(init_rgb, data->init_rgb, 3 * imgHeight * imgWidth * sizeof(unsigned char));
         memcpy(init_rgba, data->init_rgba, 4 * imgHeight * imgWidth * sizeof(unsigned char));
         memcpy(curr_rgb, data->curr_rgb, 3 * imgHeight * imgWidth * sizeof(unsigned char));
+        memcpy(curr_rgb_bp, data->curr_rgb_bp, 3 * imgHeight * imgWidth * sizeof(unsigned char));
         memcpy(final_rgb, data->final_rgb, 3 * imgHeight * imgWidth * sizeof(unsigned char));
 
         memcpy(init_cloud, data->init_cloud, 3 * imgHeight * imgWidth * sizeof(float));
         memcpy(curr_cloud, data->curr_cloud, 3 * imgHeight * imgWidth * sizeof(float));
+        memcpy(curr_cloud_bp, data->curr_cloud_bp, 3 * imgHeight * imgWidth * sizeof(float));
         memcpy(final_cloud, data->final_cloud, 3 * imgHeight * imgWidth * sizeof(float));
 
         memcpy(init_masks, data->init_masks, nSE3 * imgHeight * imgWidth * sizeof(float));
         memcpy(curr_masks, data->curr_masks, nSE3 * imgHeight * imgWidth * sizeof(float));
+        memcpy(curr_masks_bp, data->curr_masks_bp, nSE3 * imgHeight * imgWidth * sizeof(float));
         memcpy(final_masks, data->final_masks, nSE3 * imgHeight * imgWidth * sizeof(float));
 
         memcpy(init_poses, data->init_poses, nSE3 * 12 * sizeof(float));
         memcpy(curr_poses, data->curr_poses, nSE3 * 12 * sizeof(float));
+        memcpy(curr_poses_bp, data->curr_poses_bp, nSE3 * 12 * sizeof(float));
         memcpy(final_poses, data->final_poses, nSE3 * 12 * sizeof(float));
 
         memcpy(init_jts, data->init_jts, 7 * sizeof(float));
         memcpy(curr_jts, data->curr_jts, 7 * sizeof(float));
+        memcpy(curr_jts_bp, data->curr_jts_bp, 7 * sizeof(float));
         memcpy(final_jts, data->final_jts, 7 * sizeof(float));
 
         pose_errors = data->pose_errors;
         pose_errors_indiv = data->pose_errors_indiv;
         deg_errors  = data->deg_errors;
+
+        pose_errors_bp = data->pose_errors_bp;
+        pose_errors_indiv_bp = data->pose_errors_indiv_bp;
+        deg_errors_bp  = data->deg_errors_bp;
     }
 
     // Free members alone
@@ -186,27 +210,33 @@ public:
         free(init_rgb);
         free(init_rgba);
         free(curr_rgb);
+        free(curr_rgb_bp);
         free(final_rgb);
 
         free(init_cloud);
         free(curr_cloud);
+        free(curr_cloud_bp);
         free(final_cloud);
 
         free(init_jts);
         free(curr_jts);
+        free(curr_jts_bp);
         free(final_jts);
 
         free(initnorm_cloud);
         free(currnorm_cloud);
+        free(currnorm_cloud_bp);
         free(finalnorm_cloud);
 
         free(init_masks);
         free(curr_masks);
+        free(curr_masks_bp);
         free(final_masks);
         free(curr_labels);
 
         free(init_poses);
         free(curr_poses);
+        free(curr_poses_bp);
         free(final_poses);
     }
 
@@ -246,6 +276,10 @@ class RealCtrlViz
                               const float *curr_poses, const float *curr_masks, const unsigned char *curr_rgb,
                               const float curr_pose_error, const float *curr_pose_errors_indiv,
                               const float *curr_deg_error,
+                              const float *curr_angles_bp, const float *curr_ptcloud_bp,
+                              const float *curr_poses_bp, const float *curr_masks_bp, const unsigned char *curr_rgb_bp,
+                              const float curr_pose_error_bp, const float *curr_pose_errors_indiv_bp,
+                              const float *curr_deg_error_bp,
                               int save_frame);
 
         void update_real_init(const float *start_angles, const float *start_ptcloud,

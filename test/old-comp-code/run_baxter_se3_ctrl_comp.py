@@ -24,11 +24,11 @@ savedir = 'temp' # TODO: Fix this!
 
 # Load pangolin visualizer library
 import _init_paths
-from torchviz import realctrlviz
-pangolin = realctrlviz.PyRealCtrlViz(img_ht, img_wd, img_scale, num_se3,
-                                     cam_intrinsics['fx'], cam_intrinsics['fy'],
-                                     cam_intrinsics['cx'], cam_intrinsics['cy'],
-                                     savedir, 0)
+from torchviz import realctrlcompviz
+pangolin = realctrlcompviz.PyRealCtrlCompViz(img_ht, img_wd, img_scale, num_se3,
+                                         cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                         cam_intrinsics['cx'], cam_intrinsics['cy'],
+                                         savedir, 0)
 
 # Global imports
 import argparse
@@ -862,7 +862,7 @@ def main():
         ]
         )
 
-    # ###
+    # # ###
     # start_angles_all = torch.FloatTensor(
     #      [
     #          [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
@@ -948,421 +948,440 @@ def main():
     if pargs.num_configs > 0:
         num_configs = min(start_angles_all.size(0), pargs.num_configs)
     print("Running tests over {} configs".format(num_configs))
-    iterstats = []
-    init_errors, final_errors = [], []
-    datastats = []
+    iterstats = {'gn': [], 'backprop': []}
+    init_errors, final_errors = {'gn': [], 'backprop': []}, {'gn': [], 'backprop': []}
     for k in xrange(num_configs):
-        # Get start/goal angles
-        print("========================================")
-        print("========== STARTING TEST: {} ===========".format(k))
-        start_angles = start_angles_all[k].clone()
-        goal_angles = goal_angles_all[k].clone()
-
-        # Set based on options
-        if pargs.only_top4_jts:
-            assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
-            print('Controlling only top 4 joints')
-            goal_angles[4:] = start_angles[4:]
-        elif pargs.only_top5_jts:
-            assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
-            print('Controlling only top 5 joints')
-            goal_angles[5:] = start_angles[5:]
-        elif pargs.only_top6_jts:
-            assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
-            print('Controlling only top 6 joints')
-            goal_angles[6:] = start_angles[6:]
-        elif pargs.ctrl_specific_jts is not '':
-            print('Setting targets only for joints: {}. All other joints have zero error'
-                  ' but can be controlled'.format(pargs.ctrl_specific_jts))
-            ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-            for k in xrange(7):
-                if k not in ctrl_jts:
-                    goal_angles[k] = start_angles[k]
-
-        # Print error
-        print('Initial jt angle error:')
-        full_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)  # Full error in degrees
-        print(full_deg_error.view(7, 1))
-        init_errors.append(full_deg_error.view(1, 7))
-
-        ###### Goal stuff
-        # Set goal position, get observation
-        print("Moving to the goal configuration...")
-        jc.move_to_pos(create_config(goal_angles.numpy()))
-        if pargs.real_robot:
-            goal_pts = depth_subscriber.get_ptcloud()
-            goal_rgb = rgb_subscriber.get_img()
-        else:
-            goal_pts, _ = generate_ptcloud(goal_angles, se3optim.args)
-            goal_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
-
-        # Compute goal poses
-        goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
-        time.sleep(1)
-
-        ###### Start stuff
-        # Set start position, get observation
-        print("Moving to the start configuration...")
-        jc.move_to_pos(create_config(start_angles.numpy()))
-        if pargs.real_robot:
-            start_pts = depth_subscriber.get_ptcloud()
-            start_rgb = rgb_subscriber.get_img()
-        else:
-            start_pts, _ = generate_ptcloud(start_angles, se3optim.args)
-            start_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
-
-        # Compute goal poses
-        start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
-
-        # Compute initial pose loss
-        init_pose_loss  = se3optim.args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
-        init_pose_err_indiv = se3optim.args.loss_scale * (start_poses - goal_poses).pow(2).view(se3optim.args.num_se3,12).mean(1)
-        init_deg_errors = full_deg_error.view(7).numpy()
-
-        # Render the poses
-        # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
-        print("Initializing the visualizer...")
-        start_masks_f, goal_masks_f = start_masks.data.cpu().float(), goal_masks.data.cpu().float()
-        #_, start_labels = start_masks_f.max(dim=1); start_labels_f = start_labels.float()
-        #_, goal_labels  = goal_masks_f.max(dim=1);  goal_labels_f  = goal_labels.float()
-        start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
-        pangolin.update_real_init(start_angles.numpy(),
-                                  start_pts[0].cpu().numpy(),
-                                  start_poses_f[0].numpy(),
-                                  start_masks_f[0].numpy(),
-                                  start_rgb.numpy(),
-                                  goal_angles.numpy(),
-                                  goal_pts[0].cpu().numpy(),
-                                  goal_poses_f[0].numpy(),
-                                  goal_masks_f[0].numpy(),
-                                  goal_rgb.numpy(),
-                                  init_pose_loss.data[0],
-                                  init_pose_err_indiv.data.cpu().numpy(),
-                                  init_deg_errors)
-
-        # For saving:
-        initstats = [start_angles.numpy(),
-                     start_pts[0].cpu().numpy(),
-                     start_poses_f[0].numpy(),
-                     start_masks_f[0].numpy(),
-                     start_rgb.numpy(),
-                     goal_angles.numpy(),
-                     goal_pts[0].cpu().numpy(),
-                     goal_poses_f[0].numpy(),
-                     goal_masks_f[0].numpy(),
-                     goal_rgb.numpy(),
-                     init_pose_loss.data[0],
-                     init_pose_err_indiv.data.cpu().numpy(),
-                     init_deg_errors];
-
-        ########################
-        ############ Run the controller
-        # Init stuff
-        ctrl_mag = pargs.max_ctrl_mag
-        angles, deg_errors = [start_angles], [full_deg_error.view(1,7)]
-        ctrl_grads, ctrls  = [], []
-        losses = []
-
-        # Init vars for all items
-        init_ctrl_v  = util.to_var(torch.zeros(1, num_ctrl).type(se3optim.deftype), requires_grad=True)  # Need grad w.r.t this
-        goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
-
-        # Initialize the controller if in smoothpos mode
-        #if pargs.ctrlr_type == 'smoothpos':
-        #    spc.set_valid(True) # Can start sending commands
-
-        # # Plots for errors and loss
-        # fig, axes = plt.subplots(2, 1)
-        # fig.show()
-
+        methods = ['gn', 'backprop']
         # Save for final frame saving
-        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
-        curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
+        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = {'gn': [], 'backprop': []}, {'gn': [], 'backprop': []}, \
+                                                                {'gn': [], 'backprop': []}, {'gn': [], 'backprop': []}
+        curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = {'gn': [], 'backprop': []}, {'gn': [], 'backprop': []}, \
+                                                             {'gn': [], 'backprop': []}, {'gn': [], 'backprop': []}
 
-        # Run the controller
-        gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), \
-                                                                   AverageMeter(), AverageMeter()
-        conv_iter = pargs.max_iter
-        inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
-        status, prev_loss = 0, np.float("inf")
-        for it in xrange(pargs.max_iter):
-            # Print
-            print('\n #####################')
+        for method in methods:
+            pargs.optimization = method
 
-            # Get current observation
-            start = time.time()
+            # Get start/goal angles
+            print("========================================")
+            print("========== STARTING TEST: {}, OPTIM METHOD: {} ===========".format(k, pargs.optimization))
+            start_angles = start_angles_all[k].clone()
+            goal_angles = goal_angles_all[k].clone()
 
-            curr_angles = get_angles(jc.cur_pos())
-            if pargs.real_robot:
-                curr_pts = depth_subscriber.get_ptcloud()
-                curr_rgb = rgb_subscriber.get_img()
-            else:
-                curr_pts, _ = generate_ptcloud(curr_angles, se3optim.args)
-                curr_rgb = start_rgb
-            curr_pts = curr_pts.type(deftype)
-
-            gen_time.update(time.time() - start)
-
-            # Predict poses and masks
-            start = time.time()
-            curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
-            curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
-
-            posemask_time.update(time.time() - start)
-
-            # Run one step of the optimization (controls are always zeros, poses change)
-            start = time.time()
-
-            ctrl_grad, loss = se3optim.optimize_ctrl(curr_poses,
-                                                     init_ctrl_v,
-                                                     goal_poses=goal_poses_v)
-            ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
-
-            # Set last 3 joint's controls to zero
+            # Set based on options
             if pargs.only_top4_jts:
-                ctrl_grad[4:] = 0
-            elif pargs.only_top4_jts:
-                ctrl_grad[5:] = 0
-            elif pargs.only_top6_jts:
-                ctrl_grad[6:] = 0
-
-            # Decay controls if loss is small
-            if loss < 1:
-                pargs.ctrl_mag_decay = 0.999
-            else:
-                ctrl_mag = pargs.max_ctrl_mag
-                pargs.ctrl_mag_decay = 1.
-
-            if ctrl_mag > 0:
-                ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2)  # Dirn
-                curr_ctrl = ctrl_dirn * ctrl_mag  # Scale dirn by mag
-                ctrl_mag *= pargs.ctrl_mag_decay  # Decay control magnitude
-            else:
-                curr_ctrl = ctrl_grad.cpu().float()
-
-            # Apply control (simple velocity integration)
-            #if se3optim.args.use_jt_angles:
-            #    next_angles = curr_angles - (curr_ctrl * dt)
-            #else:
-            #    next_angles = get_angles(jc.cur_pos()) - (curr_ctrl * dt)
-            next_angles = curr_angles - (curr_ctrl * dt)
-            if pargs.only_top4_jts:
-                next_angles[4:] = start_angles[4:] # Lock these angles
+                assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
+                print('Controlling only top 4 joints')
+                goal_angles[4:] = start_angles[4:]
             elif pargs.only_top5_jts:
-                next_angles[5:] = start_angles[5:] # Lock these angles
+                assert not pargs.only_top6_jts, "Cannot enable control for 4 and 6 joints at the same time"
+                print('Controlling only top 5 joints')
+                goal_angles[5:] = start_angles[5:]
             elif pargs.only_top6_jts:
-                next_angles[6:] = start_angles[6:] # Lock these angles
+                assert not pargs.only_top4_jts, "Cannot enable control for 4 and 6 joints at the same time"
+                print('Controlling only top 6 joints')
+                goal_angles[6:] = start_angles[6:]
+            elif pargs.ctrl_specific_jts is not '':
+                print('Setting targets only for joints: {}. All other joints have zero error'
+                      ' but can be controlled'.format(pargs.ctrl_specific_jts))
+                ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
+                for k in xrange(7):
+                    if k not in ctrl_jts:
+                        goal_angles[k] = start_angles[k]
 
-            # Send commands to the robot
-            if pargs.ctrlr_type == 'blockpos':
-                jc.move_to_pos(create_config(next_angles))
-            elif pargs.ctrlr_type == 'noblockpos':
-                jc.set_pos(create_config(next_angles))
-            elif pargs.ctrlr_type == 'smoothpos':
-                spc.set_target(create_config(next_angles)) # Update target
-            elif pargs.ctrlr_type == 'vel':
-                jc.set_vel(create_config(curr_ctrl.mul(-1))) # Move in -ve dirn of gradient
+            # Print error
+            print('Initial jt angle error:')
+            full_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)  # Full error in degrees
+            print(full_deg_error.view(7, 1))
+            init_errors[method].append(full_deg_error.view(1, 7))
+
+            ###### Goal stuff
+            # Set goal position, get observation
+            print("Moving to the goal configuration...")
+            jc.move_to_pos(create_config(goal_angles.numpy()))
+            if pargs.real_robot:
+                goal_pts = depth_subscriber.get_ptcloud()
+                goal_rgb = rgb_subscriber.get_img()
             else:
-                assert False, "Unknown controller type specified: " + pargs.ctrlr_type
+                goal_pts, _ = generate_ptcloud(goal_angles, se3optim.args)
+                goal_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
 
-            optim_time.update(time.time() - start)
+            # Compute goal poses
+            goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
+            time.sleep(1)
 
-            # Render poses and masks using Pangolin
-            start = time.time()
+            ###### Start stuff
+            # Set start position, get observation
+            print("Moving to the start configuration...")
+            jc.move_to_pos(create_config(start_angles.numpy()))
+            if pargs.real_robot:
+                start_pts = depth_subscriber.get_ptcloud()
+                start_rgb = rgb_subscriber.get_img()
+            else:
+                start_pts, _ = generate_ptcloud(start_angles, se3optim.args)
+                start_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
 
-            curr_pts_f = curr_pts.cpu().float()
-            curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
-            curr_pose_err_indiv = se3optim.args.loss_scale * (curr_poses - goal_poses).pow(2).view(se3optim.args.num_se3, 12).mean(1)
-            pangolin.update_real_curr(curr_angles.numpy(),
-                                      curr_pts_f[0].numpy(),
-                                      curr_poses_f[0].numpy(),
-                                      curr_masks_f[0].numpy(),
-                                      curr_rgb.numpy(),
-                                      loss,
-                                      curr_pose_err_indiv.data.cpu().numpy(),
-                                      curr_deg_errors[0].numpy(),
-                                      0) # Don't save frame
+            # Compute goal poses
+            start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
+
+            # Compute initial pose loss
+            init_pose_loss  = se3optim.args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
+            init_pose_err_indiv = se3optim.args.loss_scale * (start_poses - goal_poses).pow(2).view(se3optim.args.num_se3,12).mean(1)
+            init_deg_errors = full_deg_error.view(7).numpy()
+
+            # Render the poses
+            # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
+            print("Initializing the visualizer...")
+            start_masks_f, goal_masks_f = start_masks.data.cpu().float(), goal_masks.data.cpu().float()
+            #_, start_labels = start_masks_f.max(dim=1); start_labels_f = start_labels.float()
+            #_, goal_labels  = goal_masks_f.max(dim=1);  goal_labels_f  = goal_labels.float()
+            start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
+            pangolin.update_real_init(start_angles.numpy(),
+                                      start_pts[0].cpu().numpy(),
+                                      start_poses_f[0].numpy(),
+                                      start_masks_f[0].numpy(),
+                                      start_rgb.numpy(),
+                                      goal_angles.numpy(),
+                                      goal_pts[0].cpu().numpy(),
+                                      goal_poses_f[0].numpy(),
+                                      goal_masks_f[0].numpy(),
+                                      goal_rgb.numpy(),
+                                      init_pose_loss.data[0],
+                                      init_pose_err_indiv.data.cpu().numpy(),
+                                      init_deg_errors)
+
+            ########################
+            ############ Run the controller
+            # Init stuff
+            ctrl_mag = pargs.max_ctrl_mag
+            angles, deg_errors = [start_angles], [full_deg_error.view(1,7)]
+            ctrl_grads, ctrls  = [], []
+            losses = []
+
+            # Init vars for all items
+            init_ctrl_v  = util.to_var(torch.zeros(1, num_ctrl).type(se3optim.deftype), requires_grad=True)  # Need grad w.r.t this
+            goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
+
+            # Initialize the controller if in smoothpos mode
+            #if pargs.ctrlr_type == 'smoothpos':
+            #    spc.set_valid(True) # Can start sending commands
+
+            # # Plots for errors and loss
+            # fig, axes = plt.subplots(2, 1)
+            # fig.show()
+
+            # Run the controller
+            gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), \
+                                                                       AverageMeter(), AverageMeter()
+            conv_iter = pargs.max_iter
+            inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
+            status, prev_loss = 0, np.float("inf")
+            for it in xrange(pargs.max_iter):
+                # Print
+                print('\n #####################')
+
+                # Get current observation
+                start = time.time()
+
+                curr_angles = get_angles(jc.cur_pos())
+                if pargs.real_robot:
+                    curr_pts = depth_subscriber.get_ptcloud()
+                    curr_rgb = rgb_subscriber.get_img()
+                else:
+                    curr_pts, _ = generate_ptcloud(curr_angles, se3optim.args)
+                    curr_rgb = start_rgb
+                curr_pts = curr_pts.type(deftype)
+
+                gen_time.update(time.time() - start)
+
+                # Predict poses and masks
+                start = time.time()
+                curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
+                curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
+
+                posemask_time.update(time.time() - start)
+
+                # Run one step of the optimization (controls are always zeros, poses change)
+                start = time.time()
+
+                ctrl_grad, loss = se3optim.optimize_ctrl(curr_poses,
+                                                         init_ctrl_v,
+                                                         goal_poses=goal_poses_v)
+                ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
+
+                # Set last 3 joint's controls to zero
+                if pargs.only_top4_jts:
+                    ctrl_grad[4:] = 0
+                elif pargs.only_top4_jts:
+                    ctrl_grad[5:] = 0
+                elif pargs.only_top6_jts:
+                    ctrl_grad[6:] = 0
+
+                # Decay controls if loss is small
+                if loss < 1:
+                    pargs.ctrl_mag_decay = 0.999
+                else:
+                    ctrl_mag = pargs.max_ctrl_mag
+                    pargs.ctrl_mag_decay = 1.
+
+                if ctrl_mag > 0:
+                    ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2)  # Dirn
+                    curr_ctrl = ctrl_dirn * ctrl_mag  # Scale dirn by mag
+                    ctrl_mag *= pargs.ctrl_mag_decay  # Decay control magnitude
+                else:
+                    curr_ctrl = ctrl_grad.cpu().float()
+
+                # Apply control (simple velocity integration)
+                #if se3optim.args.use_jt_angles:
+                #    next_angles = curr_angles - (curr_ctrl * dt)
+                #else:
+                #    next_angles = get_angles(jc.cur_pos()) - (curr_ctrl * dt)
+                next_angles = curr_angles - (curr_ctrl * dt)
+                if pargs.only_top4_jts:
+                    next_angles[4:] = start_angles[4:] # Lock these angles
+                elif pargs.only_top5_jts:
+                    next_angles[5:] = start_angles[5:] # Lock these angles
+                elif pargs.only_top6_jts:
+                    next_angles[6:] = start_angles[6:] # Lock these angles
+
+                # Send commands to the robot
+                if pargs.ctrlr_type == 'blockpos':
+                    jc.move_to_pos(create_config(next_angles))
+                elif pargs.ctrlr_type == 'noblockpos':
+                    jc.set_pos(create_config(next_angles))
+                elif pargs.ctrlr_type == 'smoothpos':
+                    spc.set_target(create_config(next_angles)) # Update target
+                elif pargs.ctrlr_type == 'vel':
+                    jc.set_vel(create_config(curr_ctrl.mul(-1))) # Move in -ve dirn of gradient
+                else:
+                    assert False, "Unknown controller type specified: " + pargs.ctrlr_type
+
+                optim_time.update(time.time() - start)
+
+                # Render poses and masks using Pangolin
+                start = time.time()
+
+                curr_pts_f = curr_pts.cpu().float()
+                curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
+                curr_pose_err_indiv = se3optim.args.loss_scale * (curr_poses - goal_poses).pow(2).view(se3optim.args.num_se3, 12).mean(1)
+                pangolin.update_real_curr(curr_angles.numpy(),
+                                          curr_pts_f[0].numpy(),
+                                          curr_poses_f[0].numpy(),
+                                          curr_masks_f[0].numpy(),
+                                          curr_rgb.numpy(),
+                                          loss,
+                                          curr_pose_err_indiv.data.cpu().numpy(),
+                                          curr_deg_errors[0].numpy(),
+                                          curr_angles.numpy(),
+                                          curr_pts_f[0].numpy(),
+                                          curr_poses_f[0].numpy(),
+                                          curr_masks_f[0].numpy(),
+                                          curr_rgb.numpy(),
+                                          loss,
+                                          curr_pose_err_indiv.data.cpu().numpy(),
+                                          curr_deg_errors[0].numpy(),
+                                          0) # Don't save frame
 
 
-            # Save for future frame generation!
-            curr_angles_s.append(curr_angles)
-            curr_pts_s.append(curr_pts_f[0])
-            curr_poses_s.append(curr_poses_f[0])
-            curr_masks_s.append(curr_masks_f[0])
-            curr_rgb_s.append(curr_rgb)
-            loss_s.append(loss)
-            err_indiv_s.append(curr_pose_err_indiv.data.cpu())
-            curr_deg_errors_s.append(curr_deg_errors[0])
+                # Save for future frame generation!
+                curr_angles_s[method].append(curr_angles)
+                curr_pts_s[method].append(curr_pts_f[0])
+                curr_poses_s[method].append(curr_poses_f[0])
+                curr_masks_s[method].append(curr_masks_f[0])
+                curr_rgb_s[method].append(curr_rgb)
+                loss_s[method].append(loss)
+                err_indiv_s[method].append(curr_pose_err_indiv.data.cpu())
+                curr_deg_errors_s[method].append(curr_deg_errors[0])
 
-            # Log time
-            viz_time.update(time.time() - start)
+                # Log time
+                viz_time.update(time.time() - start)
 
-            # Rest of it
-            start = time.time()
+                # Rest of it
+                start = time.time()
 
-            # Save stuff
-            losses.append(loss)
-            ctrls.append(curr_ctrl)
-            angles.append(next_angles)
-            deg_errors.append(curr_deg_errors)
+                # Save stuff
+                losses.append(loss)
+                ctrls.append(curr_ctrl)
+                angles.append(next_angles)
+                deg_errors.append(curr_deg_errors)
 
-            # Print losses and errors
-            print('Test: {}/{}, Ctr: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, inc_ctr, max_ctr,
-                                                                                  it+1, pargs.max_iter, loss))
-            print('Joint angle errors in degrees: ',
-                  torch.cat([deg_errors[-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
+                # Print losses and errors
+                print('Test: {}/{}, Ctr: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, inc_ctr, max_ctr,
+                                                                                      it+1, pargs.max_iter, loss))
+                print('Joint angle errors in degrees: ',
+                      torch.cat([deg_errors[-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
 
-            # # Plot the errors & loss
-            # colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
-            # labels = []
-            # if ((it % 4) == 0) or (loss < pargs.loss_threshold):
-            #     conv = "Converged" if (loss < pargs.loss_threshold) else ""
-            #     axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k + 1, num_configs,
-            #                                                                                  (it + 1), loss)) + conv)
-            #     for j in xrange(7):
-            #         axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
-            #         labels.append("Jt-{}".format(j))
-            #     # I'm basically just demonstrating several different legend options here...
-            #     axes[0].legend(labels, ncol=4, loc='upper center',
-            #                    bbox_to_anchor=[0.5, 1.1],
-            #                    columnspacing=1.0, labelspacing=0.0,
-            #                    handletextpad=0.0, handlelength=1.5,
-            #                    fancybox=True, shadow=True)
-            #     axes[1].set_title("Iter: {}, Loss".format(it + 1))
-            #     axes[1].plot(losses, color='k')
-            #     fig.canvas.draw()  # Render
-            #     plt.pause(0.01)
-            # if (it % se3optim.args.disp_freq) == 0:  # Clear now and then
-            #     for ax in axes:
-            #         ax.cla()
+                # # Plot the errors & loss
+                # colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
+                # labels = []
+                # if ((it % 4) == 0) or (loss < pargs.loss_threshold):
+                #     conv = "Converged" if (loss < pargs.loss_threshold) else ""
+                #     axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k + 1, num_configs,
+                #                                                                                  (it + 1), loss)) + conv)
+                #     for j in xrange(7):
+                #         axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
+                #         labels.append("Jt-{}".format(j))
+                #     # I'm basically just demonstrating several different legend options here...
+                #     axes[0].legend(labels, ncol=4, loc='upper center',
+                #                    bbox_to_anchor=[0.5, 1.1],
+                #                    columnspacing=1.0, labelspacing=0.0,
+                #                    handletextpad=0.0, handlelength=1.5,
+                #                    fancybox=True, shadow=True)
+                #     axes[1].set_title("Iter: {}, Loss".format(it + 1))
+                #     axes[1].plot(losses, color='k')
+                #     fig.canvas.draw()  # Render
+                #     plt.pause(0.01)
+                # if (it % se3optim.args.disp_freq) == 0:  # Clear now and then
+                #     for ax in axes:
+                #         ax.cla()
 
-            # Finish
-            rest_time.update(time.time() - start)
-            print('Gen: {:.3f}({:.3f}), PoseMask: {:.3f}({:.3f}), Viz: {:.3f}({:.3f}),'
-                  ' Optim: {:.3f}({:.3f}), Rest: {:.3f}({:.3f})'.format(
-                gen_time.val, gen_time.avg, posemask_time.val, posemask_time.avg,
-                viz_time.val, viz_time.avg, optim_time.val, optim_time.avg,
-                rest_time.val, rest_time.avg))
+                # Finish
+                rest_time.update(time.time() - start)
+                print('Gen: {:.3f}({:.3f}), PoseMask: {:.3f}({:.3f}), Viz: {:.3f}({:.3f}),'
+                      ' Optim: {:.3f}({:.3f}), Rest: {:.3f}({:.3f})'.format(
+                    gen_time.val, gen_time.avg, posemask_time.val, posemask_time.avg,
+                    viz_time.val, viz_time.avg, optim_time.val, optim_time.avg,
+                    rest_time.val, rest_time.avg))
 
-            # Check for convergence in pose space
-            if loss < pargs.loss_threshold:
-                print("*****************************************")
-                print('Control Iter: {}/{}, Loss: {} less than threshold'.format(it + 1, pargs.max_iter,
-                                                                                 loss, pargs.loss_threshold))
-                conv_iter = it + 1
-                print("*****************************************")
-                break
-
-            # Check loss increase
-            if (loss > prev_loss):
-                inc_ctr += 1
-                if inc_ctr == max_ctr:
-                    print("************* FAILED *****************")
-                    print('Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(it + 1, pargs.max_iter,
+                # Check for convergence in pose space
+                if loss < pargs.loss_threshold:
+                    print("*****************************************")
+                    print('Control Iter: {}/{}, Loss: {} less than threshold'.format(it + 1, pargs.max_iter,
                                                                                      loss, pargs.loss_threshold))
-                    status = -1
                     conv_iter = it + 1
                     print("*****************************************")
                     break
+
+                # Check loss increase
+                if (loss > prev_loss):
+                    inc_ctr += 1
+                    if inc_ctr == max_ctr:
+                        print("************* FAILED *****************")
+                        print('Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(it + 1, pargs.max_iter,
+                                                                                         loss, pargs.loss_threshold))
+                        status = -1
+                        conv_iter = it + 1
+                        print("*****************************************")
+                        break
+                else:
+                    inc_ctr = 0 # Reset max(inc_ctr-1, 0) # Reset
+                prev_loss = loss
+
+            # Stop the controller if in smoothpos mode
+            if pargs.ctrlr_type == 'smoothpos':
+                spc.stop_motion()  # Stop sending commands
+
+            # Print final stats
+            print('=========== FINISHED ============')
+            print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
+            print('Final angle errors in degrees: ')
+            print(deg_errors[-1].view(7, 1))
+            final_errors[method].append(deg_errors[-1])
+
+            # Print final error in stats file
+            if status == -1:
+                conv = "Final Loss: {}, Failed after {} iterations \n".format(losses[-1], conv_iter)
+            elif conv_iter == pargs.max_iter:
+                conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
             else:
-                inc_ctr = 0 # Reset max(inc_ctr-1, 0) # Reset
-            prev_loss = loss
+                conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
+            errorfile.write(("Test: {}, ".format(k + 1)) + conv)
+            for j in xrange(len(start_angles)):
+                errorfile.write("{}, {}, {}, {}\n".format(start_angles[j], goal_angles[j],
+                                                          full_deg_error[j], deg_errors[-1][0, j]))
+            errorfile.write("\n")
 
-        # Stop the controller if in smoothpos mode
-        if pargs.ctrlr_type == 'smoothpos':
-            spc.stop_motion()  # Stop sending commands
+            # Save stats and exit
+            iterstats[method].append({'start_angles': start_angles, 'goal_angles': goal_angles,
+                              'angles': angles, 'ctrls': ctrls,
+                              'predctrls': ctrl_grads,
+                              'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
-        # Print final stats
-        print('=========== FINISHED ============')
-        print('Final loss after {} iterations: {}'.format(pargs.max_iter, losses[-1]))
-        print('Final angle errors in degrees: ')
-        print(deg_errors[-1].view(7, 1))
-        final_errors.append(deg_errors[-1])
+            ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
+            ######## Saving frames to disk now!
+            if method == 'backprop':
+                pangolin.update_real_init(start_angles.numpy(),
+                                          start_pts[0].cpu().numpy(),
+                                          start_poses_f[0].numpy(),
+                                          start_masks_f[0].numpy(),
+                                          start_rgb.numpy(),
+                                          goal_angles.numpy(),
+                                          goal_pts[0].cpu().numpy(),
+                                          goal_poses_f[0].numpy(),
+                                          goal_masks_f[0].numpy(),
+                                          goal_rgb.numpy(),
+                                          init_pose_loss.data[0],
+                                          init_pose_err_indiv.data.cpu().numpy(),
+                                          init_deg_errors)
 
-        # Print final error in stats file
-        if status == -1:
-            conv = "Final Loss: {}, Failed after {} iterations \n".format(losses[-1], conv_iter)
-        elif conv_iter == pargs.max_iter:
-            conv = "Final Loss: {}, Did not converge after {} iterations\n".format(losses[-1], pargs.max_iter)
-        else:
-            conv = "Final Loss: {}, Converged after {} iterations\n".format(losses[-1], conv_iter)
-        errorfile.write(("Test: {}, ".format(k + 1)) + conv)
-        for j in xrange(len(start_angles)):
-            errorfile.write("{}, {}, {}, {}\n".format(start_angles[j], goal_angles[j],
-                                                      full_deg_error[j], deg_errors[-1][0, j]))
-        errorfile.write("\n")
+                # Start saving frames
+                save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
+                util.create_dir(save_dir)  # Create directory
+                pangolin.start_saving_frames(save_dir)  # Start saving frames
 
-        # Save stats and exit
-        iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
-                          'angles': angles, 'ctrls': ctrls,
-                          'predctrls': ctrl_grads,
-                          'deg_errors': deg_errors, 'losses': losses, 'status': status})
+                mx = max(len(curr_angles_s['gn']), len(curr_angles_s['backprop']))
+                for j in xrange(mx):
+                    jg = j if (j < len(curr_angles_s['gn'])) else len(curr_angles_s['gn'])-1
+                    jb = j if (j < len(curr_angles_s['backprop'])) else len(curr_angles_s['backprop'])-1
+                    if (j%10  == 0):
+                        print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
+                    pangolin.update_real_curr(curr_angles_s['gn'][jg].numpy(),
+                                              curr_pts_s['gn'][jg].numpy(),
+                                              curr_poses_s['gn'][jg].numpy(),
+                                              curr_masks_s['gn'][jg].numpy(),
+                                              curr_rgb_s['gn'][jg].numpy(),
+                                              loss_s['gn'][jg],
+                                              err_indiv_s['gn'][jg].numpy(),
+                                              curr_deg_errors_s['gn'][jg].numpy(),
+                                              curr_angles_s['backprop'][jb].numpy(),
+                                              curr_pts_s['backprop'][jb].numpy(),
+                                              curr_poses_s['backprop'][jb].numpy(),
+                                              curr_masks_s['backprop'][jb].numpy(),
+                                              curr_rgb_s['backprop'][jb].numpy(),
+                                              loss_s['backprop'][jb],
+                                              err_indiv_s['backprop'][jb].numpy(),
+                                              curr_deg_errors_s['backprop'][jb].numpy(),
+                                              0) # Save frame
 
-        # Save
-        datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
-                          curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
-
-        ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
-        ######## Saving frames to disk now!
-        #
-        # pangolin.update_real_init(start_angles.numpy(),
-        #                           start_pts[0].cpu().numpy(),
-        #                           start_poses_f[0].numpy(),
-        #                           start_masks_f[0].numpy(),
-        #                           start_rgb.numpy(),
-        #                           goal_angles.numpy(),
-        #                           goal_pts[0].cpu().numpy(),
-        #                           goal_poses_f[0].numpy(),
-        #                           goal_masks_f[0].numpy(),
-        #                           goal_rgb.numpy(),
-        #                           init_pose_loss.data[0],
-        #                           init_pose_err_indiv.data.cpu().numpy(),
-        #                           init_deg_errors)
-        #
-        # # Start saving frames
-        # save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
-        # util.create_dir(save_dir)  # Create directory
-        # pangolin.start_saving_frames(save_dir)  # Start saving frames
-        #
-        # for j in xrange(len(curr_angles_s)):
-        #     if (j%10  == 0):
-        #         print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
-        #     pangolin.update_real_curr(curr_angles_s[j].numpy(),
-        #                               curr_pts_s[j].numpy(),
-        #                               curr_poses_s[j].numpy(),
-        #                               curr_masks_s[j].numpy(),
-        #                               curr_rgb_s[j].numpy(),
-        #                               loss_s[j],
-        #                               err_indiv_s[j].numpy(),
-        #                               curr_deg_errors_s[j].numpy(),
-        #                               1) # Save frame
-        #
-        # # Stop saving frames
-        # time.sleep(1)
-        # pangolin.stop_saving_frames()
+                # Stop saving frames
+                time.sleep(1)
+                pangolin.stop_saving_frames()
 
     # Print all errors
-    i_err, f_err = torch.cat(init_errors, 0), torch.cat(final_errors, 0)
-    print("------------ INITIAL ERRORS -------------")
+    i_err, f_err = torch.cat(init_errors['gn'], 0), torch.cat(final_errors['gn'], 0)
+    print("------------ GN: INITIAL ERRORS -------------")
     print(i_err)
-    print("------------- FINAL ERRORS --------------")
+    print("------------- GN: FINAL ERRORS --------------")
     print(f_err)
-    num_top6_strict = (f_err[:, :6] < 1.5).sum(1).eq(6).sum()
-    num_top4_strict = (f_err[:, :4] < 1.5).sum(1).eq(4).sum()
-    num_top6_relax = ((f_err[:, :4] < 1.5).sum(1).eq(4) *
+    num_top6_strict_gn = (f_err[:, :6] < 1.5).sum(1).eq(6).sum()
+    num_top4_strict_gn = (f_err[:, :4] < 1.5).sum(1).eq(4).sum()
+    num_top6_relax_gn = ((f_err[:, :4] < 1.5).sum(1).eq(4) *
                       (f_err[:, [4, 5]] < 3.0).sum(1).eq(2)).sum()
     print("------ Top 6 jts strict: {}/{}, relax: {}/{}. Top 4 jts strict: {}/{}".format(
-        num_top6_strict, num_configs, num_top6_relax, num_configs, num_top4_strict, num_configs
+        num_top6_strict_gn, num_configs, num_top6_relax_gn, num_configs, num_top4_strict_gn, num_configs
     ))
 
-    # Save data stats
-    torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
+    # Print all errors
+    i_err, f_err = torch.cat(init_errors['backprop'], 0), torch.cat(final_errors['backprop'], 0)
+    print("------------ BACKPROP: INITIAL ERRORS -------------")
+    print(i_err)
+    print("------------- BACKPROP: FINAL ERRORS --------------")
+    print(f_err)
+    num_top6_strict_bp = (f_err[:, :6] < 1.5).sum(1).eq(6).sum()
+    num_top4_strict_bp = (f_err[:, :4] < 1.5).sum(1).eq(4).sum()
+    num_top6_relax_bp = ((f_err[:, :4] < 1.5).sum(1).eq(4) *
+                      (f_err[:, [4, 5]] < 3.0).sum(1).eq(2)).sum()
+    print("------ Top 6 jts strict: {}/{}, relax: {}/{}. Top 4 jts strict: {}/{}".format(
+        num_top6_strict_bp, num_configs, num_top6_relax_bp, num_configs, num_top4_strict_bp, num_configs
+    ))
 
     # Save stats across all iterations
     stats = {'args': se3optim.args, 'pargs': pargs, 'start_angles_all': start_angles_all,
              'goal_angles_all': goal_angles_all, 'iterstats': iterstats, 'finalerrors': final_errors,
-             'num_top6_strict': num_top6_strict, 'num_top4_strict': num_top4_strict,
-             'num_top6_relax': num_top6_relax}
+             'num_top6_strict_gn': num_top6_strict_gn, 'num_top4_strict_gn': num_top4_strict_gn,
+             'num_top6_relax_gn': num_top6_relax_gn,
+             'num_top6_strict_bp': num_top6_strict_bp, 'num_top4_strict_bp': num_top4_strict_bp,
+             'num_top6_relax_bp': num_top6_relax_bp
+             }
     torch.save(stats, pargs.save_dir + '/planstats.pth.tar')
     errorfile.close()
     print('---------- DONE -----------')

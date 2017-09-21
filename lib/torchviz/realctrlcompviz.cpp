@@ -441,8 +441,8 @@ static CYTHON_INLINE float __PYX_NAN() {
   #endif
 #endif
 
-#define __PYX_HAVE__torchviz__realctrlviz
-#define __PYX_HAVE_API__torchviz__realctrlviz
+#define __PYX_HAVE__torchviz__realctrlcompviz
+#define __PYX_HAVE_API__torchviz__realctrlcompviz
 #include <string.h>
 #include <string>
 #include "ios"
@@ -453,7 +453,7 @@ static CYTHON_INLINE float __PYX_NAN() {
 #include <stdlib.h>
 #include "numpy/arrayobject.h"
 #include "numpy/ufuncobject.h"
-#include "realctrlviz.hpp"
+#include "realctrlcompviz.hpp"
 #ifdef _OPENMP
 #include <omp.h>
 #endif /* _OPENMP */
@@ -671,7 +671,7 @@ static const char *__pyx_filename;
 
 
 static const char *__pyx_f[] = {
-  "torchviz/realctrlviz.pyx",
+  "torchviz/realctrlcompviz.pyx",
   "__init__.pxd",
   "stringsource",
   "type.pxd",
@@ -927,7 +927,7 @@ static CYTHON_INLINE __pyx_t_double_complex __pyx_t_double_complex_from_parts(do
 
 
 /*--- Type declarations ---*/
-struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz;
+struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz;
 
 /* "../../ExternalPackages/Anaconda/lib/python2.7/site-packages/Cython/Includes/numpy/__init__.pxd":764
  * ctypedef npy_longdouble longdouble_t
@@ -965,16 +965,16 @@ typedef npy_clongdouble __pyx_t_5numpy_clongdouble_t;
  */
 typedef npy_cdouble __pyx_t_5numpy_complex_t;
 
-/* "torchviz/realctrlviz.pyx":54
+/* "torchviz/realctrlcompviz.pyx":58
  *         assert arr.flags['C_CONTIGUOUS']
  * 
- * cdef class PyRealCtrlViz:             # <<<<<<<<<<<<<<
- *     cdef RealCtrlViz *realctrlviz     # hold a C++ instance which we're wrapping
+ * cdef class PyRealCtrlCompViz:             # <<<<<<<<<<<<<<
+ *     cdef RealCtrlViz *realctrlcompviz     # hold a C++ instance which we're wrapping
  *     cdef int img_ht
  */
-struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz {
+struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz {
   PyObject_HEAD
-  RealCtrlViz *realctrlviz;
+  RealCtrlViz *realctrlcompviz;
   int img_ht;
   int img_wd;
 };
@@ -1402,15 +1402,15 @@ static PyTypeObject *__pyx_ptype_5numpy_ndarray = 0;
 static PyTypeObject *__pyx_ptype_5numpy_ufunc = 0;
 static CYTHON_INLINE char *__pyx_f_5numpy__util_dtypestring(PyArray_Descr *, char *, char *, int *); /*proto*/
 
-/* Module declarations from 'torchviz.realctrlviz' */
-static PyTypeObject *__pyx_ptype_8torchviz_11realctrlviz_PyRealCtrlViz = 0;
+/* Module declarations from 'torchviz.realctrlcompviz' */
+static PyTypeObject *__pyx_ptype_8torchviz_15realctrlcompviz_PyRealCtrlCompViz = 0;
 static std::string __pyx_convert_string_from_py_std__in_string(PyObject *); /*proto*/
 static __Pyx_TypeInfo __Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t = { "float32_t", NULL, sizeof(__pyx_t_5numpy_float32_t), { 0 }, 0, 'R', 0, 0 };
 static __Pyx_TypeInfo __Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t = { "uint8_t", NULL, sizeof(__pyx_t_5numpy_uint8_t), { 0 }, 0, IS_UNSIGNED(__pyx_t_5numpy_uint8_t) ? 'U' : 'I', IS_UNSIGNED(__pyx_t_5numpy_uint8_t), 0 };
-#define __Pyx_MODULE_NAME "torchviz.realctrlviz"
-int __pyx_module_is_main_torchviz__realctrlviz = 0;
+#define __Pyx_MODULE_NAME "torchviz.realctrlcompviz"
+int __pyx_module_is_main_torchviz__realctrlcompviz = 0;
 
-/* Implementation of 'torchviz.realctrlviz' */
+/* Implementation of 'torchviz.realctrlcompviz' */
 static PyObject *__pyx_builtin_ValueError;
 static PyObject *__pyx_builtin_range;
 static PyObject *__pyx_builtin_RuntimeError;
@@ -1454,6 +1454,7 @@ static const char __pyx_k_goal_poses[] = "goal_poses";
 static const char __pyx_k_save_frame[] = "save_frame";
 static const char __pyx_k_ImportError[] = "ImportError";
 static const char __pyx_k_curr_angles[] = "curr_angles";
+static const char __pyx_k_curr_rgb_bp[] = "curr_rgb_bp";
 static const char __pyx_k_da_goal_pts[] = "da_goal_pts";
 static const char __pyx_k_goal_angles[] = "goal_angles";
 static const char __pyx_k_start_masks[] = "start_masks";
@@ -1464,18 +1465,25 @@ static const char __pyx_k_curr_ptcloud[] = "curr_ptcloud";
 static const char __pyx_k_goal_ptcloud[] = "goal_ptcloud";
 static const char __pyx_k_gtwarped_out[] = "gtwarped_out";
 static const char __pyx_k_start_angles[] = "start_angles";
+static const char __pyx_k_curr_masks_bp[] = "curr_masks_bp";
+static const char __pyx_k_curr_poses_bp[] = "curr_poses_bp";
 static const char __pyx_k_start_ptcloud[] = "start_ptcloud";
 static const char __pyx_k_use_simulator[] = "use_simulator";
+static const char __pyx_k_curr_angles_bp[] = "curr_angles_bp";
 static const char __pyx_k_curr_deg_error[] = "curr_deg_error";
 static const char __pyx_k_init_deg_error[] = "init_deg_error";
 static const char __pyx_k_curr_pose_error[] = "curr_pose_error";
+static const char __pyx_k_curr_ptcloud_bp[] = "curr_ptcloud_bp";
 static const char __pyx_k_init_pose_error[] = "init_pose_error";
 static const char __pyx_k_assert_contiguous[] = "assert_contiguous";
-static const char __pyx_k_torchviz_realctrlviz[] = "torchviz.realctrlviz";
+static const char __pyx_k_curr_deg_error_bp[] = "curr_deg_error_bp";
+static const char __pyx_k_curr_pose_error_bp[] = "curr_pose_error_bp";
 static const char __pyx_k_curr_pose_error_indiv[] = "curr_pose_error_indiv";
 static const char __pyx_k_init_pose_error_indiv[] = "init_pose_error_indiv";
+static const char __pyx_k_curr_pose_error_indiv_bp[] = "curr_pose_error_indiv_bp";
+static const char __pyx_k_torchviz_realctrlcompviz[] = "torchviz.realctrlcompviz";
 static const char __pyx_k_ndarray_is_not_C_contiguous[] = "ndarray is not C contiguous";
-static const char __pyx_k_home_barun_Projects_se3nets_pyt[] = "/home/barun/Projects/se3nets-pytorch/lib/torchviz/realctrlviz.pyx";
+static const char __pyx_k_home_barun_Projects_se3nets_pyt[] = "/home/barun/Projects/se3nets-pytorch/lib/torchviz/realctrlcompviz.pyx";
 static const char __pyx_k_numpy_core_multiarray_failed_to[] = "numpy.core.multiarray failed to import";
 static const char __pyx_k_unknown_dtype_code_in_numpy_pxd[] = "unknown dtype code in numpy.pxd (%d)";
 static const char __pyx_k_Format_string_allocated_too_shor[] = "Format string allocated too short, see comment in numpy.pxd";
@@ -1498,13 +1506,21 @@ static PyObject *__pyx_n_s_config1;
 static PyObject *__pyx_n_s_config2;
 static PyObject *__pyx_n_s_ctypes;
 static PyObject *__pyx_n_s_curr_angles;
+static PyObject *__pyx_n_s_curr_angles_bp;
 static PyObject *__pyx_n_s_curr_deg_error;
+static PyObject *__pyx_n_s_curr_deg_error_bp;
 static PyObject *__pyx_n_s_curr_masks;
+static PyObject *__pyx_n_s_curr_masks_bp;
 static PyObject *__pyx_n_s_curr_pose_error;
+static PyObject *__pyx_n_s_curr_pose_error_bp;
 static PyObject *__pyx_n_s_curr_pose_error_indiv;
+static PyObject *__pyx_n_s_curr_pose_error_indiv_bp;
 static PyObject *__pyx_n_s_curr_poses;
+static PyObject *__pyx_n_s_curr_poses_bp;
 static PyObject *__pyx_n_s_curr_ptcloud;
+static PyObject *__pyx_n_s_curr_ptcloud_bp;
 static PyObject *__pyx_n_s_curr_rgb;
+static PyObject *__pyx_n_s_curr_rgb_bp;
 static PyObject *__pyx_n_s_cx;
 static PyObject *__pyx_n_s_cy;
 static PyObject *__pyx_n_s_da_goal_pts;
@@ -1547,24 +1563,24 @@ static PyObject *__pyx_n_s_start_pts;
 static PyObject *__pyx_n_s_start_rgb;
 static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_n_s_thresh;
-static PyObject *__pyx_n_s_torchviz_realctrlviz;
+static PyObject *__pyx_n_s_torchviz_realctrlcompviz;
 static PyObject *__pyx_kp_u_unknown_dtype_code_in_numpy_pxd;
 static PyObject *__pyx_n_s_use_simulator;
 static PyObject *__pyx_n_s_winsize;
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_arrays); /* proto */
-static int __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz___cinit__(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, int __pyx_v_img_ht, int __pyx_v_img_wd, float __pyx_v_img_scale, int __pyx_v_num_se3, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, std::string __pyx_v_savedir, int __pyx_v_use_simulator); /* proto */
-static void __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_2__dealloc__(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud, PyArrayObject *__pyx_v_labels); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, int __pyx_v_winsize, float __pyx_v_thresh, PyArrayObject *__pyx_v_gtwarped_out, PyArrayObject *__pyx_v_gtda_ids); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_problem(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, PyArrayObject *__pyx_v_start_pts, PyArrayObject *__pyx_v_da_goal_pts); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_curr(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_curr_angles, PyArrayObject *__pyx_v_curr_ptcloud, PyArrayObject *__pyx_v_curr_poses, PyArrayObject *__pyx_v_curr_masks, PyArrayObject *__pyx_v_curr_rgb, float __pyx_v_curr_pose_error, PyArrayObject *__pyx_v_curr_pose_error_indiv, PyArrayObject *__pyx_v_curr_deg_error, int __pyx_v_save_frame); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_init(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_start_angles, PyArrayObject *__pyx_v_start_ptcloud, PyArrayObject *__pyx_v_start_poses, PyArrayObject *__pyx_v_start_masks, PyArrayObject *__pyx_v_start_rgb, PyArrayObject *__pyx_v_goal_angles, PyArrayObject *__pyx_v_goal_ptcloud, PyArrayObject *__pyx_v_goal_poses, PyArrayObject *__pyx_v_goal_masks, PyArrayObject *__pyx_v_goal_rgb, float __pyx_v_init_pose_error, PyArrayObject *__pyx_v_init_pose_error_indiv, PyArrayObject *__pyx_v_init_deg_error); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_14reset(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_16start_saving_frames(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, std::string __pyx_v_framesavedir); /* proto */
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_18stop_saving_frames(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_assert_contiguous(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_arrays); /* proto */
+static int __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz___cinit__(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, int __pyx_v_img_ht, int __pyx_v_img_wd, float __pyx_v_img_scale, int __pyx_v_num_se3, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, std::string __pyx_v_savedir, int __pyx_v_use_simulator); /* proto */
+static void __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_2__dealloc__(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_4render_arm(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud, PyArrayObject *__pyx_v_labels); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_6compute_gt_da(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, int __pyx_v_winsize, float __pyx_v_thresh, PyArrayObject *__pyx_v_gtwarped_out, PyArrayObject *__pyx_v_gtda_ids); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_8initialize_problem(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, PyArrayObject *__pyx_v_start_pts, PyArrayObject *__pyx_v_da_goal_pts); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_10update_real_curr(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_curr_angles, PyArrayObject *__pyx_v_curr_ptcloud, PyArrayObject *__pyx_v_curr_poses, PyArrayObject *__pyx_v_curr_masks, PyArrayObject *__pyx_v_curr_rgb, float __pyx_v_curr_pose_error, PyArrayObject *__pyx_v_curr_pose_error_indiv, PyArrayObject *__pyx_v_curr_deg_error, PyArrayObject *__pyx_v_curr_angles_bp, PyArrayObject *__pyx_v_curr_ptcloud_bp, PyArrayObject *__pyx_v_curr_poses_bp, PyArrayObject *__pyx_v_curr_masks_bp, PyArrayObject *__pyx_v_curr_rgb_bp, float __pyx_v_curr_pose_error_bp, PyArrayObject *__pyx_v_curr_pose_error_indiv_bp, PyArrayObject *__pyx_v_curr_deg_error_bp, int __pyx_v_save_frame); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_12update_real_init(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_start_angles, PyArrayObject *__pyx_v_start_ptcloud, PyArrayObject *__pyx_v_start_poses, PyArrayObject *__pyx_v_start_masks, PyArrayObject *__pyx_v_start_rgb, PyArrayObject *__pyx_v_goal_angles, PyArrayObject *__pyx_v_goal_ptcloud, PyArrayObject *__pyx_v_goal_poses, PyArrayObject *__pyx_v_goal_masks, PyArrayObject *__pyx_v_goal_rgb, float __pyx_v_init_pose_error, PyArrayObject *__pyx_v_init_pose_error_indiv, PyArrayObject *__pyx_v_init_deg_error); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_14reset(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_16start_saving_frames(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, std::string __pyx_v_framesavedir); /* proto */
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_18stop_saving_frames(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self); /* proto */
 static int __pyx_pf_5numpy_7ndarray___getbuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info, int __pyx_v_flags); /* proto */
 static void __pyx_pf_5numpy_7ndarray_2__releasebuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info); /* proto */
-static PyObject *__pyx_tp_new_8torchviz_11realctrlviz_PyRealCtrlViz(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
+static PyObject *__pyx_tp_new_8torchviz_15realctrlcompviz_PyRealCtrlCompViz(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_tuple_;
 static PyObject *__pyx_tuple__2;
 static PyObject *__pyx_tuple__3;
@@ -1577,7 +1593,7 @@ static PyObject *__pyx_tuple__9;
 static PyObject *__pyx_tuple__10;
 static PyObject *__pyx_codeobj__11;
 
-/* "torchviz/realctrlviz.pyx":50
+/* "torchviz/realctrlcompviz.pyx":54
  *         void stop_saving_frames();
  * 
  * def assert_contiguous(arrays):             # <<<<<<<<<<<<<<
@@ -1586,20 +1602,20 @@ static PyObject *__pyx_codeobj__11;
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_1assert_contiguous(PyObject *__pyx_self, PyObject *__pyx_v_arrays); /*proto*/
-static PyMethodDef __pyx_mdef_8torchviz_11realctrlviz_1assert_contiguous = {"assert_contiguous", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_1assert_contiguous, METH_O, 0};
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_1assert_contiguous(PyObject *__pyx_self, PyObject *__pyx_v_arrays) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_1assert_contiguous(PyObject *__pyx_self, PyObject *__pyx_v_arrays); /*proto*/
+static PyMethodDef __pyx_mdef_8torchviz_15realctrlcompviz_1assert_contiguous = {"assert_contiguous", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_1assert_contiguous, METH_O, 0};
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_1assert_contiguous(PyObject *__pyx_self, PyObject *__pyx_v_arrays) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("assert_contiguous (wrapper)", 0);
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_assert_contiguous(__pyx_self, ((PyObject *)__pyx_v_arrays));
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_assert_contiguous(__pyx_self, ((PyObject *)__pyx_v_arrays));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_arrays) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_assert_contiguous(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_arrays) {
   PyObject *__pyx_v_arr = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
@@ -1611,7 +1627,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
   int __pyx_t_6;
   __Pyx_RefNannySetupContext("assert_contiguous", 0);
 
-  /* "torchviz/realctrlviz.pyx":51
+  /* "torchviz/realctrlcompviz.pyx":55
  * 
  * def assert_contiguous(arrays):
  *     for arr in arrays:             # <<<<<<<<<<<<<<
@@ -1622,26 +1638,26 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
     __pyx_t_1 = __pyx_v_arrays; __Pyx_INCREF(__pyx_t_1); __pyx_t_2 = 0;
     __pyx_t_3 = NULL;
   } else {
-    __pyx_t_2 = -1; __pyx_t_1 = PyObject_GetIter(__pyx_v_arrays); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 51, __pyx_L1_error)
+    __pyx_t_2 = -1; __pyx_t_1 = PyObject_GetIter(__pyx_v_arrays); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 55, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_3 = Py_TYPE(__pyx_t_1)->tp_iternext; if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 51, __pyx_L1_error)
+    __pyx_t_3 = Py_TYPE(__pyx_t_1)->tp_iternext; if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 55, __pyx_L1_error)
   }
   for (;;) {
     if (likely(!__pyx_t_3)) {
       if (likely(PyList_CheckExact(__pyx_t_1))) {
         if (__pyx_t_2 >= PyList_GET_SIZE(__pyx_t_1)) break;
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-        __pyx_t_4 = PyList_GET_ITEM(__pyx_t_1, __pyx_t_2); __Pyx_INCREF(__pyx_t_4); __pyx_t_2++; if (unlikely(0 < 0)) __PYX_ERR(0, 51, __pyx_L1_error)
+        __pyx_t_4 = PyList_GET_ITEM(__pyx_t_1, __pyx_t_2); __Pyx_INCREF(__pyx_t_4); __pyx_t_2++; if (unlikely(0 < 0)) __PYX_ERR(0, 55, __pyx_L1_error)
         #else
-        __pyx_t_4 = PySequence_ITEM(__pyx_t_1, __pyx_t_2); __pyx_t_2++; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 51, __pyx_L1_error)
+        __pyx_t_4 = PySequence_ITEM(__pyx_t_1, __pyx_t_2); __pyx_t_2++; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 55, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         #endif
       } else {
         if (__pyx_t_2 >= PyTuple_GET_SIZE(__pyx_t_1)) break;
         #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
-        __pyx_t_4 = PyTuple_GET_ITEM(__pyx_t_1, __pyx_t_2); __Pyx_INCREF(__pyx_t_4); __pyx_t_2++; if (unlikely(0 < 0)) __PYX_ERR(0, 51, __pyx_L1_error)
+        __pyx_t_4 = PyTuple_GET_ITEM(__pyx_t_1, __pyx_t_2); __Pyx_INCREF(__pyx_t_4); __pyx_t_2++; if (unlikely(0 < 0)) __PYX_ERR(0, 55, __pyx_L1_error)
         #else
-        __pyx_t_4 = PySequence_ITEM(__pyx_t_1, __pyx_t_2); __pyx_t_2++; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 51, __pyx_L1_error)
+        __pyx_t_4 = PySequence_ITEM(__pyx_t_1, __pyx_t_2); __pyx_t_2++; if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 55, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_4);
         #endif
       }
@@ -1651,7 +1667,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
         PyObject* exc_type = PyErr_Occurred();
         if (exc_type) {
           if (likely(exc_type == PyExc_StopIteration || PyErr_GivenExceptionMatches(exc_type, PyExc_StopIteration))) PyErr_Clear();
-          else __PYX_ERR(0, 51, __pyx_L1_error)
+          else __PYX_ERR(0, 55, __pyx_L1_error)
         }
         break;
       }
@@ -1660,30 +1676,30 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
     __Pyx_XDECREF_SET(__pyx_v_arr, __pyx_t_4);
     __pyx_t_4 = 0;
 
-    /* "torchviz/realctrlviz.pyx":52
+    /* "torchviz/realctrlcompviz.pyx":56
  * def assert_contiguous(arrays):
  *     for arr in arrays:
  *         assert arr.flags['C_CONTIGUOUS']             # <<<<<<<<<<<<<<
  * 
- * cdef class PyRealCtrlViz:
+ * cdef class PyRealCtrlCompViz:
  */
     #ifndef CYTHON_WITHOUT_ASSERTIONS
     if (unlikely(!Py_OptimizeFlag)) {
-      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_arr, __pyx_n_s_flags); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 52, __pyx_L1_error)
+      __pyx_t_4 = __Pyx_PyObject_GetAttrStr(__pyx_v_arr, __pyx_n_s_flags); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 56, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_4);
-      __pyx_t_5 = PyObject_GetItem(__pyx_t_4, __pyx_n_s_C_CONTIGUOUS); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 52, __pyx_L1_error)
+      __pyx_t_5 = PyObject_GetItem(__pyx_t_4, __pyx_n_s_C_CONTIGUOUS); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 56, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_5);
       __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-      __pyx_t_6 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely(__pyx_t_6 < 0)) __PYX_ERR(0, 52, __pyx_L1_error)
+      __pyx_t_6 = __Pyx_PyObject_IsTrue(__pyx_t_5); if (unlikely(__pyx_t_6 < 0)) __PYX_ERR(0, 56, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
       if (unlikely(!__pyx_t_6)) {
         PyErr_SetNone(PyExc_AssertionError);
-        __PYX_ERR(0, 52, __pyx_L1_error)
+        __PYX_ERR(0, 56, __pyx_L1_error)
       }
     }
     #endif
 
-    /* "torchviz/realctrlviz.pyx":51
+    /* "torchviz/realctrlcompviz.pyx":55
  * 
  * def assert_contiguous(arrays):
  *     for arr in arrays:             # <<<<<<<<<<<<<<
@@ -1693,7 +1709,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
   }
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "torchviz/realctrlviz.pyx":50
+  /* "torchviz/realctrlcompviz.pyx":54
  *         void stop_saving_frames();
  * 
  * def assert_contiguous(arrays):             # <<<<<<<<<<<<<<
@@ -1708,7 +1724,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
   __Pyx_XDECREF(__pyx_t_1);
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
-  __Pyx_AddTraceback("torchviz.realctrlviz.assert_contiguous", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.assert_contiguous", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XDECREF(__pyx_v_arr);
@@ -1717,7 +1733,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":59
+/* "torchviz/realctrlcompviz.pyx":63
  *     cdef int img_wd
  * 
  *     def __cinit__(self, int img_ht, int img_wd, float img_scale, int num_se3,             # <<<<<<<<<<<<<<
@@ -1726,8 +1742,8 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_assert_contiguous(CYTHON_UNUSE
  */
 
 /* Python wrapper */
-static int __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static int __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static int __pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static int __pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_1__cinit__(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   int __pyx_v_img_ht;
   int __pyx_v_img_wd;
   float __pyx_v_img_scale;
@@ -1769,51 +1785,51 @@ static int __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_1__cinit__(PyObject 
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_img_wd)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 1); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 1); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_img_scale)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 2); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 2); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_num_se3)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 3); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 3); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  4:
         if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fx)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 4); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 4); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  5:
         if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_fy)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 5); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 5); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  6:
         if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cx)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 6); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 6); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  7:
         if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_cy)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 7); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 7); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  8:
         if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_savedir)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 8); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 8); __PYX_ERR(0, 63, __pyx_L3_error)
         }
         case  9:
         if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_use_simulator)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 9); __PYX_ERR(0, 59, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, 9); __PYX_ERR(0, 63, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 59, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(0, 63, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 10) {
       goto __pyx_L5_argtuple_error;
@@ -1829,65 +1845,65 @@ static int __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_1__cinit__(PyObject 
       values[8] = PyTuple_GET_ITEM(__pyx_args, 8);
       values[9] = PyTuple_GET_ITEM(__pyx_args, 9);
     }
-    __pyx_v_img_ht = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_img_ht == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 59, __pyx_L3_error)
-    __pyx_v_img_wd = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_img_wd == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 59, __pyx_L3_error)
-    __pyx_v_img_scale = __pyx_PyFloat_AsFloat(values[2]); if (unlikely((__pyx_v_img_scale == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 59, __pyx_L3_error)
-    __pyx_v_num_se3 = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_num_se3 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 59, __pyx_L3_error)
-    __pyx_v_fx = __pyx_PyFloat_AsFloat(values[4]); if (unlikely((__pyx_v_fx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 60, __pyx_L3_error)
-    __pyx_v_fy = __pyx_PyFloat_AsFloat(values[5]); if (unlikely((__pyx_v_fy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 60, __pyx_L3_error)
-    __pyx_v_cx = __pyx_PyFloat_AsFloat(values[6]); if (unlikely((__pyx_v_cx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 60, __pyx_L3_error)
-    __pyx_v_cy = __pyx_PyFloat_AsFloat(values[7]); if (unlikely((__pyx_v_cy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 60, __pyx_L3_error)
-    __pyx_v_savedir = __pyx_convert_string_from_py_std__in_string(values[8]); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 61, __pyx_L3_error)
-    __pyx_v_use_simulator = __Pyx_PyInt_As_int(values[9]); if (unlikely((__pyx_v_use_simulator == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 61, __pyx_L3_error)
+    __pyx_v_img_ht = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_img_ht == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L3_error)
+    __pyx_v_img_wd = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_img_wd == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L3_error)
+    __pyx_v_img_scale = __pyx_PyFloat_AsFloat(values[2]); if (unlikely((__pyx_v_img_scale == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L3_error)
+    __pyx_v_num_se3 = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_num_se3 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 63, __pyx_L3_error)
+    __pyx_v_fx = __pyx_PyFloat_AsFloat(values[4]); if (unlikely((__pyx_v_fx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L3_error)
+    __pyx_v_fy = __pyx_PyFloat_AsFloat(values[5]); if (unlikely((__pyx_v_fy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L3_error)
+    __pyx_v_cx = __pyx_PyFloat_AsFloat(values[6]); if (unlikely((__pyx_v_cx == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L3_error)
+    __pyx_v_cy = __pyx_PyFloat_AsFloat(values[7]); if (unlikely((__pyx_v_cy == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 64, __pyx_L3_error)
+    __pyx_v_savedir = __pyx_convert_string_from_py_std__in_string(values[8]); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 65, __pyx_L3_error)
+    __pyx_v_use_simulator = __Pyx_PyInt_As_int(values[9]); if (unlikely((__pyx_v_use_simulator == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 65, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 59, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 10, 10, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 63, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return -1;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz___cinit__(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_img_ht, __pyx_v_img_wd, __pyx_v_img_scale, __pyx_v_num_se3, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, __pyx_v_savedir, __pyx_v_use_simulator);
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz___cinit__(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_img_ht, __pyx_v_img_wd, __pyx_v_img_scale, __pyx_v_num_se3, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, __pyx_v_savedir, __pyx_v_use_simulator);
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static int __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz___cinit__(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, int __pyx_v_img_ht, int __pyx_v_img_wd, float __pyx_v_img_scale, int __pyx_v_num_se3, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, std::string __pyx_v_savedir, int __pyx_v_use_simulator) {
+static int __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz___cinit__(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, int __pyx_v_img_ht, int __pyx_v_img_wd, float __pyx_v_img_scale, int __pyx_v_num_se3, float __pyx_v_fx, float __pyx_v_fy, float __pyx_v_cx, float __pyx_v_cy, std::string __pyx_v_savedir, int __pyx_v_use_simulator) {
   int __pyx_r;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__cinit__", 0);
 
-  /* "torchviz/realctrlviz.pyx":62
+  /* "torchviz/realctrlcompviz.pyx":66
  *                     float fx, float fy, float cx, float cy,
  *                     string savedir, int use_simulator):
  *         self.img_ht   = img_ht             # <<<<<<<<<<<<<<
  *         self.img_wd   = img_wd
- *         self.realctrlviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
+ *         self.realctrlcompviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
  */
   __pyx_v_self->img_ht = __pyx_v_img_ht;
 
-  /* "torchviz/realctrlviz.pyx":63
+  /* "torchviz/realctrlcompviz.pyx":67
  *                     string savedir, int use_simulator):
  *         self.img_ht   = img_ht
  *         self.img_wd   = img_wd             # <<<<<<<<<<<<<<
- *         self.realctrlviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
+ *         self.realctrlcompviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
  *                                        fx, fy, cx, cy, savedir, use_simulator)
  */
   __pyx_v_self->img_wd = __pyx_v_img_wd;
 
-  /* "torchviz/realctrlviz.pyx":64
+  /* "torchviz/realctrlcompviz.pyx":68
  *         self.img_ht   = img_ht
  *         self.img_wd   = img_wd
- *         self.realctrlviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,             # <<<<<<<<<<<<<<
  *                                        fx, fy, cx, cy, savedir, use_simulator)
  * 
  */
-  __pyx_v_self->realctrlviz = new RealCtrlViz(__pyx_v_img_ht, __pyx_v_img_wd, __pyx_v_img_scale, __pyx_v_num_se3, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, __pyx_v_savedir, __pyx_v_use_simulator);
+  __pyx_v_self->realctrlcompviz = new RealCtrlViz(__pyx_v_img_ht, __pyx_v_img_wd, __pyx_v_img_scale, __pyx_v_num_se3, __pyx_v_fx, __pyx_v_fy, __pyx_v_cx, __pyx_v_cy, __pyx_v_savedir, __pyx_v_use_simulator);
 
-  /* "torchviz/realctrlviz.pyx":59
+  /* "torchviz/realctrlcompviz.pyx":63
  *     cdef int img_wd
  * 
  *     def __cinit__(self, int img_ht, int img_wd, float img_scale, int num_se3,             # <<<<<<<<<<<<<<
@@ -1901,43 +1917,43 @@ static int __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz___cinit__(struct __p
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":67
+/* "torchviz/realctrlcompviz.pyx":71
  *                                        fx, fy, cx, cy, savedir, use_simulator)
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
- *         del self.realctrlviz
+ *         del self.realctrlcompviz
  * 
  */
 
 /* Python wrapper */
-static void __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_3__dealloc__(PyObject *__pyx_v_self); /*proto*/
-static void __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_3__dealloc__(PyObject *__pyx_v_self) {
+static void __pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_3__dealloc__(PyObject *__pyx_v_self); /*proto*/
+static void __pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_3__dealloc__(PyObject *__pyx_v_self) {
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__ (wrapper)", 0);
-  __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_2__dealloc__(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self));
+  __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_2__dealloc__(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
 }
 
-static void __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_2__dealloc__(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self) {
+static void __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_2__dealloc__(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self) {
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__", 0);
 
-  /* "torchviz/realctrlviz.pyx":68
+  /* "torchviz/realctrlcompviz.pyx":72
  * 
  *     def __dealloc__(self):
- *         del self.realctrlviz             # <<<<<<<<<<<<<<
+ *         del self.realctrlcompviz             # <<<<<<<<<<<<<<
  * 
  *     def render_arm(self, np.ndarray[np.float32_t, ndim=1] config,
  */
-  delete __pyx_v_self->realctrlviz;
+  delete __pyx_v_self->realctrlcompviz;
 
-  /* "torchviz/realctrlviz.pyx":67
+  /* "torchviz/realctrlcompviz.pyx":71
  *                                        fx, fy, cx, cy, savedir, use_simulator)
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
- *         del self.realctrlviz
+ *         del self.realctrlcompviz
  * 
  */
 
@@ -1945,8 +1961,8 @@ static void __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_2__dealloc__(struct
   __Pyx_RefNannyFinishContext();
 }
 
-/* "torchviz/realctrlviz.pyx":70
- *         del self.realctrlviz
+/* "torchviz/realctrlcompviz.pyx":74
+ *         del self.realctrlcompviz
  * 
  *     def render_arm(self, np.ndarray[np.float32_t, ndim=1] config,             # <<<<<<<<<<<<<<
  *                          np.ndarray[np.float32_t, ndim=3] ptcloud,
@@ -1954,8 +1970,8 @@ static void __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_2__dealloc__(struct
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_5render_arm(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_5render_arm(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_config = 0;
   PyArrayObject *__pyx_v_ptcloud = 0;
   PyArrayObject *__pyx_v_labels = 0;
@@ -1983,16 +1999,16 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm(Py
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ptcloud)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, 1); __PYX_ERR(0, 70, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, 1); __PYX_ERR(0, 74, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_labels)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, 2); __PYX_ERR(0, 70, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, 2); __PYX_ERR(0, 74, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "render_arm") < 0)) __PYX_ERR(0, 70, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "render_arm") < 0)) __PYX_ERR(0, 74, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -2007,16 +2023,16 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm(Py
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 70, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("render_arm", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 74, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.render_arm", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.render_arm", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config), __pyx_ptype_5numpy_ndarray, 1, "config", 0))) __PYX_ERR(0, 70, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "ptcloud", 0))) __PYX_ERR(0, 71, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_labels), __pyx_ptype_5numpy_ndarray, 1, "labels", 0))) __PYX_ERR(0, 72, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_config, __pyx_v_ptcloud, __pyx_v_labels);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config), __pyx_ptype_5numpy_ndarray, 1, "config", 0))) __PYX_ERR(0, 74, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "ptcloud", 0))) __PYX_ERR(0, 75, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_labels), __pyx_ptype_5numpy_ndarray, 1, "labels", 0))) __PYX_ERR(0, 76, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_4render_arm(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_config, __pyx_v_ptcloud, __pyx_v_labels);
 
   /* function exit code */
   goto __pyx_L0;
@@ -2027,7 +2043,7 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm(Py
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud, PyArrayObject *__pyx_v_labels) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_4render_arm(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud, PyArrayObject *__pyx_v_labels) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config;
   __Pyx_Buffer __pyx_pybuffer_config;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_labels;
@@ -2059,24 +2075,24 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
   __pyx_pybuffernd_labels.rcbuffer = &__pyx_pybuffer_labels;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config.rcbuffer->pybuffer, (PyObject*)__pyx_v_config, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 70, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config.rcbuffer->pybuffer, (PyObject*)__pyx_v_config, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 74, __pyx_L1_error)
   }
   __pyx_pybuffernd_config.diminfo[0].strides = __pyx_pybuffernd_config.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config.diminfo[0].shape = __pyx_pybuffernd_config.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 70, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 74, __pyx_L1_error)
   }
   __pyx_pybuffernd_ptcloud.diminfo[0].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_ptcloud.diminfo[0].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_ptcloud.diminfo[1].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_ptcloud.diminfo[1].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_ptcloud.diminfo[2].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_ptcloud.diminfo[2].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_labels.rcbuffer->pybuffer, (PyObject*)__pyx_v_labels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 70, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_labels.rcbuffer->pybuffer, (PyObject*)__pyx_v_labels, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 74, __pyx_L1_error)
   }
   __pyx_pybuffernd_labels.diminfo[0].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_labels.diminfo[0].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_labels.diminfo[1].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_labels.diminfo[1].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_labels.diminfo[2].strides = __pyx_pybuffernd_labels.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_labels.diminfo[2].shape = __pyx_pybuffernd_labels.rcbuffer->pybuffer.shape[2];
 
-  /* "torchviz/realctrlviz.pyx":74
+  /* "torchviz/realctrlcompviz.pyx":78
  *                          np.ndarray[np.float32_t, ndim=3] labels):
  *         # Run CPP code
- *         self.realctrlviz.render_arm(&config[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.render_arm(&config[0],             # <<<<<<<<<<<<<<
  *                                  &ptcloud[0,0,0],
  *                                  &labels[0,0,0])
  */
@@ -2088,12 +2104,12 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
   } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_config.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 74, __pyx_L1_error)
+    __PYX_ERR(0, 78, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":75
+  /* "torchviz/realctrlcompviz.pyx":79
  *         # Run CPP code
- *         self.realctrlviz.render_arm(&config[0],
+ *         self.realctrlcompviz.render_arm(&config[0],
  *                                  &ptcloud[0,0,0],             # <<<<<<<<<<<<<<
  *                                  &labels[0,0,0])
  * 
@@ -2116,11 +2132,11 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
   } else if (unlikely(__pyx_t_5 >= __pyx_pybuffernd_ptcloud.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 75, __pyx_L1_error)
+    __PYX_ERR(0, 79, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":76
- *         self.realctrlviz.render_arm(&config[0],
+  /* "torchviz/realctrlcompviz.pyx":80
+ *         self.realctrlcompviz.render_arm(&config[0],
  *                                  &ptcloud[0,0,0],
  *                                  &labels[0,0,0])             # <<<<<<<<<<<<<<
  * 
@@ -2144,20 +2160,20 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
   } else if (unlikely(__pyx_t_8 >= __pyx_pybuffernd_labels.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 76, __pyx_L1_error)
+    __PYX_ERR(0, 80, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":74
+  /* "torchviz/realctrlcompviz.pyx":78
  *                          np.ndarray[np.float32_t, ndim=3] labels):
  *         # Run CPP code
- *         self.realctrlviz.render_arm(&config[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.render_arm(&config[0],             # <<<<<<<<<<<<<<
  *                                  &ptcloud[0,0,0],
  *                                  &labels[0,0,0])
  */
-  __pyx_v_self->realctrlviz->render_arm((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_labels.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_labels.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_labels.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_labels.diminfo[2].strides))));
+  __pyx_v_self->realctrlcompviz->render_arm((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_labels.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_labels.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_labels.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_labels.diminfo[2].strides))));
 
-  /* "torchviz/realctrlviz.pyx":70
- *         del self.realctrlviz
+  /* "torchviz/realctrlcompviz.pyx":74
+ *         del self.realctrlcompviz
  * 
  *     def render_arm(self, np.ndarray[np.float32_t, ndim=1] config,             # <<<<<<<<<<<<<<
  *                          np.ndarray[np.float32_t, ndim=3] ptcloud,
@@ -2176,7 +2192,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_labels.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_ptcloud.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.render_arm", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.render_arm", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   goto __pyx_L2;
   __pyx_L0:;
@@ -2189,7 +2205,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":78
+/* "torchviz/realctrlcompviz.pyx":82
  *                                  &labels[0,0,0])
  * 
  *     def compute_gt_da(self, np.ndarray[np.float32_t, ndim=1] config1,             # <<<<<<<<<<<<<<
@@ -2198,8 +2214,8 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_4render_arm(st
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_7compute_gt_da(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_7compute_gt_da(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_config1 = 0;
   PyArrayObject *__pyx_v_config2 = 0;
   int __pyx_v_winsize;
@@ -2233,31 +2249,31 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_config2)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 1); __PYX_ERR(0, 78, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 1); __PYX_ERR(0, 82, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_winsize)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 2); __PYX_ERR(0, 78, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 2); __PYX_ERR(0, 82, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_thresh)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 3); __PYX_ERR(0, 78, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 3); __PYX_ERR(0, 82, __pyx_L3_error)
         }
         case  4:
         if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_gtwarped_out)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 4); __PYX_ERR(0, 78, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 4); __PYX_ERR(0, 82, __pyx_L3_error)
         }
         case  5:
         if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_gtda_ids)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 5); __PYX_ERR(0, 78, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, 5); __PYX_ERR(0, 82, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "compute_gt_da") < 0)) __PYX_ERR(0, 78, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "compute_gt_da") < 0)) __PYX_ERR(0, 82, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 6) {
       goto __pyx_L5_argtuple_error;
@@ -2271,24 +2287,24 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da
     }
     __pyx_v_config1 = ((PyArrayObject *)values[0]);
     __pyx_v_config2 = ((PyArrayObject *)values[1]);
-    __pyx_v_winsize = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_winsize == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L3_error)
-    __pyx_v_thresh = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_thresh == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 80, __pyx_L3_error)
+    __pyx_v_winsize = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_winsize == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 84, __pyx_L3_error)
+    __pyx_v_thresh = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_thresh == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 84, __pyx_L3_error)
     __pyx_v_gtwarped_out = ((PyArrayObject *)values[4]);
     __pyx_v_gtda_ids = ((PyArrayObject *)values[5]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 78, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("compute_gt_da", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 82, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.compute_gt_da", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.compute_gt_da", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config1), __pyx_ptype_5numpy_ndarray, 1, "config1", 0))) __PYX_ERR(0, 78, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config2), __pyx_ptype_5numpy_ndarray, 1, "config2", 0))) __PYX_ERR(0, 79, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_gtwarped_out), __pyx_ptype_5numpy_ndarray, 1, "gtwarped_out", 0))) __PYX_ERR(0, 81, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_gtda_ids), __pyx_ptype_5numpy_ndarray, 1, "gtda_ids", 0))) __PYX_ERR(0, 82, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_config1, __pyx_v_config2, __pyx_v_winsize, __pyx_v_thresh, __pyx_v_gtwarped_out, __pyx_v_gtda_ids);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config1), __pyx_ptype_5numpy_ndarray, 1, "config1", 0))) __PYX_ERR(0, 82, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config2), __pyx_ptype_5numpy_ndarray, 1, "config2", 0))) __PYX_ERR(0, 83, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_gtwarped_out), __pyx_ptype_5numpy_ndarray, 1, "gtwarped_out", 0))) __PYX_ERR(0, 85, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_gtda_ids), __pyx_ptype_5numpy_ndarray, 1, "gtda_ids", 0))) __PYX_ERR(0, 86, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_6compute_gt_da(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_config1, __pyx_v_config2, __pyx_v_winsize, __pyx_v_thresh, __pyx_v_gtwarped_out, __pyx_v_gtda_ids);
 
   /* function exit code */
   goto __pyx_L0;
@@ -2299,7 +2315,7 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, int __pyx_v_winsize, float __pyx_v_thresh, PyArrayObject *__pyx_v_gtwarped_out, PyArrayObject *__pyx_v_gtda_ids) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_6compute_gt_da(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, int __pyx_v_winsize, float __pyx_v_thresh, PyArrayObject *__pyx_v_gtwarped_out, PyArrayObject *__pyx_v_gtda_ids) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config1;
   __Pyx_Buffer __pyx_pybuffer_config1;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config2;
@@ -2338,29 +2354,29 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   __pyx_pybuffernd_gtda_ids.rcbuffer = &__pyx_pybuffer_gtda_ids;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config1.rcbuffer->pybuffer, (PyObject*)__pyx_v_config1, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 78, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config1.rcbuffer->pybuffer, (PyObject*)__pyx_v_config1, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 82, __pyx_L1_error)
   }
   __pyx_pybuffernd_config1.diminfo[0].strides = __pyx_pybuffernd_config1.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config1.diminfo[0].shape = __pyx_pybuffernd_config1.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config2.rcbuffer->pybuffer, (PyObject*)__pyx_v_config2, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 78, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config2.rcbuffer->pybuffer, (PyObject*)__pyx_v_config2, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 82, __pyx_L1_error)
   }
   __pyx_pybuffernd_config2.diminfo[0].strides = __pyx_pybuffernd_config2.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config2.diminfo[0].shape = __pyx_pybuffernd_config2.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer, (PyObject*)__pyx_v_gtwarped_out, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 78, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer, (PyObject*)__pyx_v_gtwarped_out, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 82, __pyx_L1_error)
   }
   __pyx_pybuffernd_gtwarped_out.diminfo[0].strides = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_gtwarped_out.diminfo[0].shape = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_gtwarped_out.diminfo[1].strides = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_gtwarped_out.diminfo[1].shape = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_gtwarped_out.diminfo[2].strides = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_gtwarped_out.diminfo[2].shape = __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer, (PyObject*)__pyx_v_gtda_ids, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 78, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer, (PyObject*)__pyx_v_gtda_ids, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 82, __pyx_L1_error)
   }
   __pyx_pybuffernd_gtda_ids.diminfo[0].strides = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_gtda_ids.diminfo[0].shape = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_gtda_ids.diminfo[1].strides = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_gtda_ids.diminfo[1].shape = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_gtda_ids.diminfo[2].strides = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_gtda_ids.diminfo[2].shape = __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.shape[2];
 
-  /* "torchviz/realctrlviz.pyx":84
+  /* "torchviz/realctrlcompviz.pyx":88
  *                             np.ndarray[np.float32_t, ndim=3] gtda_ids):
  *         # Run CPP code
- *         self.realctrlviz.compute_gt_da(&config1[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.compute_gt_da(&config1[0],             # <<<<<<<<<<<<<<
  *                                        &config2[0],
  *                                        winsize,
  */
@@ -2372,12 +2388,12 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_config1.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 84, __pyx_L1_error)
+    __PYX_ERR(0, 88, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":85
+  /* "torchviz/realctrlcompviz.pyx":89
  *         # Run CPP code
- *         self.realctrlviz.compute_gt_da(&config1[0],
+ *         self.realctrlcompviz.compute_gt_da(&config1[0],
  *                                        &config2[0],             # <<<<<<<<<<<<<<
  *                                        winsize,
  *                                        thresh,
@@ -2390,10 +2406,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   } else if (unlikely(__pyx_t_3 >= __pyx_pybuffernd_config2.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 85, __pyx_L1_error)
+    __PYX_ERR(0, 89, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":88
+  /* "torchviz/realctrlcompviz.pyx":92
  *                                        winsize,
  *                                        thresh,
  *                                        &gtwarped_out[0,0,0],             # <<<<<<<<<<<<<<
@@ -2418,10 +2434,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   } else if (unlikely(__pyx_t_6 >= __pyx_pybuffernd_gtwarped_out.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 88, __pyx_L1_error)
+    __PYX_ERR(0, 92, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":89
+  /* "torchviz/realctrlcompviz.pyx":93
  *                                        thresh,
  *                                        &gtwarped_out[0,0,0],
  *                                        &gtda_ids[0,0,0])             # <<<<<<<<<<<<<<
@@ -2446,19 +2462,19 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   } else if (unlikely(__pyx_t_9 >= __pyx_pybuffernd_gtda_ids.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 89, __pyx_L1_error)
+    __PYX_ERR(0, 93, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":84
+  /* "torchviz/realctrlcompviz.pyx":88
  *                             np.ndarray[np.float32_t, ndim=3] gtda_ids):
  *         # Run CPP code
- *         self.realctrlviz.compute_gt_da(&config1[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.compute_gt_da(&config1[0],             # <<<<<<<<<<<<<<
  *                                        &config2[0],
  *                                        winsize,
  */
-  __pyx_v_self->realctrlviz->compute_gt_da((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config1.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config1.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config2.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_config2.diminfo[0].strides))), __pyx_v_winsize, __pyx_v_thresh, (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.buf, __pyx_t_4, __pyx_pybuffernd_gtwarped_out.diminfo[0].strides, __pyx_t_5, __pyx_pybuffernd_gtwarped_out.diminfo[1].strides, __pyx_t_6, __pyx_pybuffernd_gtwarped_out.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.buf, __pyx_t_7, __pyx_pybuffernd_gtda_ids.diminfo[0].strides, __pyx_t_8, __pyx_pybuffernd_gtda_ids.diminfo[1].strides, __pyx_t_9, __pyx_pybuffernd_gtda_ids.diminfo[2].strides))));
+  __pyx_v_self->realctrlcompviz->compute_gt_da((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config1.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config1.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config2.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_config2.diminfo[0].strides))), __pyx_v_winsize, __pyx_v_thresh, (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer.buf, __pyx_t_4, __pyx_pybuffernd_gtwarped_out.diminfo[0].strides, __pyx_t_5, __pyx_pybuffernd_gtwarped_out.diminfo[1].strides, __pyx_t_6, __pyx_pybuffernd_gtwarped_out.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer.buf, __pyx_t_7, __pyx_pybuffernd_gtda_ids.diminfo[0].strides, __pyx_t_8, __pyx_pybuffernd_gtda_ids.diminfo[1].strides, __pyx_t_9, __pyx_pybuffernd_gtda_ids.diminfo[2].strides))));
 
-  /* "torchviz/realctrlviz.pyx":78
+  /* "torchviz/realctrlcompviz.pyx":82
  *                                  &labels[0,0,0])
  * 
  *     def compute_gt_da(self, np.ndarray[np.float32_t, ndim=1] config1,             # <<<<<<<<<<<<<<
@@ -2479,7 +2495,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_gtda_ids.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_gtwarped_out.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.compute_gt_da", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.compute_gt_da", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   goto __pyx_L2;
   __pyx_L0:;
@@ -2493,7 +2509,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":91
+/* "torchviz/realctrlcompviz.pyx":95
  *                                        &gtda_ids[0,0,0])
  * 
  *     def initialize_problem(self, np.ndarray[np.float32_t, ndim=1] config1,             # <<<<<<<<<<<<<<
@@ -2502,8 +2518,8 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_6compute_gt_da
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_problem(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_problem(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_9initialize_problem(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_9initialize_problem(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_config1 = 0;
   PyArrayObject *__pyx_v_config2 = 0;
   PyArrayObject *__pyx_v_start_pts = 0;
@@ -2533,21 +2549,21 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_pr
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_config2)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 1); __PYX_ERR(0, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 1); __PYX_ERR(0, 95, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start_pts)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 2); __PYX_ERR(0, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 2); __PYX_ERR(0, 95, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_da_goal_pts)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 3); __PYX_ERR(0, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, 3); __PYX_ERR(0, 95, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "initialize_problem") < 0)) __PYX_ERR(0, 91, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "initialize_problem") < 0)) __PYX_ERR(0, 95, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -2564,17 +2580,17 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_pr
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 91, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("initialize_problem", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 95, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.initialize_problem", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.initialize_problem", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config1), __pyx_ptype_5numpy_ndarray, 1, "config1", 0))) __PYX_ERR(0, 91, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config2), __pyx_ptype_5numpy_ndarray, 1, "config2", 0))) __PYX_ERR(0, 92, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_pts), __pyx_ptype_5numpy_ndarray, 1, "start_pts", 0))) __PYX_ERR(0, 93, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_da_goal_pts), __pyx_ptype_5numpy_ndarray, 1, "da_goal_pts", 0))) __PYX_ERR(0, 94, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_problem(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_config1, __pyx_v_config2, __pyx_v_start_pts, __pyx_v_da_goal_pts);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config1), __pyx_ptype_5numpy_ndarray, 1, "config1", 0))) __PYX_ERR(0, 95, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config2), __pyx_ptype_5numpy_ndarray, 1, "config2", 0))) __PYX_ERR(0, 96, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_pts), __pyx_ptype_5numpy_ndarray, 1, "start_pts", 0))) __PYX_ERR(0, 97, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_da_goal_pts), __pyx_ptype_5numpy_ndarray, 1, "da_goal_pts", 0))) __PYX_ERR(0, 98, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_8initialize_problem(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_config1, __pyx_v_config2, __pyx_v_start_pts, __pyx_v_da_goal_pts);
 
   /* function exit code */
   goto __pyx_L0;
@@ -2585,7 +2601,7 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_pr
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_problem(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, PyArrayObject *__pyx_v_start_pts, PyArrayObject *__pyx_v_da_goal_pts) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_8initialize_problem(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_config1, PyArrayObject *__pyx_v_config2, PyArrayObject *__pyx_v_start_pts, PyArrayObject *__pyx_v_da_goal_pts) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config1;
   __Pyx_Buffer __pyx_pybuffer_config1;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config2;
@@ -2624,29 +2640,29 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   __pyx_pybuffernd_da_goal_pts.rcbuffer = &__pyx_pybuffer_da_goal_pts;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config1.rcbuffer->pybuffer, (PyObject*)__pyx_v_config1, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config1.rcbuffer->pybuffer, (PyObject*)__pyx_v_config1, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 95, __pyx_L1_error)
   }
   __pyx_pybuffernd_config1.diminfo[0].strides = __pyx_pybuffernd_config1.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config1.diminfo[0].shape = __pyx_pybuffernd_config1.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config2.rcbuffer->pybuffer, (PyObject*)__pyx_v_config2, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config2.rcbuffer->pybuffer, (PyObject*)__pyx_v_config2, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 95, __pyx_L1_error)
   }
   __pyx_pybuffernd_config2.diminfo[0].strides = __pyx_pybuffernd_config2.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config2.diminfo[0].shape = __pyx_pybuffernd_config2.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_pts.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_pts, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_pts.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_pts, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 95, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_pts.diminfo[0].strides = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_pts.diminfo[0].shape = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_start_pts.diminfo[1].strides = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_start_pts.diminfo[1].shape = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_start_pts.diminfo[2].strides = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_start_pts.diminfo[2].shape = __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer, (PyObject*)__pyx_v_da_goal_pts, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer, (PyObject*)__pyx_v_da_goal_pts, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 95, __pyx_L1_error)
   }
   __pyx_pybuffernd_da_goal_pts.diminfo[0].strides = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_da_goal_pts.diminfo[0].shape = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_da_goal_pts.diminfo[1].strides = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_da_goal_pts.diminfo[1].shape = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_da_goal_pts.diminfo[2].strides = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_da_goal_pts.diminfo[2].shape = __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.shape[2];
 
-  /* "torchviz/realctrlviz.pyx":96
+  /* "torchviz/realctrlcompviz.pyx":100
  *                             np.ndarray[np.float32_t, ndim=3] da_goal_pts):
  *         # Run CPP code
- *         self.realctrlviz.initialize_problem(&config1[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.initialize_problem(&config1[0],             # <<<<<<<<<<<<<<
  *                                             &config2[0],
  *                                             &start_pts[0,0,0],
  */
@@ -2658,12 +2674,12 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_config1.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 96, __pyx_L1_error)
+    __PYX_ERR(0, 100, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":97
+  /* "torchviz/realctrlcompviz.pyx":101
  *         # Run CPP code
- *         self.realctrlviz.initialize_problem(&config1[0],
+ *         self.realctrlcompviz.initialize_problem(&config1[0],
  *                                             &config2[0],             # <<<<<<<<<<<<<<
  *                                             &start_pts[0,0,0],
  *                                             &da_goal_pts[0,0,0])
@@ -2676,11 +2692,11 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   } else if (unlikely(__pyx_t_3 >= __pyx_pybuffernd_config2.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 97, __pyx_L1_error)
+    __PYX_ERR(0, 101, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":98
- *         self.realctrlviz.initialize_problem(&config1[0],
+  /* "torchviz/realctrlcompviz.pyx":102
+ *         self.realctrlcompviz.initialize_problem(&config1[0],
  *                                             &config2[0],
  *                                             &start_pts[0,0,0],             # <<<<<<<<<<<<<<
  *                                             &da_goal_pts[0,0,0])
@@ -2704,10 +2720,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   } else if (unlikely(__pyx_t_6 >= __pyx_pybuffernd_start_pts.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 98, __pyx_L1_error)
+    __PYX_ERR(0, 102, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":99
+  /* "torchviz/realctrlcompviz.pyx":103
  *                                             &config2[0],
  *                                             &start_pts[0,0,0],
  *                                             &da_goal_pts[0,0,0])             # <<<<<<<<<<<<<<
@@ -2732,19 +2748,19 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   } else if (unlikely(__pyx_t_9 >= __pyx_pybuffernd_da_goal_pts.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 99, __pyx_L1_error)
+    __PYX_ERR(0, 103, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":96
+  /* "torchviz/realctrlcompviz.pyx":100
  *                             np.ndarray[np.float32_t, ndim=3] da_goal_pts):
  *         # Run CPP code
- *         self.realctrlviz.initialize_problem(&config1[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.initialize_problem(&config1[0],             # <<<<<<<<<<<<<<
  *                                             &config2[0],
  *                                             &start_pts[0,0,0],
  */
-  __pyx_v_self->realctrlviz->initialize_problem((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config1.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config1.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config2.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_config2.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.buf, __pyx_t_4, __pyx_pybuffernd_start_pts.diminfo[0].strides, __pyx_t_5, __pyx_pybuffernd_start_pts.diminfo[1].strides, __pyx_t_6, __pyx_pybuffernd_start_pts.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.buf, __pyx_t_7, __pyx_pybuffernd_da_goal_pts.diminfo[0].strides, __pyx_t_8, __pyx_pybuffernd_da_goal_pts.diminfo[1].strides, __pyx_t_9, __pyx_pybuffernd_da_goal_pts.diminfo[2].strides))));
+  __pyx_v_self->realctrlcompviz->initialize_problem((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config1.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_config1.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config2.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_config2.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_pts.rcbuffer->pybuffer.buf, __pyx_t_4, __pyx_pybuffernd_start_pts.diminfo[0].strides, __pyx_t_5, __pyx_pybuffernd_start_pts.diminfo[1].strides, __pyx_t_6, __pyx_pybuffernd_start_pts.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer.buf, __pyx_t_7, __pyx_pybuffernd_da_goal_pts.diminfo[0].strides, __pyx_t_8, __pyx_pybuffernd_da_goal_pts.diminfo[1].strides, __pyx_t_9, __pyx_pybuffernd_da_goal_pts.diminfo[2].strides))));
 
-  /* "torchviz/realctrlviz.pyx":91
+  /* "torchviz/realctrlcompviz.pyx":95
  *                                        &gtda_ids[0,0,0])
  * 
  *     def initialize_problem(self, np.ndarray[np.float32_t, ndim=1] config1,             # <<<<<<<<<<<<<<
@@ -2765,7 +2781,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_da_goal_pts.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_start_pts.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.initialize_problem", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.initialize_problem", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   goto __pyx_L2;
   __pyx_L0:;
@@ -2779,7 +2795,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":101
+/* "torchviz/realctrlcompviz.pyx":105
  *                                             &da_goal_pts[0,0,0])
  * 
  *     def update_real_curr(self, np.ndarray[np.float32_t, ndim=1] curr_angles,             # <<<<<<<<<<<<<<
@@ -2788,8 +2804,8 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_8initialize_pr
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_curr(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_curr(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_11update_real_curr(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_11update_real_curr(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_curr_angles = 0;
   PyArrayObject *__pyx_v_curr_ptcloud = 0;
   PyArrayObject *__pyx_v_curr_poses = 0;
@@ -2798,17 +2814,33 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_
   float __pyx_v_curr_pose_error;
   PyArrayObject *__pyx_v_curr_pose_error_indiv = 0;
   PyArrayObject *__pyx_v_curr_deg_error = 0;
+  PyArrayObject *__pyx_v_curr_angles_bp = 0;
+  PyArrayObject *__pyx_v_curr_ptcloud_bp = 0;
+  PyArrayObject *__pyx_v_curr_poses_bp = 0;
+  PyArrayObject *__pyx_v_curr_masks_bp = 0;
+  PyArrayObject *__pyx_v_curr_rgb_bp = 0;
+  float __pyx_v_curr_pose_error_bp;
+  PyArrayObject *__pyx_v_curr_pose_error_indiv_bp = 0;
+  PyArrayObject *__pyx_v_curr_deg_error_bp = 0;
   int __pyx_v_save_frame;
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("update_real_curr (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_curr_angles,&__pyx_n_s_curr_ptcloud,&__pyx_n_s_curr_poses,&__pyx_n_s_curr_masks,&__pyx_n_s_curr_rgb,&__pyx_n_s_curr_pose_error,&__pyx_n_s_curr_pose_error_indiv,&__pyx_n_s_curr_deg_error,&__pyx_n_s_save_frame,0};
-    PyObject* values[9] = {0,0,0,0,0,0,0,0,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_curr_angles,&__pyx_n_s_curr_ptcloud,&__pyx_n_s_curr_poses,&__pyx_n_s_curr_masks,&__pyx_n_s_curr_rgb,&__pyx_n_s_curr_pose_error,&__pyx_n_s_curr_pose_error_indiv,&__pyx_n_s_curr_deg_error,&__pyx_n_s_curr_angles_bp,&__pyx_n_s_curr_ptcloud_bp,&__pyx_n_s_curr_poses_bp,&__pyx_n_s_curr_masks_bp,&__pyx_n_s_curr_rgb_bp,&__pyx_n_s_curr_pose_error_bp,&__pyx_n_s_curr_pose_error_indiv_bp,&__pyx_n_s_curr_deg_error_bp,&__pyx_n_s_save_frame,0};
+    PyObject* values[17] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
       switch (pos_args) {
+        case 17: values[16] = PyTuple_GET_ITEM(__pyx_args, 16);
+        case 16: values[15] = PyTuple_GET_ITEM(__pyx_args, 15);
+        case 15: values[14] = PyTuple_GET_ITEM(__pyx_args, 14);
+        case 14: values[13] = PyTuple_GET_ITEM(__pyx_args, 13);
+        case 13: values[12] = PyTuple_GET_ITEM(__pyx_args, 12);
+        case 12: values[11] = PyTuple_GET_ITEM(__pyx_args, 11);
+        case 11: values[10] = PyTuple_GET_ITEM(__pyx_args, 10);
+        case 10: values[9] = PyTuple_GET_ITEM(__pyx_args, 9);
         case  9: values[8] = PyTuple_GET_ITEM(__pyx_args, 8);
         case  8: values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
         case  7: values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
@@ -2829,48 +2861,88 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_ptcloud)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 1); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 1); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_poses)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 2); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 2); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_masks)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 3); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 3); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  4:
         if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_rgb)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 4); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 4); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  5:
         if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_pose_error)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 5); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 5); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  6:
         if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_pose_error_indiv)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 6); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 6); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  7:
         if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_deg_error)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 7); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 7); __PYX_ERR(0, 105, __pyx_L3_error)
         }
         case  8:
-        if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_save_frame)) != 0)) kw_args--;
+        if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_angles_bp)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, 8); __PYX_ERR(0, 101, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 8); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case  9:
+        if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_ptcloud_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 9); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 10:
+        if (likely((values[10] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_poses_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 10); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 11:
+        if (likely((values[11] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_masks_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 11); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 12:
+        if (likely((values[12] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_rgb_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 12); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 13:
+        if (likely((values[13] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_pose_error_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 13); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 14:
+        if (likely((values[14] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_pose_error_indiv_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 14); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 15:
+        if (likely((values[15] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_curr_deg_error_bp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 15); __PYX_ERR(0, 105, __pyx_L3_error)
+        }
+        case 16:
+        if (likely((values[16] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_save_frame)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, 16); __PYX_ERR(0, 105, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_real_curr") < 0)) __PYX_ERR(0, 101, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_real_curr") < 0)) __PYX_ERR(0, 105, __pyx_L3_error)
       }
-    } else if (PyTuple_GET_SIZE(__pyx_args) != 9) {
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 17) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
@@ -2882,33 +2954,56 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_
       values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
       values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
       values[8] = PyTuple_GET_ITEM(__pyx_args, 8);
+      values[9] = PyTuple_GET_ITEM(__pyx_args, 9);
+      values[10] = PyTuple_GET_ITEM(__pyx_args, 10);
+      values[11] = PyTuple_GET_ITEM(__pyx_args, 11);
+      values[12] = PyTuple_GET_ITEM(__pyx_args, 12);
+      values[13] = PyTuple_GET_ITEM(__pyx_args, 13);
+      values[14] = PyTuple_GET_ITEM(__pyx_args, 14);
+      values[15] = PyTuple_GET_ITEM(__pyx_args, 15);
+      values[16] = PyTuple_GET_ITEM(__pyx_args, 16);
     }
     __pyx_v_curr_angles = ((PyArrayObject *)values[0]);
     __pyx_v_curr_ptcloud = ((PyArrayObject *)values[1]);
     __pyx_v_curr_poses = ((PyArrayObject *)values[2]);
     __pyx_v_curr_masks = ((PyArrayObject *)values[3]);
     __pyx_v_curr_rgb = ((PyArrayObject *)values[4]);
-    __pyx_v_curr_pose_error = __pyx_PyFloat_AsFloat(values[5]); if (unlikely((__pyx_v_curr_pose_error == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 106, __pyx_L3_error)
+    __pyx_v_curr_pose_error = __pyx_PyFloat_AsFloat(values[5]); if (unlikely((__pyx_v_curr_pose_error == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 110, __pyx_L3_error)
     __pyx_v_curr_pose_error_indiv = ((PyArrayObject *)values[6]);
     __pyx_v_curr_deg_error = ((PyArrayObject *)values[7]);
-    __pyx_v_save_frame = __Pyx_PyInt_As_int(values[8]); if (unlikely((__pyx_v_save_frame == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 109, __pyx_L3_error)
+    __pyx_v_curr_angles_bp = ((PyArrayObject *)values[8]);
+    __pyx_v_curr_ptcloud_bp = ((PyArrayObject *)values[9]);
+    __pyx_v_curr_poses_bp = ((PyArrayObject *)values[10]);
+    __pyx_v_curr_masks_bp = ((PyArrayObject *)values[11]);
+    __pyx_v_curr_rgb_bp = ((PyArrayObject *)values[12]);
+    __pyx_v_curr_pose_error_bp = __pyx_PyFloat_AsFloat(values[13]); if (unlikely((__pyx_v_curr_pose_error_bp == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 118, __pyx_L3_error)
+    __pyx_v_curr_pose_error_indiv_bp = ((PyArrayObject *)values[14]);
+    __pyx_v_curr_deg_error_bp = ((PyArrayObject *)values[15]);
+    __pyx_v_save_frame = __Pyx_PyInt_As_int(values[16]); if (unlikely((__pyx_v_save_frame == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 121, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 9, 9, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 101, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("update_real_curr", 1, 17, 17, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 105, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.update_real_curr", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.update_real_curr", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_angles), __pyx_ptype_5numpy_ndarray, 1, "curr_angles", 0))) __PYX_ERR(0, 101, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "curr_ptcloud", 0))) __PYX_ERR(0, 102, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_poses), __pyx_ptype_5numpy_ndarray, 1, "curr_poses", 0))) __PYX_ERR(0, 103, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_masks), __pyx_ptype_5numpy_ndarray, 1, "curr_masks", 0))) __PYX_ERR(0, 104, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_rgb), __pyx_ptype_5numpy_ndarray, 1, "curr_rgb", 0))) __PYX_ERR(0, 105, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_pose_error_indiv), __pyx_ptype_5numpy_ndarray, 1, "curr_pose_error_indiv", 0))) __PYX_ERR(0, 107, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_deg_error), __pyx_ptype_5numpy_ndarray, 1, "curr_deg_error", 0))) __PYX_ERR(0, 108, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_curr(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_curr_angles, __pyx_v_curr_ptcloud, __pyx_v_curr_poses, __pyx_v_curr_masks, __pyx_v_curr_rgb, __pyx_v_curr_pose_error, __pyx_v_curr_pose_error_indiv, __pyx_v_curr_deg_error, __pyx_v_save_frame);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_angles), __pyx_ptype_5numpy_ndarray, 1, "curr_angles", 0))) __PYX_ERR(0, 105, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "curr_ptcloud", 0))) __PYX_ERR(0, 106, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_poses), __pyx_ptype_5numpy_ndarray, 1, "curr_poses", 0))) __PYX_ERR(0, 107, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_masks), __pyx_ptype_5numpy_ndarray, 1, "curr_masks", 0))) __PYX_ERR(0, 108, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_rgb), __pyx_ptype_5numpy_ndarray, 1, "curr_rgb", 0))) __PYX_ERR(0, 109, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_pose_error_indiv), __pyx_ptype_5numpy_ndarray, 1, "curr_pose_error_indiv", 0))) __PYX_ERR(0, 111, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_deg_error), __pyx_ptype_5numpy_ndarray, 1, "curr_deg_error", 0))) __PYX_ERR(0, 112, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_angles_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_angles_bp", 0))) __PYX_ERR(0, 113, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_ptcloud_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_ptcloud_bp", 0))) __PYX_ERR(0, 114, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_poses_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_poses_bp", 0))) __PYX_ERR(0, 115, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_masks_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_masks_bp", 0))) __PYX_ERR(0, 116, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_rgb_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_rgb_bp", 0))) __PYX_ERR(0, 117, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_pose_error_indiv_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_pose_error_indiv_bp", 0))) __PYX_ERR(0, 119, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_curr_deg_error_bp), __pyx_ptype_5numpy_ndarray, 1, "curr_deg_error_bp", 0))) __PYX_ERR(0, 120, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_10update_real_curr(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_curr_angles, __pyx_v_curr_ptcloud, __pyx_v_curr_poses, __pyx_v_curr_masks, __pyx_v_curr_rgb, __pyx_v_curr_pose_error, __pyx_v_curr_pose_error_indiv, __pyx_v_curr_deg_error, __pyx_v_curr_angles_bp, __pyx_v_curr_ptcloud_bp, __pyx_v_curr_poses_bp, __pyx_v_curr_masks_bp, __pyx_v_curr_rgb_bp, __pyx_v_curr_pose_error_bp, __pyx_v_curr_pose_error_indiv_bp, __pyx_v_curr_deg_error_bp, __pyx_v_save_frame);
 
   /* function exit code */
   goto __pyx_L0;
@@ -2919,21 +3014,35 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_curr(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_curr_angles, PyArrayObject *__pyx_v_curr_ptcloud, PyArrayObject *__pyx_v_curr_poses, PyArrayObject *__pyx_v_curr_masks, PyArrayObject *__pyx_v_curr_rgb, float __pyx_v_curr_pose_error, PyArrayObject *__pyx_v_curr_pose_error_indiv, PyArrayObject *__pyx_v_curr_deg_error, int __pyx_v_save_frame) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_10update_real_curr(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_curr_angles, PyArrayObject *__pyx_v_curr_ptcloud, PyArrayObject *__pyx_v_curr_poses, PyArrayObject *__pyx_v_curr_masks, PyArrayObject *__pyx_v_curr_rgb, float __pyx_v_curr_pose_error, PyArrayObject *__pyx_v_curr_pose_error_indiv, PyArrayObject *__pyx_v_curr_deg_error, PyArrayObject *__pyx_v_curr_angles_bp, PyArrayObject *__pyx_v_curr_ptcloud_bp, PyArrayObject *__pyx_v_curr_poses_bp, PyArrayObject *__pyx_v_curr_masks_bp, PyArrayObject *__pyx_v_curr_rgb_bp, float __pyx_v_curr_pose_error_bp, PyArrayObject *__pyx_v_curr_pose_error_indiv_bp, PyArrayObject *__pyx_v_curr_deg_error_bp, int __pyx_v_save_frame) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_angles;
   __Pyx_Buffer __pyx_pybuffer_curr_angles;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_angles_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_angles_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_deg_error;
   __Pyx_Buffer __pyx_pybuffer_curr_deg_error;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_deg_error_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_deg_error_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_masks;
   __Pyx_Buffer __pyx_pybuffer_curr_masks;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_masks_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_masks_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_pose_error_indiv;
   __Pyx_Buffer __pyx_pybuffer_curr_pose_error_indiv;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_pose_error_indiv_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_pose_error_indiv_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_poses;
   __Pyx_Buffer __pyx_pybuffer_curr_poses;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_poses_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_poses_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_ptcloud;
   __Pyx_Buffer __pyx_pybuffer_curr_ptcloud;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_ptcloud_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_ptcloud_bp;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_rgb;
   __Pyx_Buffer __pyx_pybuffer_curr_rgb;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_curr_rgb_bp;
+  __Pyx_Buffer __pyx_pybuffer_curr_rgb_bp;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   Py_ssize_t __pyx_t_1;
@@ -2952,6 +3061,21 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   Py_ssize_t __pyx_t_14;
   Py_ssize_t __pyx_t_15;
   Py_ssize_t __pyx_t_16;
+  Py_ssize_t __pyx_t_17;
+  Py_ssize_t __pyx_t_18;
+  Py_ssize_t __pyx_t_19;
+  Py_ssize_t __pyx_t_20;
+  Py_ssize_t __pyx_t_21;
+  Py_ssize_t __pyx_t_22;
+  Py_ssize_t __pyx_t_23;
+  Py_ssize_t __pyx_t_24;
+  Py_ssize_t __pyx_t_25;
+  Py_ssize_t __pyx_t_26;
+  Py_ssize_t __pyx_t_27;
+  Py_ssize_t __pyx_t_28;
+  Py_ssize_t __pyx_t_29;
+  Py_ssize_t __pyx_t_30;
+  Py_ssize_t __pyx_t_31;
   __Pyx_RefNannySetupContext("update_real_curr", 0);
   __pyx_pybuffer_curr_angles.pybuffer.buf = NULL;
   __pyx_pybuffer_curr_angles.refcount = 0;
@@ -2981,46 +3105,109 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   __pyx_pybuffer_curr_deg_error.refcount = 0;
   __pyx_pybuffernd_curr_deg_error.data = NULL;
   __pyx_pybuffernd_curr_deg_error.rcbuffer = &__pyx_pybuffer_curr_deg_error;
+  __pyx_pybuffer_curr_angles_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_angles_bp.refcount = 0;
+  __pyx_pybuffernd_curr_angles_bp.data = NULL;
+  __pyx_pybuffernd_curr_angles_bp.rcbuffer = &__pyx_pybuffer_curr_angles_bp;
+  __pyx_pybuffer_curr_ptcloud_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_ptcloud_bp.refcount = 0;
+  __pyx_pybuffernd_curr_ptcloud_bp.data = NULL;
+  __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer = &__pyx_pybuffer_curr_ptcloud_bp;
+  __pyx_pybuffer_curr_poses_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_poses_bp.refcount = 0;
+  __pyx_pybuffernd_curr_poses_bp.data = NULL;
+  __pyx_pybuffernd_curr_poses_bp.rcbuffer = &__pyx_pybuffer_curr_poses_bp;
+  __pyx_pybuffer_curr_masks_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_masks_bp.refcount = 0;
+  __pyx_pybuffernd_curr_masks_bp.data = NULL;
+  __pyx_pybuffernd_curr_masks_bp.rcbuffer = &__pyx_pybuffer_curr_masks_bp;
+  __pyx_pybuffer_curr_rgb_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_rgb_bp.refcount = 0;
+  __pyx_pybuffernd_curr_rgb_bp.data = NULL;
+  __pyx_pybuffernd_curr_rgb_bp.rcbuffer = &__pyx_pybuffer_curr_rgb_bp;
+  __pyx_pybuffer_curr_pose_error_indiv_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_pose_error_indiv_bp.refcount = 0;
+  __pyx_pybuffernd_curr_pose_error_indiv_bp.data = NULL;
+  __pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer = &__pyx_pybuffer_curr_pose_error_indiv_bp;
+  __pyx_pybuffer_curr_deg_error_bp.pybuffer.buf = NULL;
+  __pyx_pybuffer_curr_deg_error_bp.refcount = 0;
+  __pyx_pybuffernd_curr_deg_error_bp.data = NULL;
+  __pyx_pybuffernd_curr_deg_error_bp.rcbuffer = &__pyx_pybuffer_curr_deg_error_bp;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_angles.diminfo[0].strides = __pyx_pybuffernd_curr_angles.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_angles.diminfo[0].shape = __pyx_pybuffernd_curr_angles.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_ptcloud.diminfo[0].strides = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_ptcloud.diminfo[0].shape = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_ptcloud.diminfo[1].strides = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_ptcloud.diminfo[1].shape = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_ptcloud.diminfo[2].strides = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_ptcloud.diminfo[2].shape = __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_poses.diminfo[0].strides = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_poses.diminfo[0].shape = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_poses.diminfo[1].strides = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_poses.diminfo[1].shape = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_poses.diminfo[2].strides = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_poses.diminfo[2].shape = __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_masks.diminfo[0].strides = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_masks.diminfo[0].shape = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_masks.diminfo[1].strides = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_masks.diminfo[1].shape = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_masks.diminfo[2].strides = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_masks.diminfo[2].shape = __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_rgb.diminfo[0].strides = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_rgb.diminfo[0].shape = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_rgb.diminfo[1].strides = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_rgb.diminfo[1].shape = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_rgb.diminfo[2].strides = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_rgb.diminfo[2].shape = __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_pose_error_indiv, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_pose_error_indiv, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_pose_error_indiv.diminfo[0].strides = __pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_pose_error_indiv.diminfo[0].shape = __pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_deg_error, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 101, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_deg_error, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
   }
   __pyx_pybuffernd_curr_deg_error.diminfo[0].strides = __pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_deg_error.diminfo[0].shape = __pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer.shape[0];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_angles_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_angles_bp.diminfo[0].strides = __pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_angles_bp.diminfo[0].shape = __pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer.shape[0];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_ptcloud_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_ptcloud_bp.diminfo[0].strides = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_ptcloud_bp.diminfo[0].shape = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_ptcloud_bp.diminfo[1].strides = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_ptcloud_bp.diminfo[1].shape = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_ptcloud_bp.diminfo[2].strides = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_ptcloud_bp.diminfo[2].shape = __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.shape[2];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_poses_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_poses_bp.diminfo[0].strides = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_poses_bp.diminfo[0].shape = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_poses_bp.diminfo[1].strides = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_poses_bp.diminfo[1].shape = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_poses_bp.diminfo[2].strides = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_poses_bp.diminfo[2].shape = __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.shape[2];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_masks_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_masks_bp.diminfo[0].strides = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_masks_bp.diminfo[0].shape = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_masks_bp.diminfo[1].strides = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_masks_bp.diminfo[1].shape = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_masks_bp.diminfo[2].strides = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_masks_bp.diminfo[2].shape = __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.shape[2];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_rgb_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_rgb_bp.diminfo[0].strides = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_rgb_bp.diminfo[0].shape = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_curr_rgb_bp.diminfo[1].strides = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_curr_rgb_bp.diminfo[1].shape = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_curr_rgb_bp.diminfo[2].strides = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_curr_rgb_bp.diminfo[2].shape = __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.shape[2];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_pose_error_indiv_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_pose_error_indiv_bp.diminfo[0].strides = __pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_pose_error_indiv_bp.diminfo[0].shape = __pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer.shape[0];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer, (PyObject*)__pyx_v_curr_deg_error_bp, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_curr_deg_error_bp.diminfo[0].strides = __pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_curr_deg_error_bp.diminfo[0].shape = __pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer.shape[0];
 
-  /* "torchviz/realctrlviz.pyx":111
+  /* "torchviz/realctrlcompviz.pyx":123
  *                                int save_frame):
  *         # Run CPP code
- *         self.realctrlviz.update_real_curr(&curr_angles[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.update_real_curr(&curr_angles[0],             # <<<<<<<<<<<<<<
  *                                        &curr_ptcloud[0,0,0],
  *                                        &curr_poses[0,0,0],
  */
@@ -3032,12 +3219,12 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_curr_angles.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 111, __pyx_L1_error)
+    __PYX_ERR(0, 123, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":112
+  /* "torchviz/realctrlcompviz.pyx":124
  *         # Run CPP code
- *         self.realctrlviz.update_real_curr(&curr_angles[0],
+ *         self.realctrlcompviz.update_real_curr(&curr_angles[0],
  *                                        &curr_ptcloud[0,0,0],             # <<<<<<<<<<<<<<
  *                                        &curr_poses[0,0,0],
  *                                        &curr_masks[0,0,0],
@@ -3060,11 +3247,11 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_5 >= __pyx_pybuffernd_curr_ptcloud.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 112, __pyx_L1_error)
+    __PYX_ERR(0, 124, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":113
- *         self.realctrlviz.update_real_curr(&curr_angles[0],
+  /* "torchviz/realctrlcompviz.pyx":125
+ *         self.realctrlcompviz.update_real_curr(&curr_angles[0],
  *                                        &curr_ptcloud[0,0,0],
  *                                        &curr_poses[0,0,0],             # <<<<<<<<<<<<<<
  *                                        &curr_masks[0,0,0],
@@ -3088,10 +3275,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_8 >= __pyx_pybuffernd_curr_poses.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 113, __pyx_L1_error)
+    __PYX_ERR(0, 125, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":114
+  /* "torchviz/realctrlcompviz.pyx":126
  *                                        &curr_ptcloud[0,0,0],
  *                                        &curr_poses[0,0,0],
  *                                        &curr_masks[0,0,0],             # <<<<<<<<<<<<<<
@@ -3116,10 +3303,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_11 >= __pyx_pybuffernd_curr_masks.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 114, __pyx_L1_error)
+    __PYX_ERR(0, 126, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":115
+  /* "torchviz/realctrlcompviz.pyx":127
  *                                        &curr_poses[0,0,0],
  *                                        &curr_masks[0,0,0],
  *                                        &curr_rgb[0,0,0],             # <<<<<<<<<<<<<<
@@ -3144,15 +3331,15 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_14 >= __pyx_pybuffernd_curr_rgb.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 115, __pyx_L1_error)
+    __PYX_ERR(0, 127, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":117
+  /* "torchviz/realctrlcompviz.pyx":129
  *                                        &curr_rgb[0,0,0],
  *                                        curr_pose_error,
  *                                        &curr_pose_error_indiv[0],             # <<<<<<<<<<<<<<
  *                                        &curr_deg_error[0],
- *                                        save_frame)
+ *                                        &curr_angles_bp[0],
  */
   __pyx_t_15 = 0;
   __pyx_t_2 = -1;
@@ -3162,15 +3349,15 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_15 >= __pyx_pybuffernd_curr_pose_error_indiv.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 117, __pyx_L1_error)
+    __PYX_ERR(0, 129, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":118
+  /* "torchviz/realctrlcompviz.pyx":130
  *                                        curr_pose_error,
  *                                        &curr_pose_error_indiv[0],
  *                                        &curr_deg_error[0],             # <<<<<<<<<<<<<<
- *                                        save_frame)
- * 
+ *                                        &curr_angles_bp[0],
+ *                                        &curr_ptcloud_bp[0,0,0],
  */
   __pyx_t_16 = 0;
   __pyx_t_2 = -1;
@@ -3180,19 +3367,185 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
   } else if (unlikely(__pyx_t_16 >= __pyx_pybuffernd_curr_deg_error.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 118, __pyx_L1_error)
+    __PYX_ERR(0, 130, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":111
+  /* "torchviz/realctrlcompviz.pyx":131
+ *                                        &curr_pose_error_indiv[0],
+ *                                        &curr_deg_error[0],
+ *                                        &curr_angles_bp[0],             # <<<<<<<<<<<<<<
+ *                                        &curr_ptcloud_bp[0,0,0],
+ *                                        &curr_poses_bp[0,0,0],
+ */
+  __pyx_t_17 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_17 < 0) {
+    __pyx_t_17 += __pyx_pybuffernd_curr_angles_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_17 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_17 >= __pyx_pybuffernd_curr_angles_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 131, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":132
+ *                                        &curr_deg_error[0],
+ *                                        &curr_angles_bp[0],
+ *                                        &curr_ptcloud_bp[0,0,0],             # <<<<<<<<<<<<<<
+ *                                        &curr_poses_bp[0,0,0],
+ *                                        &curr_masks_bp[0,0,0],
+ */
+  __pyx_t_18 = 0;
+  __pyx_t_19 = 0;
+  __pyx_t_20 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_18 < 0) {
+    __pyx_t_18 += __pyx_pybuffernd_curr_ptcloud_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_18 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_18 >= __pyx_pybuffernd_curr_ptcloud_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (__pyx_t_19 < 0) {
+    __pyx_t_19 += __pyx_pybuffernd_curr_ptcloud_bp.diminfo[1].shape;
+    if (unlikely(__pyx_t_19 < 0)) __pyx_t_2 = 1;
+  } else if (unlikely(__pyx_t_19 >= __pyx_pybuffernd_curr_ptcloud_bp.diminfo[1].shape)) __pyx_t_2 = 1;
+  if (__pyx_t_20 < 0) {
+    __pyx_t_20 += __pyx_pybuffernd_curr_ptcloud_bp.diminfo[2].shape;
+    if (unlikely(__pyx_t_20 < 0)) __pyx_t_2 = 2;
+  } else if (unlikely(__pyx_t_20 >= __pyx_pybuffernd_curr_ptcloud_bp.diminfo[2].shape)) __pyx_t_2 = 2;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 132, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":133
+ *                                        &curr_angles_bp[0],
+ *                                        &curr_ptcloud_bp[0,0,0],
+ *                                        &curr_poses_bp[0,0,0],             # <<<<<<<<<<<<<<
+ *                                        &curr_masks_bp[0,0,0],
+ *                                        &curr_rgb_bp[0,0,0],
+ */
+  __pyx_t_21 = 0;
+  __pyx_t_22 = 0;
+  __pyx_t_23 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_21 < 0) {
+    __pyx_t_21 += __pyx_pybuffernd_curr_poses_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_21 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_21 >= __pyx_pybuffernd_curr_poses_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (__pyx_t_22 < 0) {
+    __pyx_t_22 += __pyx_pybuffernd_curr_poses_bp.diminfo[1].shape;
+    if (unlikely(__pyx_t_22 < 0)) __pyx_t_2 = 1;
+  } else if (unlikely(__pyx_t_22 >= __pyx_pybuffernd_curr_poses_bp.diminfo[1].shape)) __pyx_t_2 = 1;
+  if (__pyx_t_23 < 0) {
+    __pyx_t_23 += __pyx_pybuffernd_curr_poses_bp.diminfo[2].shape;
+    if (unlikely(__pyx_t_23 < 0)) __pyx_t_2 = 2;
+  } else if (unlikely(__pyx_t_23 >= __pyx_pybuffernd_curr_poses_bp.diminfo[2].shape)) __pyx_t_2 = 2;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 133, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":134
+ *                                        &curr_ptcloud_bp[0,0,0],
+ *                                        &curr_poses_bp[0,0,0],
+ *                                        &curr_masks_bp[0,0,0],             # <<<<<<<<<<<<<<
+ *                                        &curr_rgb_bp[0,0,0],
+ *                                        curr_pose_error_bp,
+ */
+  __pyx_t_24 = 0;
+  __pyx_t_25 = 0;
+  __pyx_t_26 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_24 < 0) {
+    __pyx_t_24 += __pyx_pybuffernd_curr_masks_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_24 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_24 >= __pyx_pybuffernd_curr_masks_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (__pyx_t_25 < 0) {
+    __pyx_t_25 += __pyx_pybuffernd_curr_masks_bp.diminfo[1].shape;
+    if (unlikely(__pyx_t_25 < 0)) __pyx_t_2 = 1;
+  } else if (unlikely(__pyx_t_25 >= __pyx_pybuffernd_curr_masks_bp.diminfo[1].shape)) __pyx_t_2 = 1;
+  if (__pyx_t_26 < 0) {
+    __pyx_t_26 += __pyx_pybuffernd_curr_masks_bp.diminfo[2].shape;
+    if (unlikely(__pyx_t_26 < 0)) __pyx_t_2 = 2;
+  } else if (unlikely(__pyx_t_26 >= __pyx_pybuffernd_curr_masks_bp.diminfo[2].shape)) __pyx_t_2 = 2;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 134, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":135
+ *                                        &curr_poses_bp[0,0,0],
+ *                                        &curr_masks_bp[0,0,0],
+ *                                        &curr_rgb_bp[0,0,0],             # <<<<<<<<<<<<<<
+ *                                        curr_pose_error_bp,
+ *                                        &curr_pose_error_indiv_bp[0],
+ */
+  __pyx_t_27 = 0;
+  __pyx_t_28 = 0;
+  __pyx_t_29 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_27 < 0) {
+    __pyx_t_27 += __pyx_pybuffernd_curr_rgb_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_27 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_27 >= __pyx_pybuffernd_curr_rgb_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (__pyx_t_28 < 0) {
+    __pyx_t_28 += __pyx_pybuffernd_curr_rgb_bp.diminfo[1].shape;
+    if (unlikely(__pyx_t_28 < 0)) __pyx_t_2 = 1;
+  } else if (unlikely(__pyx_t_28 >= __pyx_pybuffernd_curr_rgb_bp.diminfo[1].shape)) __pyx_t_2 = 1;
+  if (__pyx_t_29 < 0) {
+    __pyx_t_29 += __pyx_pybuffernd_curr_rgb_bp.diminfo[2].shape;
+    if (unlikely(__pyx_t_29 < 0)) __pyx_t_2 = 2;
+  } else if (unlikely(__pyx_t_29 >= __pyx_pybuffernd_curr_rgb_bp.diminfo[2].shape)) __pyx_t_2 = 2;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 135, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":137
+ *                                        &curr_rgb_bp[0,0,0],
+ *                                        curr_pose_error_bp,
+ *                                        &curr_pose_error_indiv_bp[0],             # <<<<<<<<<<<<<<
+ *                                        &curr_deg_error_bp[0],
+ *                                        save_frame)
+ */
+  __pyx_t_30 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_30 < 0) {
+    __pyx_t_30 += __pyx_pybuffernd_curr_pose_error_indiv_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_30 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_30 >= __pyx_pybuffernd_curr_pose_error_indiv_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 137, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":138
+ *                                        curr_pose_error_bp,
+ *                                        &curr_pose_error_indiv_bp[0],
+ *                                        &curr_deg_error_bp[0],             # <<<<<<<<<<<<<<
+ *                                        save_frame)
+ * 
+ */
+  __pyx_t_31 = 0;
+  __pyx_t_2 = -1;
+  if (__pyx_t_31 < 0) {
+    __pyx_t_31 += __pyx_pybuffernd_curr_deg_error_bp.diminfo[0].shape;
+    if (unlikely(__pyx_t_31 < 0)) __pyx_t_2 = 0;
+  } else if (unlikely(__pyx_t_31 >= __pyx_pybuffernd_curr_deg_error_bp.diminfo[0].shape)) __pyx_t_2 = 0;
+  if (unlikely(__pyx_t_2 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_2);
+    __PYX_ERR(0, 138, __pyx_L1_error)
+  }
+
+  /* "torchviz/realctrlcompviz.pyx":123
  *                                int save_frame):
  *         # Run CPP code
- *         self.realctrlviz.update_real_curr(&curr_angles[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.update_real_curr(&curr_angles[0],             # <<<<<<<<<<<<<<
  *                                        &curr_ptcloud[0,0,0],
  *                                        &curr_poses[0,0,0],
  */
-  __pyx_v_self->realctrlviz->update_real_curr((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_angles.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_curr_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_curr_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_curr_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_curr_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_curr_poses.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_curr_poses.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_curr_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_curr_masks.diminfo[0].strides, __pyx_t_10, __pyx_pybuffernd_curr_masks.diminfo[1].strides, __pyx_t_11, __pyx_pybuffernd_curr_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_curr_rgb.diminfo[0].strides, __pyx_t_13, __pyx_pybuffernd_curr_rgb.diminfo[1].strides, __pyx_t_14, __pyx_pybuffernd_curr_rgb.diminfo[2].strides))), __pyx_v_curr_pose_error, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_curr_pose_error_indiv.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer.buf, __pyx_t_16, __pyx_pybuffernd_curr_deg_error.diminfo[0].strides))), __pyx_v_save_frame);
+  __pyx_v_self->realctrlcompviz->update_real_curr((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_angles.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_curr_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_curr_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_curr_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_curr_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_poses.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_curr_poses.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_curr_poses.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_curr_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_masks.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_curr_masks.diminfo[0].strides, __pyx_t_10, __pyx_pybuffernd_curr_masks.diminfo[1].strides, __pyx_t_11, __pyx_pybuffernd_curr_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_curr_rgb.diminfo[0].strides, __pyx_t_13, __pyx_pybuffernd_curr_rgb.diminfo[1].strides, __pyx_t_14, __pyx_pybuffernd_curr_rgb.diminfo[2].strides))), __pyx_v_curr_pose_error, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_curr_pose_error_indiv.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer.buf, __pyx_t_16, __pyx_pybuffernd_curr_deg_error.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer.buf, __pyx_t_17, __pyx_pybuffernd_curr_angles_bp.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer.buf, __pyx_t_18, __pyx_pybuffernd_curr_ptcloud_bp.diminfo[0].strides, __pyx_t_19, __pyx_pybuffernd_curr_ptcloud_bp.diminfo[1].strides, __pyx_t_20, __pyx_pybuffernd_curr_ptcloud_bp.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer.buf, __pyx_t_21, __pyx_pybuffernd_curr_poses_bp.diminfo[0].strides, __pyx_t_22, __pyx_pybuffernd_curr_poses_bp.diminfo[1].strides, __pyx_t_23, __pyx_pybuffernd_curr_poses_bp.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer.buf, __pyx_t_24, __pyx_pybuffernd_curr_masks_bp.diminfo[0].strides, __pyx_t_25, __pyx_pybuffernd_curr_masks_bp.diminfo[1].strides, __pyx_t_26, __pyx_pybuffernd_curr_masks_bp.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer.buf, __pyx_t_27, __pyx_pybuffernd_curr_rgb_bp.diminfo[0].strides, __pyx_t_28, __pyx_pybuffernd_curr_rgb_bp.diminfo[1].strides, __pyx_t_29, __pyx_pybuffernd_curr_rgb_bp.diminfo[2].strides))), __pyx_v_curr_pose_error_bp, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer.buf, __pyx_t_30, __pyx_pybuffernd_curr_pose_error_indiv_bp.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer.buf, __pyx_t_31, __pyx_pybuffernd_curr_deg_error_bp.diminfo[0].strides))), __pyx_v_save_frame);
 
-  /* "torchviz/realctrlviz.pyx":101
+  /* "torchviz/realctrlcompviz.pyx":105
  *                                             &da_goal_pts[0,0,0])
  * 
  *     def update_real_curr(self, np.ndarray[np.float32_t, ndim=1] curr_angles,             # <<<<<<<<<<<<<<
@@ -3209,31 +3562,45 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
     __Pyx_PyThreadState_assign
     __Pyx_ErrFetch(&__pyx_type, &__pyx_value, &__pyx_tb);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_angles.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_masks.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_poses.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.update_real_curr", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.update_real_curr", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   goto __pyx_L2;
   __pyx_L0:;
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_angles.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_angles_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_deg_error.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_deg_error_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_masks.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_masks_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_pose_error_indiv.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_pose_error_indiv_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_poses.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_poses_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_ptcloud.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_ptcloud_bp.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_rgb.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_curr_rgb_bp.rcbuffer->pybuffer);
   __pyx_L2:;
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":121
+/* "torchviz/realctrlcompviz.pyx":141
  *                                        save_frame)
  * 
  *     def update_real_init(self, np.ndarray[np.float32_t, ndim=1] start_angles,             # <<<<<<<<<<<<<<
@@ -3242,8 +3609,8 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_10update_real_
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_init(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_init(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_13update_real_init(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_13update_real_init(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_start_angles = 0;
   PyArrayObject *__pyx_v_start_ptcloud = 0;
   PyArrayObject *__pyx_v_start_poses = 0;
@@ -3291,66 +3658,66 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start_ptcloud)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 1); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 1); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  2:
         if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start_poses)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 2); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 2); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  3:
         if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start_masks)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 3); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 3); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  4:
         if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_start_rgb)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 4); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 4); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  5:
         if (likely((values[5] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_goal_angles)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 5); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 5); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  6:
         if (likely((values[6] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_goal_ptcloud)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 6); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 6); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  7:
         if (likely((values[7] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_goal_poses)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 7); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 7); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  8:
         if (likely((values[8] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_goal_masks)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 8); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 8); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case  9:
         if (likely((values[9] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_goal_rgb)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 9); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 9); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case 10:
         if (likely((values[10] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_init_pose_error)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 10); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 10); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case 11:
         if (likely((values[11] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_init_pose_error_indiv)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 11); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 11); __PYX_ERR(0, 141, __pyx_L3_error)
         }
         case 12:
         if (likely((values[12] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_init_deg_error)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 12); __PYX_ERR(0, 121, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, 12); __PYX_ERR(0, 141, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_real_init") < 0)) __PYX_ERR(0, 121, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_real_init") < 0)) __PYX_ERR(0, 141, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 13) {
       goto __pyx_L5_argtuple_error;
@@ -3379,31 +3746,31 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_
     __pyx_v_goal_poses = ((PyArrayObject *)values[7]);
     __pyx_v_goal_masks = ((PyArrayObject *)values[8]);
     __pyx_v_goal_rgb = ((PyArrayObject *)values[9]);
-    __pyx_v_init_pose_error = __pyx_PyFloat_AsFloat(values[10]); if (unlikely((__pyx_v_init_pose_error == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 131, __pyx_L3_error)
+    __pyx_v_init_pose_error = __pyx_PyFloat_AsFloat(values[10]); if (unlikely((__pyx_v_init_pose_error == (float)-1) && PyErr_Occurred())) __PYX_ERR(0, 151, __pyx_L3_error)
     __pyx_v_init_pose_error_indiv = ((PyArrayObject *)values[11]);
     __pyx_v_init_deg_error = ((PyArrayObject *)values[12]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 121, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("update_real_init", 1, 13, 13, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 141, __pyx_L3_error)
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.update_real_init", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.update_real_init", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_angles), __pyx_ptype_5numpy_ndarray, 1, "start_angles", 0))) __PYX_ERR(0, 121, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "start_ptcloud", 0))) __PYX_ERR(0, 122, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_poses), __pyx_ptype_5numpy_ndarray, 1, "start_poses", 0))) __PYX_ERR(0, 123, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_masks), __pyx_ptype_5numpy_ndarray, 1, "start_masks", 0))) __PYX_ERR(0, 124, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_rgb), __pyx_ptype_5numpy_ndarray, 1, "start_rgb", 0))) __PYX_ERR(0, 125, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_angles), __pyx_ptype_5numpy_ndarray, 1, "goal_angles", 0))) __PYX_ERR(0, 126, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "goal_ptcloud", 0))) __PYX_ERR(0, 127, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_poses), __pyx_ptype_5numpy_ndarray, 1, "goal_poses", 0))) __PYX_ERR(0, 128, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_masks), __pyx_ptype_5numpy_ndarray, 1, "goal_masks", 0))) __PYX_ERR(0, 129, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_rgb), __pyx_ptype_5numpy_ndarray, 1, "goal_rgb", 0))) __PYX_ERR(0, 130, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_init_pose_error_indiv), __pyx_ptype_5numpy_ndarray, 1, "init_pose_error_indiv", 0))) __PYX_ERR(0, 132, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_init_deg_error), __pyx_ptype_5numpy_ndarray, 1, "init_deg_error", 0))) __PYX_ERR(0, 133, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_init(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), __pyx_v_start_angles, __pyx_v_start_ptcloud, __pyx_v_start_poses, __pyx_v_start_masks, __pyx_v_start_rgb, __pyx_v_goal_angles, __pyx_v_goal_ptcloud, __pyx_v_goal_poses, __pyx_v_goal_masks, __pyx_v_goal_rgb, __pyx_v_init_pose_error, __pyx_v_init_pose_error_indiv, __pyx_v_init_deg_error);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_angles), __pyx_ptype_5numpy_ndarray, 1, "start_angles", 0))) __PYX_ERR(0, 141, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "start_ptcloud", 0))) __PYX_ERR(0, 142, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_poses), __pyx_ptype_5numpy_ndarray, 1, "start_poses", 0))) __PYX_ERR(0, 143, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_masks), __pyx_ptype_5numpy_ndarray, 1, "start_masks", 0))) __PYX_ERR(0, 144, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_start_rgb), __pyx_ptype_5numpy_ndarray, 1, "start_rgb", 0))) __PYX_ERR(0, 145, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_angles), __pyx_ptype_5numpy_ndarray, 1, "goal_angles", 0))) __PYX_ERR(0, 146, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "goal_ptcloud", 0))) __PYX_ERR(0, 147, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_poses), __pyx_ptype_5numpy_ndarray, 1, "goal_poses", 0))) __PYX_ERR(0, 148, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_masks), __pyx_ptype_5numpy_ndarray, 1, "goal_masks", 0))) __PYX_ERR(0, 149, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_goal_rgb), __pyx_ptype_5numpy_ndarray, 1, "goal_rgb", 0))) __PYX_ERR(0, 150, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_init_pose_error_indiv), __pyx_ptype_5numpy_ndarray, 1, "init_pose_error_indiv", 0))) __PYX_ERR(0, 152, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_init_deg_error), __pyx_ptype_5numpy_ndarray, 1, "init_deg_error", 0))) __PYX_ERR(0, 153, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_12update_real_init(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), __pyx_v_start_angles, __pyx_v_start_ptcloud, __pyx_v_start_poses, __pyx_v_start_masks, __pyx_v_start_rgb, __pyx_v_goal_angles, __pyx_v_goal_ptcloud, __pyx_v_goal_poses, __pyx_v_goal_masks, __pyx_v_goal_rgb, __pyx_v_init_pose_error, __pyx_v_init_pose_error_indiv, __pyx_v_init_deg_error);
 
   /* function exit code */
   goto __pyx_L0;
@@ -3414,7 +3781,7 @@ static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_init(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, PyArrayObject *__pyx_v_start_angles, PyArrayObject *__pyx_v_start_ptcloud, PyArrayObject *__pyx_v_start_poses, PyArrayObject *__pyx_v_start_masks, PyArrayObject *__pyx_v_start_rgb, PyArrayObject *__pyx_v_goal_angles, PyArrayObject *__pyx_v_goal_ptcloud, PyArrayObject *__pyx_v_goal_poses, PyArrayObject *__pyx_v_goal_masks, PyArrayObject *__pyx_v_goal_rgb, float __pyx_v_init_pose_error, PyArrayObject *__pyx_v_init_pose_error_indiv, PyArrayObject *__pyx_v_init_deg_error) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_12update_real_init(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, PyArrayObject *__pyx_v_start_angles, PyArrayObject *__pyx_v_start_ptcloud, PyArrayObject *__pyx_v_start_poses, PyArrayObject *__pyx_v_start_masks, PyArrayObject *__pyx_v_start_rgb, PyArrayObject *__pyx_v_goal_angles, PyArrayObject *__pyx_v_goal_ptcloud, PyArrayObject *__pyx_v_goal_poses, PyArrayObject *__pyx_v_goal_masks, PyArrayObject *__pyx_v_goal_rgb, float __pyx_v_init_pose_error, PyArrayObject *__pyx_v_init_pose_error_indiv, PyArrayObject *__pyx_v_init_deg_error) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_goal_angles;
   __Pyx_Buffer __pyx_pybuffer_goal_angles;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_goal_masks;
@@ -3521,69 +3888,69 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   __pyx_pybuffernd_init_deg_error.rcbuffer = &__pyx_pybuffer_init_deg_error;
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_angles.diminfo[0].strides = __pyx_pybuffernd_start_angles.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_angles.diminfo[0].shape = __pyx_pybuffernd_start_angles.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_ptcloud.diminfo[0].strides = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_ptcloud.diminfo[0].shape = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_start_ptcloud.diminfo[1].strides = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_start_ptcloud.diminfo[1].shape = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_start_ptcloud.diminfo[2].strides = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_start_ptcloud.diminfo[2].shape = __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_poses.diminfo[0].strides = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_poses.diminfo[0].shape = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_start_poses.diminfo[1].strides = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_start_poses.diminfo[1].shape = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_start_poses.diminfo[2].strides = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_start_poses.diminfo[2].shape = __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_masks.diminfo[0].strides = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_masks.diminfo[0].shape = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_start_masks.diminfo[1].strides = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_start_masks.diminfo[1].shape = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_start_masks.diminfo[2].strides = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_start_masks.diminfo[2].shape = __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_start_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_start_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_start_rgb.diminfo[0].strides = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_start_rgb.diminfo[0].shape = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_start_rgb.diminfo[1].strides = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_start_rgb.diminfo[1].shape = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_start_rgb.diminfo[2].strides = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_start_rgb.diminfo[2].shape = __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_angles.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_angles, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_goal_angles.diminfo[0].strides = __pyx_pybuffernd_goal_angles.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_goal_angles.diminfo[0].shape = __pyx_pybuffernd_goal_angles.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_ptcloud, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_goal_ptcloud.diminfo[0].strides = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_goal_ptcloud.diminfo[0].shape = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_goal_ptcloud.diminfo[1].strides = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_goal_ptcloud.diminfo[1].shape = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_goal_ptcloud.diminfo[2].strides = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_goal_ptcloud.diminfo[2].shape = __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_poses.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_poses, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_goal_poses.diminfo[0].strides = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_goal_poses.diminfo[0].shape = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_goal_poses.diminfo[1].strides = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_goal_poses.diminfo[1].shape = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_goal_poses.diminfo[2].strides = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_goal_poses.diminfo[2].shape = __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_masks.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_masks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_goal_masks.diminfo[0].strides = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_goal_masks.diminfo[0].shape = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_goal_masks.diminfo[1].strides = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_goal_masks.diminfo[1].shape = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_goal_masks.diminfo[2].strides = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_goal_masks.diminfo[2].shape = __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer, (PyObject*)__pyx_v_goal_rgb, &__Pyx_TypeInfo_nn___pyx_t_5numpy_uint8_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_goal_rgb.diminfo[0].strides = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_goal_rgb.diminfo[0].shape = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_goal_rgb.diminfo[1].strides = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_goal_rgb.diminfo[1].shape = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_goal_rgb.diminfo[2].strides = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_goal_rgb.diminfo[2].shape = __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer, (PyObject*)__pyx_v_init_pose_error_indiv, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer, (PyObject*)__pyx_v_init_pose_error_indiv, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_init_pose_error_indiv.diminfo[0].strides = __pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_init_pose_error_indiv.diminfo[0].shape = __pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer.shape[0];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
-    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer, (PyObject*)__pyx_v_init_deg_error, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 121, __pyx_L1_error)
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer, (PyObject*)__pyx_v_init_deg_error, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 141, __pyx_L1_error)
   }
   __pyx_pybuffernd_init_deg_error.diminfo[0].strides = __pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_init_deg_error.diminfo[0].shape = __pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer.shape[0];
 
-  /* "torchviz/realctrlviz.pyx":135
+  /* "torchviz/realctrlcompviz.pyx":155
  *                                np.ndarray[np.float32_t, ndim=1] init_deg_error):
  *         # Run CPP code
- *         self.realctrlviz.update_real_init(&start_angles[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.update_real_init(&start_angles[0],             # <<<<<<<<<<<<<<
  *                                        &start_ptcloud[0,0,0],
  *                                        &start_poses[0,0,0],
  */
@@ -3595,12 +3962,12 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_1 >= __pyx_pybuffernd_start_angles.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 135, __pyx_L1_error)
+    __PYX_ERR(0, 155, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":136
+  /* "torchviz/realctrlcompviz.pyx":156
  *         # Run CPP code
- *         self.realctrlviz.update_real_init(&start_angles[0],
+ *         self.realctrlcompviz.update_real_init(&start_angles[0],
  *                                        &start_ptcloud[0,0,0],             # <<<<<<<<<<<<<<
  *                                        &start_poses[0,0,0],
  *                                        &start_masks[0,0,0],
@@ -3623,11 +3990,11 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_5 >= __pyx_pybuffernd_start_ptcloud.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 136, __pyx_L1_error)
+    __PYX_ERR(0, 156, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":137
- *         self.realctrlviz.update_real_init(&start_angles[0],
+  /* "torchviz/realctrlcompviz.pyx":157
+ *         self.realctrlcompviz.update_real_init(&start_angles[0],
  *                                        &start_ptcloud[0,0,0],
  *                                        &start_poses[0,0,0],             # <<<<<<<<<<<<<<
  *                                        &start_masks[0,0,0],
@@ -3651,10 +4018,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_8 >= __pyx_pybuffernd_start_poses.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 137, __pyx_L1_error)
+    __PYX_ERR(0, 157, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":138
+  /* "torchviz/realctrlcompviz.pyx":158
  *                                        &start_ptcloud[0,0,0],
  *                                        &start_poses[0,0,0],
  *                                        &start_masks[0,0,0],             # <<<<<<<<<<<<<<
@@ -3679,10 +4046,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_11 >= __pyx_pybuffernd_start_masks.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 138, __pyx_L1_error)
+    __PYX_ERR(0, 158, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":139
+  /* "torchviz/realctrlcompviz.pyx":159
  *                                        &start_poses[0,0,0],
  *                                        &start_masks[0,0,0],
  *                                        &start_rgb[0,0,0],             # <<<<<<<<<<<<<<
@@ -3707,10 +4074,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_14 >= __pyx_pybuffernd_start_rgb.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 139, __pyx_L1_error)
+    __PYX_ERR(0, 159, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":140
+  /* "torchviz/realctrlcompviz.pyx":160
  *                                        &start_masks[0,0,0],
  *                                        &start_rgb[0,0,0],
  *                                        &goal_angles[0],             # <<<<<<<<<<<<<<
@@ -3725,10 +4092,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_15 >= __pyx_pybuffernd_goal_angles.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 140, __pyx_L1_error)
+    __PYX_ERR(0, 160, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":141
+  /* "torchviz/realctrlcompviz.pyx":161
  *                                        &start_rgb[0,0,0],
  *                                        &goal_angles[0],
  *                                        &goal_ptcloud[0,0,0],             # <<<<<<<<<<<<<<
@@ -3753,10 +4120,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_18 >= __pyx_pybuffernd_goal_ptcloud.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 141, __pyx_L1_error)
+    __PYX_ERR(0, 161, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":142
+  /* "torchviz/realctrlcompviz.pyx":162
  *                                        &goal_angles[0],
  *                                        &goal_ptcloud[0,0,0],
  *                                        &goal_poses[0,0,0],             # <<<<<<<<<<<<<<
@@ -3781,10 +4148,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_21 >= __pyx_pybuffernd_goal_poses.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 142, __pyx_L1_error)
+    __PYX_ERR(0, 162, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":143
+  /* "torchviz/realctrlcompviz.pyx":163
  *                                        &goal_ptcloud[0,0,0],
  *                                        &goal_poses[0,0,0],
  *                                        &goal_masks[0,0,0],             # <<<<<<<<<<<<<<
@@ -3809,10 +4176,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_24 >= __pyx_pybuffernd_goal_masks.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 143, __pyx_L1_error)
+    __PYX_ERR(0, 163, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":144
+  /* "torchviz/realctrlcompviz.pyx":164
  *                                        &goal_poses[0,0,0],
  *                                        &goal_masks[0,0,0],
  *                                        &goal_rgb[0,0,0],             # <<<<<<<<<<<<<<
@@ -3837,10 +4204,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_27 >= __pyx_pybuffernd_goal_rgb.diminfo[2].shape)) __pyx_t_2 = 2;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 144, __pyx_L1_error)
+    __PYX_ERR(0, 164, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":146
+  /* "torchviz/realctrlcompviz.pyx":166
  *                                        &goal_rgb[0,0,0],
  *                                        init_pose_error,
  *                                        &init_pose_error_indiv[0],             # <<<<<<<<<<<<<<
@@ -3855,10 +4222,10 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_28 >= __pyx_pybuffernd_init_pose_error_indiv.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 146, __pyx_L1_error)
+    __PYX_ERR(0, 166, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":147
+  /* "torchviz/realctrlcompviz.pyx":167
  *                                        init_pose_error,
  *                                        &init_pose_error_indiv[0],
  *                                        &init_deg_error[0])             # <<<<<<<<<<<<<<
@@ -3873,19 +4240,19 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   } else if (unlikely(__pyx_t_29 >= __pyx_pybuffernd_init_deg_error.diminfo[0].shape)) __pyx_t_2 = 0;
   if (unlikely(__pyx_t_2 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_2);
-    __PYX_ERR(0, 147, __pyx_L1_error)
+    __PYX_ERR(0, 167, __pyx_L1_error)
   }
 
-  /* "torchviz/realctrlviz.pyx":135
+  /* "torchviz/realctrlcompviz.pyx":155
  *                                np.ndarray[np.float32_t, ndim=1] init_deg_error):
  *         # Run CPP code
- *         self.realctrlviz.update_real_init(&start_angles[0],             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.update_real_init(&start_angles[0],             # <<<<<<<<<<<<<<
  *                                        &start_ptcloud[0,0,0],
  *                                        &start_poses[0,0,0],
  */
-  __pyx_v_self->realctrlviz->update_real_init((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_angles.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_start_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_start_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_start_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_start_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_start_poses.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_start_poses.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_start_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_start_masks.diminfo[0].strides, __pyx_t_10, __pyx_pybuffernd_start_masks.diminfo[1].strides, __pyx_t_11, __pyx_pybuffernd_start_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_start_rgb.diminfo[0].strides, __pyx_t_13, __pyx_pybuffernd_start_rgb.diminfo[1].strides, __pyx_t_14, __pyx_pybuffernd_start_rgb.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_angles.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_goal_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_16, __pyx_pybuffernd_goal_ptcloud.diminfo[0].strides, __pyx_t_17, __pyx_pybuffernd_goal_ptcloud.diminfo[1].strides, __pyx_t_18, __pyx_pybuffernd_goal_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.buf, __pyx_t_19, __pyx_pybuffernd_goal_poses.diminfo[0].strides, __pyx_t_20, __pyx_pybuffernd_goal_poses.diminfo[1].strides, __pyx_t_21, __pyx_pybuffernd_goal_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_goal_masks.diminfo[0].strides, __pyx_t_23, __pyx_pybuffernd_goal_masks.diminfo[1].strides, __pyx_t_24, __pyx_pybuffernd_goal_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.buf, __pyx_t_25, __pyx_pybuffernd_goal_rgb.diminfo[0].strides, __pyx_t_26, __pyx_pybuffernd_goal_rgb.diminfo[1].strides, __pyx_t_27, __pyx_pybuffernd_goal_rgb.diminfo[2].strides))), __pyx_v_init_pose_error, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer.buf, __pyx_t_28, __pyx_pybuffernd_init_pose_error_indiv.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer.buf, __pyx_t_29, __pyx_pybuffernd_init_deg_error.diminfo[0].strides))));
+  __pyx_v_self->realctrlcompviz->update_real_init((&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_angles.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_start_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_3, __pyx_pybuffernd_start_ptcloud.diminfo[0].strides, __pyx_t_4, __pyx_pybuffernd_start_ptcloud.diminfo[1].strides, __pyx_t_5, __pyx_pybuffernd_start_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_poses.rcbuffer->pybuffer.buf, __pyx_t_6, __pyx_pybuffernd_start_poses.diminfo[0].strides, __pyx_t_7, __pyx_pybuffernd_start_poses.diminfo[1].strides, __pyx_t_8, __pyx_pybuffernd_start_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_start_masks.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_start_masks.diminfo[0].strides, __pyx_t_10, __pyx_pybuffernd_start_masks.diminfo[1].strides, __pyx_t_11, __pyx_pybuffernd_start_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_start_rgb.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_start_rgb.diminfo[0].strides, __pyx_t_13, __pyx_pybuffernd_start_rgb.diminfo[1].strides, __pyx_t_14, __pyx_pybuffernd_start_rgb.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_angles.rcbuffer->pybuffer.buf, __pyx_t_15, __pyx_pybuffernd_goal_angles.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_16, __pyx_pybuffernd_goal_ptcloud.diminfo[0].strides, __pyx_t_17, __pyx_pybuffernd_goal_ptcloud.diminfo[1].strides, __pyx_t_18, __pyx_pybuffernd_goal_ptcloud.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_poses.rcbuffer->pybuffer.buf, __pyx_t_19, __pyx_pybuffernd_goal_poses.diminfo[0].strides, __pyx_t_20, __pyx_pybuffernd_goal_poses.diminfo[1].strides, __pyx_t_21, __pyx_pybuffernd_goal_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_goal_masks.rcbuffer->pybuffer.buf, __pyx_t_22, __pyx_pybuffernd_goal_masks.diminfo[0].strides, __pyx_t_23, __pyx_pybuffernd_goal_masks.diminfo[1].strides, __pyx_t_24, __pyx_pybuffernd_goal_masks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_uint8_t *, __pyx_pybuffernd_goal_rgb.rcbuffer->pybuffer.buf, __pyx_t_25, __pyx_pybuffernd_goal_rgb.diminfo[0].strides, __pyx_t_26, __pyx_pybuffernd_goal_rgb.diminfo[1].strides, __pyx_t_27, __pyx_pybuffernd_goal_rgb.diminfo[2].strides))), __pyx_v_init_pose_error, (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_init_pose_error_indiv.rcbuffer->pybuffer.buf, __pyx_t_28, __pyx_pybuffernd_init_pose_error_indiv.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_init_deg_error.rcbuffer->pybuffer.buf, __pyx_t_29, __pyx_pybuffernd_init_deg_error.diminfo[0].strides))));
 
-  /* "torchviz/realctrlviz.pyx":121
+  /* "torchviz/realctrlcompviz.pyx":141
  *                                        save_frame)
  * 
  *     def update_real_init(self, np.ndarray[np.float32_t, ndim=1] start_angles,             # <<<<<<<<<<<<<<
@@ -3914,7 +4281,7 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_start_ptcloud.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_start_rgb.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.update_real_init", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.update_real_init", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   goto __pyx_L2;
   __pyx_L0:;
@@ -3936,47 +4303,47 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_12update_real_
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":148
+/* "torchviz/realctrlcompviz.pyx":168
  *                                        &init_pose_error_indiv[0],
  *                                        &init_deg_error[0])
  *     def reset(self):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.reset()
+ *         self.realctrlcompviz.reset()
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_15reset(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_15reset(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_15reset(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_15reset(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("reset (wrapper)", 0);
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_14reset(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self));
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_14reset(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_14reset(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_14reset(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("reset", 0);
 
-  /* "torchviz/realctrlviz.pyx":150
+  /* "torchviz/realctrlcompviz.pyx":170
  *     def reset(self):
  *         # Run CPP code
- *         self.realctrlviz.reset()             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.reset()             # <<<<<<<<<<<<<<
  * 
  *     def start_saving_frames(self, string framesavedir):
  */
-  __pyx_v_self->realctrlviz->reset();
+  __pyx_v_self->realctrlcompviz->reset();
 
-  /* "torchviz/realctrlviz.pyx":148
+  /* "torchviz/realctrlcompviz.pyx":168
  *                                        &init_pose_error_indiv[0],
  *                                        &init_deg_error[0])
  *     def reset(self):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.reset()
+ *         self.realctrlcompviz.reset()
  */
 
   /* function exit code */
@@ -3986,57 +4353,57 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_14reset(struct
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":152
- *         self.realctrlviz.reset()
+/* "torchviz/realctrlcompviz.pyx":172
+ *         self.realctrlcompviz.reset()
  * 
  *     def start_saving_frames(self, string framesavedir):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.start_saving_frames(framesavedir)
+ *         self.realctrlcompviz.start_saving_frames(framesavedir)
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_17start_saving_frames(PyObject *__pyx_v_self, PyObject *__pyx_arg_framesavedir); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_17start_saving_frames(PyObject *__pyx_v_self, PyObject *__pyx_arg_framesavedir) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_17start_saving_frames(PyObject *__pyx_v_self, PyObject *__pyx_arg_framesavedir); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_17start_saving_frames(PyObject *__pyx_v_self, PyObject *__pyx_arg_framesavedir) {
   std::string __pyx_v_framesavedir;
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("start_saving_frames (wrapper)", 0);
   assert(__pyx_arg_framesavedir); {
-    __pyx_v_framesavedir = __pyx_convert_string_from_py_std__in_string(__pyx_arg_framesavedir); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 152, __pyx_L3_error)
+    __pyx_v_framesavedir = __pyx_convert_string_from_py_std__in_string(__pyx_arg_framesavedir); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 172, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
-  __Pyx_AddTraceback("torchviz.realctrlviz.PyRealCtrlViz.start_saving_frames", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_AddTraceback("torchviz.realctrlcompviz.PyRealCtrlCompViz.start_saving_frames", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_16start_saving_frames(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self), ((std::string)__pyx_v_framesavedir));
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_16start_saving_frames(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self), ((std::string)__pyx_v_framesavedir));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_16start_saving_frames(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self, std::string __pyx_v_framesavedir) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_16start_saving_frames(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self, std::string __pyx_v_framesavedir) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("start_saving_frames", 0);
 
-  /* "torchviz/realctrlviz.pyx":154
+  /* "torchviz/realctrlcompviz.pyx":174
  *     def start_saving_frames(self, string framesavedir):
  *         # Run CPP code
- *         self.realctrlviz.start_saving_frames(framesavedir)             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.start_saving_frames(framesavedir)             # <<<<<<<<<<<<<<
  * 
  *     def stop_saving_frames(self):
  */
-  __pyx_v_self->realctrlviz->start_saving_frames(__pyx_v_framesavedir);
+  __pyx_v_self->realctrlcompviz->start_saving_frames(__pyx_v_framesavedir);
 
-  /* "torchviz/realctrlviz.pyx":152
- *         self.realctrlviz.reset()
+  /* "torchviz/realctrlcompviz.pyx":172
+ *         self.realctrlcompviz.reset()
  * 
  *     def start_saving_frames(self, string framesavedir):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.start_saving_frames(framesavedir)
+ *         self.realctrlcompviz.start_saving_frames(framesavedir)
  */
 
   /* function exit code */
@@ -4046,45 +4413,45 @@ static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_16start_saving
   return __pyx_r;
 }
 
-/* "torchviz/realctrlviz.pyx":156
- *         self.realctrlviz.start_saving_frames(framesavedir)
+/* "torchviz/realctrlcompviz.pyx":176
+ *         self.realctrlcompviz.start_saving_frames(framesavedir)
  * 
  *     def stop_saving_frames(self):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.stop_saving_frames()
+ *         self.realctrlcompviz.stop_saving_frames()
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_19stop_saving_frames(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
-static PyObject *__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_19stop_saving_frames(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_19stop_saving_frames(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
+static PyObject *__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_19stop_saving_frames(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("stop_saving_frames (wrapper)", 0);
-  __pyx_r = __pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_18stop_saving_frames(((struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *)__pyx_v_self));
+  __pyx_r = __pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_18stop_saving_frames(((struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_11realctrlviz_13PyRealCtrlViz_18stop_saving_frames(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz *__pyx_v_self) {
+static PyObject *__pyx_pf_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_18stop_saving_frames(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("stop_saving_frames", 0);
 
-  /* "torchviz/realctrlviz.pyx":158
+  /* "torchviz/realctrlcompviz.pyx":178
  *     def stop_saving_frames(self):
  *         # Run CPP code
- *         self.realctrlviz.stop_saving_frames()             # <<<<<<<<<<<<<<
+ *         self.realctrlcompviz.stop_saving_frames()             # <<<<<<<<<<<<<<
  */
-  __pyx_v_self->realctrlviz->stop_saving_frames();
+  __pyx_v_self->realctrlcompviz->stop_saving_frames();
 
-  /* "torchviz/realctrlviz.pyx":156
- *         self.realctrlviz.start_saving_frames(framesavedir)
+  /* "torchviz/realctrlcompviz.pyx":176
+ *         self.realctrlcompviz.start_saving_frames(framesavedir)
  * 
  *     def stop_saving_frames(self):             # <<<<<<<<<<<<<<
  *         # Run CPP code
- *         self.realctrlviz.stop_saving_frames()
+ *         self.realctrlcompviz.stop_saving_frames()
  */
 
   /* function exit code */
@@ -6660,7 +7027,7 @@ static std::string __pyx_convert_string_from_py_std__in_string(PyObject *__pyx_v
   return __pyx_r;
 }
 
-static PyObject *__pyx_tp_new_8torchviz_11realctrlviz_PyRealCtrlViz(PyTypeObject *t, PyObject *a, PyObject *k) {
+static PyObject *__pyx_tp_new_8torchviz_15realctrlcompviz_PyRealCtrlCompViz(PyTypeObject *t, PyObject *a, PyObject *k) {
   PyObject *o;
   if (likely((t->tp_flags & Py_TPFLAGS_IS_ABSTRACT) == 0)) {
     o = (*t->tp_alloc)(t, 0);
@@ -6668,14 +7035,14 @@ static PyObject *__pyx_tp_new_8torchviz_11realctrlviz_PyRealCtrlViz(PyTypeObject
     o = (PyObject *) PyBaseObject_Type.tp_new(t, __pyx_empty_tuple, 0);
   }
   if (unlikely(!o)) return 0;
-  if (unlikely(__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_1__cinit__(o, a, k) < 0)) goto bad;
+  if (unlikely(__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_1__cinit__(o, a, k) < 0)) goto bad;
   return o;
   bad:
   Py_DECREF(o); o = 0;
   return NULL;
 }
 
-static void __pyx_tp_dealloc_8torchviz_11realctrlviz_PyRealCtrlViz(PyObject *o) {
+static void __pyx_tp_dealloc_8torchviz_15realctrlcompviz_PyRealCtrlCompViz(PyObject *o) {
   #if PY_VERSION_HEX >= 0x030400a1
   if (unlikely(Py_TYPE(o)->tp_finalize) && (!PyType_IS_GC(Py_TYPE(o)) || !_PyGC_FINALIZED(o))) {
     if (PyObject_CallFinalizerFromDealloc(o)) return;
@@ -6685,31 +7052,31 @@ static void __pyx_tp_dealloc_8torchviz_11realctrlviz_PyRealCtrlViz(PyObject *o) 
     PyObject *etype, *eval, *etb;
     PyErr_Fetch(&etype, &eval, &etb);
     ++Py_REFCNT(o);
-    __pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_3__dealloc__(o);
+    __pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_3__dealloc__(o);
     --Py_REFCNT(o);
     PyErr_Restore(etype, eval, etb);
   }
   (*Py_TYPE(o)->tp_free)(o);
 }
 
-static PyMethodDef __pyx_methods_8torchviz_11realctrlviz_PyRealCtrlViz[] = {
-  {"render_arm", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_5render_arm, METH_VARARGS|METH_KEYWORDS, 0},
-  {"compute_gt_da", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_7compute_gt_da, METH_VARARGS|METH_KEYWORDS, 0},
-  {"initialize_problem", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_9initialize_problem, METH_VARARGS|METH_KEYWORDS, 0},
-  {"update_real_curr", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_11update_real_curr, METH_VARARGS|METH_KEYWORDS, 0},
-  {"update_real_init", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_13update_real_init, METH_VARARGS|METH_KEYWORDS, 0},
-  {"reset", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_15reset, METH_NOARGS, 0},
-  {"start_saving_frames", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_17start_saving_frames, METH_O, 0},
-  {"stop_saving_frames", (PyCFunction)__pyx_pw_8torchviz_11realctrlviz_13PyRealCtrlViz_19stop_saving_frames, METH_NOARGS, 0},
+static PyMethodDef __pyx_methods_8torchviz_15realctrlcompviz_PyRealCtrlCompViz[] = {
+  {"render_arm", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_5render_arm, METH_VARARGS|METH_KEYWORDS, 0},
+  {"compute_gt_da", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_7compute_gt_da, METH_VARARGS|METH_KEYWORDS, 0},
+  {"initialize_problem", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_9initialize_problem, METH_VARARGS|METH_KEYWORDS, 0},
+  {"update_real_curr", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_11update_real_curr, METH_VARARGS|METH_KEYWORDS, 0},
+  {"update_real_init", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_13update_real_init, METH_VARARGS|METH_KEYWORDS, 0},
+  {"reset", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_15reset, METH_NOARGS, 0},
+  {"start_saving_frames", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_17start_saving_frames, METH_O, 0},
+  {"stop_saving_frames", (PyCFunction)__pyx_pw_8torchviz_15realctrlcompviz_17PyRealCtrlCompViz_19stop_saving_frames, METH_NOARGS, 0},
   {0, 0, 0, 0}
 };
 
-static PyTypeObject __pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz = {
+static PyTypeObject __pyx_type_8torchviz_15realctrlcompviz_PyRealCtrlCompViz = {
   PyVarObject_HEAD_INIT(0, 0)
-  "torchviz.realctrlviz.PyRealCtrlViz", /*tp_name*/
-  sizeof(struct __pyx_obj_8torchviz_11realctrlviz_PyRealCtrlViz), /*tp_basicsize*/
+  "torchviz.realctrlcompviz.PyRealCtrlCompViz", /*tp_name*/
+  sizeof(struct __pyx_obj_8torchviz_15realctrlcompviz_PyRealCtrlCompViz), /*tp_basicsize*/
   0, /*tp_itemsize*/
-  __pyx_tp_dealloc_8torchviz_11realctrlviz_PyRealCtrlViz, /*tp_dealloc*/
+  __pyx_tp_dealloc_8torchviz_15realctrlcompviz_PyRealCtrlCompViz, /*tp_dealloc*/
   0, /*tp_print*/
   0, /*tp_getattr*/
   0, /*tp_setattr*/
@@ -6737,7 +7104,7 @@ static PyTypeObject __pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz = {
   0, /*tp_weaklistoffset*/
   0, /*tp_iter*/
   0, /*tp_iternext*/
-  __pyx_methods_8torchviz_11realctrlviz_PyRealCtrlViz, /*tp_methods*/
+  __pyx_methods_8torchviz_15realctrlcompviz_PyRealCtrlCompViz, /*tp_methods*/
   0, /*tp_members*/
   0, /*tp_getset*/
   0, /*tp_base*/
@@ -6747,7 +7114,7 @@ static PyTypeObject __pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz = {
   0, /*tp_dictoffset*/
   0, /*tp_init*/
   0, /*tp_alloc*/
-  __pyx_tp_new_8torchviz_11realctrlviz_PyRealCtrlViz, /*tp_new*/
+  __pyx_tp_new_8torchviz_15realctrlcompviz_PyRealCtrlCompViz, /*tp_new*/
   0, /*tp_free*/
   0, /*tp_is_gc*/
   0, /*tp_bases*/
@@ -6773,7 +7140,7 @@ static struct PyModuleDef __pyx_moduledef = {
   #else
     PyModuleDef_HEAD_INIT,
   #endif
-    "realctrlviz",
+    "realctrlcompviz",
     0, /* m_doc */
     -1, /* m_size */
     __pyx_methods /* m_methods */,
@@ -6800,13 +7167,21 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_config2, __pyx_k_config2, sizeof(__pyx_k_config2), 0, 0, 1, 1},
   {&__pyx_n_s_ctypes, __pyx_k_ctypes, sizeof(__pyx_k_ctypes), 0, 0, 1, 1},
   {&__pyx_n_s_curr_angles, __pyx_k_curr_angles, sizeof(__pyx_k_curr_angles), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_angles_bp, __pyx_k_curr_angles_bp, sizeof(__pyx_k_curr_angles_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_deg_error, __pyx_k_curr_deg_error, sizeof(__pyx_k_curr_deg_error), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_deg_error_bp, __pyx_k_curr_deg_error_bp, sizeof(__pyx_k_curr_deg_error_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_masks, __pyx_k_curr_masks, sizeof(__pyx_k_curr_masks), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_masks_bp, __pyx_k_curr_masks_bp, sizeof(__pyx_k_curr_masks_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_pose_error, __pyx_k_curr_pose_error, sizeof(__pyx_k_curr_pose_error), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_pose_error_bp, __pyx_k_curr_pose_error_bp, sizeof(__pyx_k_curr_pose_error_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_pose_error_indiv, __pyx_k_curr_pose_error_indiv, sizeof(__pyx_k_curr_pose_error_indiv), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_pose_error_indiv_bp, __pyx_k_curr_pose_error_indiv_bp, sizeof(__pyx_k_curr_pose_error_indiv_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_poses, __pyx_k_curr_poses, sizeof(__pyx_k_curr_poses), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_poses_bp, __pyx_k_curr_poses_bp, sizeof(__pyx_k_curr_poses_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_ptcloud, __pyx_k_curr_ptcloud, sizeof(__pyx_k_curr_ptcloud), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_ptcloud_bp, __pyx_k_curr_ptcloud_bp, sizeof(__pyx_k_curr_ptcloud_bp), 0, 0, 1, 1},
   {&__pyx_n_s_curr_rgb, __pyx_k_curr_rgb, sizeof(__pyx_k_curr_rgb), 0, 0, 1, 1},
+  {&__pyx_n_s_curr_rgb_bp, __pyx_k_curr_rgb_bp, sizeof(__pyx_k_curr_rgb_bp), 0, 0, 1, 1},
   {&__pyx_n_s_cx, __pyx_k_cx, sizeof(__pyx_k_cx), 0, 0, 1, 1},
   {&__pyx_n_s_cy, __pyx_k_cy, sizeof(__pyx_k_cy), 0, 0, 1, 1},
   {&__pyx_n_s_da_goal_pts, __pyx_k_da_goal_pts, sizeof(__pyx_k_da_goal_pts), 0, 0, 1, 1},
@@ -6849,7 +7224,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_start_rgb, __pyx_k_start_rgb, sizeof(__pyx_k_start_rgb), 0, 0, 1, 1},
   {&__pyx_n_s_test, __pyx_k_test, sizeof(__pyx_k_test), 0, 0, 1, 1},
   {&__pyx_n_s_thresh, __pyx_k_thresh, sizeof(__pyx_k_thresh), 0, 0, 1, 1},
-  {&__pyx_n_s_torchviz_realctrlviz, __pyx_k_torchviz_realctrlviz, sizeof(__pyx_k_torchviz_realctrlviz), 0, 0, 1, 1},
+  {&__pyx_n_s_torchviz_realctrlcompviz, __pyx_k_torchviz_realctrlcompviz, sizeof(__pyx_k_torchviz_realctrlcompviz), 0, 0, 1, 1},
   {&__pyx_kp_u_unknown_dtype_code_in_numpy_pxd, __pyx_k_unknown_dtype_code_in_numpy_pxd, sizeof(__pyx_k_unknown_dtype_code_in_numpy_pxd), 0, 1, 0, 0},
   {&__pyx_n_s_use_simulator, __pyx_k_use_simulator, sizeof(__pyx_k_use_simulator), 0, 0, 1, 1},
   {&__pyx_n_s_winsize, __pyx_k_winsize, sizeof(__pyx_k_winsize), 0, 0, 1, 1},
@@ -6966,17 +7341,17 @@ static int __Pyx_InitCachedConstants(void) {
   __Pyx_GOTREF(__pyx_tuple__9);
   __Pyx_GIVEREF(__pyx_tuple__9);
 
-  /* "torchviz/realctrlviz.pyx":50
+  /* "torchviz/realctrlcompviz.pyx":54
  *         void stop_saving_frames();
  * 
  * def assert_contiguous(arrays):             # <<<<<<<<<<<<<<
  *     for arr in arrays:
  *         assert arr.flags['C_CONTIGUOUS']
  */
-  __pyx_tuple__10 = PyTuple_Pack(2, __pyx_n_s_arrays, __pyx_n_s_arr); if (unlikely(!__pyx_tuple__10)) __PYX_ERR(0, 50, __pyx_L1_error)
+  __pyx_tuple__10 = PyTuple_Pack(2, __pyx_n_s_arrays, __pyx_n_s_arr); if (unlikely(!__pyx_tuple__10)) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__10);
   __Pyx_GIVEREF(__pyx_tuple__10);
-  __pyx_codeobj__11 = (PyObject*)__Pyx_PyCode_New(1, 0, 2, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__10, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_home_barun_Projects_se3nets_pyt, __pyx_n_s_assert_contiguous, 50, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__11)) __PYX_ERR(0, 50, __pyx_L1_error)
+  __pyx_codeobj__11 = (PyObject*)__Pyx_PyCode_New(1, 0, 2, 0, 0, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__10, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_home_barun_Projects_se3nets_pyt, __pyx_n_s_assert_contiguous, 54, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__11)) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_RefNannyFinishContext();
   return 0;
   __pyx_L1_error:;
@@ -6992,11 +7367,11 @@ static int __Pyx_InitGlobals(void) {
 }
 
 #if PY_MAJOR_VERSION < 3
-PyMODINIT_FUNC initrealctrlviz(void); /*proto*/
-PyMODINIT_FUNC initrealctrlviz(void)
+PyMODINIT_FUNC initrealctrlcompviz(void); /*proto*/
+PyMODINIT_FUNC initrealctrlcompviz(void)
 #else
-PyMODINIT_FUNC PyInit_realctrlviz(void); /*proto*/
-PyMODINIT_FUNC PyInit_realctrlviz(void)
+PyMODINIT_FUNC PyInit_realctrlcompviz(void); /*proto*/
+PyMODINIT_FUNC PyInit_realctrlcompviz(void)
 #endif
 {
   PyObject *__pyx_t_1 = NULL;
@@ -7010,7 +7385,7 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
           Py_FatalError("failed to import 'refnanny' module");
   }
   #endif
-  __Pyx_RefNannySetupContext("PyMODINIT_FUNC PyInit_realctrlviz(void)", 0);
+  __Pyx_RefNannySetupContext("PyMODINIT_FUNC PyInit_realctrlcompviz(void)", 0);
   if (__Pyx_check_binary_version() < 0) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_empty_tuple = PyTuple_New(0); if (unlikely(!__pyx_empty_tuple)) __PYX_ERR(0, 1, __pyx_L1_error)
   __pyx_empty_bytes = PyBytes_FromStringAndSize("", 0); if (unlikely(!__pyx_empty_bytes)) __PYX_ERR(0, 1, __pyx_L1_error)
@@ -7039,7 +7414,7 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   #endif
   /*--- Module creation code ---*/
   #if PY_MAJOR_VERSION < 3
-  __pyx_m = Py_InitModule4("realctrlviz", __pyx_methods, 0, 0, PYTHON_API_VERSION); Py_XINCREF(__pyx_m);
+  __pyx_m = Py_InitModule4("realctrlcompviz", __pyx_methods, 0, 0, PYTHON_API_VERSION); Py_XINCREF(__pyx_m);
   #else
   __pyx_m = PyModule_Create(&__pyx_moduledef);
   #endif
@@ -7056,14 +7431,14 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   #if PY_MAJOR_VERSION < 3 && (__PYX_DEFAULT_STRING_ENCODING_IS_ASCII || __PYX_DEFAULT_STRING_ENCODING_IS_DEFAULT)
   if (__Pyx_init_sys_getdefaultencoding_params() < 0) __PYX_ERR(0, 1, __pyx_L1_error)
   #endif
-  if (__pyx_module_is_main_torchviz__realctrlviz) {
+  if (__pyx_module_is_main_torchviz__realctrlcompviz) {
     if (PyObject_SetAttrString(__pyx_m, "__name__", __pyx_n_s_main) < 0) __PYX_ERR(0, 1, __pyx_L1_error)
   }
   #if PY_MAJOR_VERSION >= 3
   {
     PyObject *modules = PyImport_GetModuleDict(); if (unlikely(!modules)) __PYX_ERR(0, 1, __pyx_L1_error)
-    if (!PyDict_GetItemString(modules, "torchviz.realctrlviz")) {
-      if (unlikely(PyDict_SetItemString(modules, "torchviz.realctrlviz", __pyx_m) < 0)) __PYX_ERR(0, 1, __pyx_L1_error)
+    if (!PyDict_GetItemString(modules, "torchviz.realctrlcompviz")) {
+      if (unlikely(PyDict_SetItemString(modules, "torchviz.realctrlcompviz", __pyx_m) < 0)) __PYX_ERR(0, 1, __pyx_L1_error)
     }
   }
   #endif
@@ -7075,10 +7450,10 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   /*--- Variable export code ---*/
   /*--- Function export code ---*/
   /*--- Type init code ---*/
-  if (PyType_Ready(&__pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz) < 0) __PYX_ERR(0, 54, __pyx_L1_error)
-  __pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz.tp_print = 0;
-  if (PyObject_SetAttrString(__pyx_m, "PyRealCtrlViz", (PyObject *)&__pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz) < 0) __PYX_ERR(0, 54, __pyx_L1_error)
-  __pyx_ptype_8torchviz_11realctrlviz_PyRealCtrlViz = &__pyx_type_8torchviz_11realctrlviz_PyRealCtrlViz;
+  if (PyType_Ready(&__pyx_type_8torchviz_15realctrlcompviz_PyRealCtrlCompViz) < 0) __PYX_ERR(0, 58, __pyx_L1_error)
+  __pyx_type_8torchviz_15realctrlcompviz_PyRealCtrlCompViz.tp_print = 0;
+  if (PyObject_SetAttrString(__pyx_m, "PyRealCtrlCompViz", (PyObject *)&__pyx_type_8torchviz_15realctrlcompviz_PyRealCtrlCompViz) < 0) __PYX_ERR(0, 58, __pyx_L1_error)
+  __pyx_ptype_8torchviz_15realctrlcompviz_PyRealCtrlCompViz = &__pyx_type_8torchviz_15realctrlcompviz_PyRealCtrlCompViz;
   /*--- Type import code ---*/
   __pyx_ptype_7cpython_4type_type = __Pyx_ImportType(__Pyx_BUILTIN_MODULE_NAME, "type", 
   #if CYTHON_COMPILING_IN_PYPY
@@ -7099,7 +7474,7 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   if (__Pyx_patch_abc() < 0) __PYX_ERR(0, 1, __pyx_L1_error)
   #endif
 
-  /* "torchviz/realctrlviz.pyx":9
+  /* "torchviz/realctrlcompviz.pyx":9
  * 
  * from libcpp.string cimport string
  * import numpy as np             # <<<<<<<<<<<<<<
@@ -7111,31 +7486,31 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_np, __pyx_t_1) < 0) __PYX_ERR(0, 9, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "torchviz/realctrlviz.pyx":11
+  /* "torchviz/realctrlcompviz.pyx":11
  * import numpy as np
  * cimport numpy as np
  * import ctypes             # <<<<<<<<<<<<<<
  * 
- * cdef extern from "realctrlviz.hpp":
+ * cdef extern from "realctrlcompviz.hpp":
  */
   __pyx_t_1 = __Pyx_Import(__pyx_n_s_ctypes, 0, -1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 11, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_ctypes, __pyx_t_1) < 0) __PYX_ERR(0, 11, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "torchviz/realctrlviz.pyx":50
+  /* "torchviz/realctrlcompviz.pyx":54
  *         void stop_saving_frames();
  * 
  * def assert_contiguous(arrays):             # <<<<<<<<<<<<<<
  *     for arr in arrays:
  *         assert arr.flags['C_CONTIGUOUS']
  */
-  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_8torchviz_11realctrlviz_1assert_contiguous, NULL, __pyx_n_s_torchviz_realctrlviz); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 50, __pyx_L1_error)
+  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_8torchviz_15realctrlcompviz_1assert_contiguous, NULL, __pyx_n_s_torchviz_realctrlcompviz); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_assert_contiguous, __pyx_t_1) < 0) __PYX_ERR(0, 50, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_assert_contiguous, __pyx_t_1) < 0) __PYX_ERR(0, 54, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "torchviz/realctrlviz.pyx":1
+  /* "torchviz/realctrlcompviz.pyx":1
  * # --------------------------------------------------------             # <<<<<<<<<<<<<<
  * # SE3-POSE-NETS
  * # Copyright (c) 2017
@@ -7160,11 +7535,11 @@ PyMODINIT_FUNC PyInit_realctrlviz(void)
   __Pyx_XDECREF(__pyx_t_1);
   if (__pyx_m) {
     if (__pyx_d) {
-      __Pyx_AddTraceback("init torchviz.realctrlviz", __pyx_clineno, __pyx_lineno, __pyx_filename);
+      __Pyx_AddTraceback("init torchviz.realctrlcompviz", __pyx_clineno, __pyx_lineno, __pyx_filename);
     }
     Py_DECREF(__pyx_m); __pyx_m = 0;
   } else if (!PyErr_Occurred()) {
-    PyErr_SetString(PyExc_ImportError, "init torchviz.realctrlviz");
+    PyErr_SetString(PyExc_ImportError, "init torchviz.realctrlcompviz");
   }
   __pyx_L0:;
   __Pyx_RefNannyFinishContext();

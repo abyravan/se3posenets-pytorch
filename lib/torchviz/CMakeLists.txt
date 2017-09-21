@@ -333,3 +333,9 @@ add_library(realctrlviz
              realctrl_visualizer.cpp
              src/render/renderer.cpp)
 target_link_libraries(realctrlviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
+
+# Real-Ctrl Visualizer
+add_library(realctrlcompviz
+             realctrlcomp_visualizer.cpp
+             src/render/renderer.cpp)
+target_link_libraries(realctrlcompviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})

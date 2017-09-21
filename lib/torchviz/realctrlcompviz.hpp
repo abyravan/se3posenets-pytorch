@@ -24,6 +24,10 @@ class RealCtrlViz
                               const float *curr_poses, const float *curr_masks, const unsigned char *curr_rgb,
                               const float curr_pose_error, const float *curr_pose_errors_indiv,
                               const float *curr_deg_error,
+                              const float *curr_angles_bp, const float *curr_ptcloud_bp,
+                              const float *curr_poses_bp, const float *curr_masks_bp, const unsigned char *curr_rgb_bp,
+                              const float curr_pose_error_bp, const float *curr_pose_errors_indiv_bp,
+                              const float *curr_deg_error_bp,
                               int save_frame);
 
         void update_real_init(const float *start_angles, const float *start_ptcloud,

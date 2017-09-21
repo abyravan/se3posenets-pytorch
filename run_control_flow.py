@@ -14,11 +14,11 @@ cam_intrinsics = {'fx': 589.3664541825391 / 2,
 savedir = 'temp'  # TODO: Fix this!
 
 # Load pangolin visualizer library
-from torchviz import pangoviz
-pangolin = pangoviz.PyPangolinViz(seq_len, img_ht, img_wd, img_scale, num_se3,
-                                  cam_intrinsics['fx'], cam_intrinsics['fy'],
-                                  cam_intrinsics['cx'], cam_intrinsics['cy'],
-                                  dt, oldgrippermodel, savedir)
+from torchviz import realctrlviz
+pangolin = realctrlviz.PyRealCtrlViz(img_ht, img_wd, img_scale, num_se3,
+                                     cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                     cam_intrinsics['cx'], cam_intrinsics['cy'],
+                                     savedir, 1)
 
 import argparse
 import os
@@ -310,6 +310,23 @@ def main():
         ]
     )
 
+    # ###
+    # start_angles_all = torch.FloatTensor(
+    #     [
+    #         [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+    #         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #     ]
+    # )
+    #
+    # goal_angles_all = torch.FloatTensor(
+    #     [
+    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+    #     ]
+    # )
+
     # Iterate over test configs
     num_configs = start_angles_all.size(0)
     if pargs.num_configs > 0:
@@ -345,16 +362,49 @@ def main():
         ############ Get start & goal point clouds, predict poses & masks
         # Initialize problem
         start_pts, da_goal_pts = torch.zeros(1, 3, args.img_ht, args.img_wd), torch.zeros(1, 3, args.img_ht, args.img_wd)
-        pangolin.init_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
+        pangolin.initialize_problem(start_angles.numpy(), goal_angles.numpy(), start_pts[0].numpy(), da_goal_pts[0].numpy())
 
-        # Compute the flow targets
-        flow_target = (da_goal_pts - start_pts)
+        # Get full goal point cloud
+        #start_pts, _ = generate_ptcloud(start_angles)
+        goal_pts, _ = generate_ptcloud(goal_angles)
+        # da_goal_pts = goal_pts
+        # flow_target = (da_goal_pts - start_pts) # Compute the flow targets
+
+        # Masks & poses init to zeros
+        start_masks, start_poses = torch.zeros(1, 8, 240, 320), torch.zeros(1, 8, 3, 4)
+        goal_masks, goal_poses = start_masks, start_poses
+        start_rgb, goal_rgb = torch.zeros(3,240,320).byte(), torch.zeros(3,240,320).byte()
 
         # Print error
         print('Initial jt angle error:')
         full_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)  # Full error in degrees
         print(full_deg_error.view(7, 1))
         init_errors.append(full_deg_error.view(1, 7))
+
+        # Compute initial pose loss
+        init_pose_loss = args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
+        init_deg_errors = full_deg_error.view(7).numpy()
+
+        # Render the poses
+        # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
+        print("Initializing the visualizer...")
+
+        start_masks_f, goal_masks_f = start_masks.cpu().float(), goal_masks.cpu().float()
+        start_poses_f, goal_poses_f = start_poses.cpu().float(), goal_poses.cpu().float()
+        start_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        goal_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        pangolin.update_real_init(start_angles.numpy(),
+                                  start_pts[0].cpu().numpy(),
+                                  start_poses_f[0].numpy(),
+                                  start_masks_f[0].numpy(),
+                                  start_rgb.numpy(),
+                                  goal_angles.numpy(),
+                                  goal_pts[0].cpu().numpy(),
+                                  goal_poses_f[0].numpy(),
+                                  goal_masks_f[0].numpy(),
+                                  goal_rgb.numpy(),
+                                  init_pose_loss,
+                                  init_deg_errors)
 
         ########################
         ############ Run the controller
@@ -367,11 +417,15 @@ def main():
         # Init vars for all items
         init_ctrl_v = util.to_var(torch.zeros(1, args.num_ctrl).type(deftype),
                                   requires_grad=True)  # Need grad w.r.t this
-        target_flows_v = util.to_var(flow_target.type(deftype), requires_grad=False)
+        # target_flows_v = util.to_var(flow_target.type(deftype), requires_grad=False)
 
-        # Plots for errors and loss
-        fig, axes = plt.subplots(2, 1)
-        fig.show()
+        # Save for final frame saving
+        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [], []
+        curr_rgb_s, loss_s, curr_deg_errors_s = [], [], []
+
+        # # Plots for errors and loss
+        # fig, axes = plt.subplots(2, 1)
+        # fig.show()
 
         # Run the controller for max_iter iterations
         gen_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -395,13 +449,13 @@ def main():
             winsize, dathresh = 5, 0.01
             pangolin.compute_gt_da(angles[0].numpy(), angles[it].numpy(),
                                    winsize, dathresh,
-                                   da_goal_pts[0].numpy(), gtwarped_out[0].numpy(),
+                                   gtwarped_out[0].numpy(),
                                    gtda_ids[0].numpy())
 
-            da_ids = gtda_ids.expand_as(da_goal_pts).clone(); da_ids[da_ids == -1] = 1
+            da_ids = gtda_ids.expand_as(goal_pts).clone(); da_ids[da_ids == -1] = 1
             warpedtarget = da_goal_pts.clone().zero_()
             warpedtarget.view(1,3,-1).scatter_(2, da_ids.view(1,3,-1).long(), da_goal_pts.view(1,3,-1))
-            warpedmask   = util.to_var(warpedtarget.narrow(1,2,1).ne(0).expand_as(da_goal_pts).type(deftype))
+            warpedmask   = util.to_var(warpedtarget.narrow(1,2,1).ne(0).expand_as(goal_pts).type(deftype))
             warpedtarget = util.to_var(warpedtarget.type(deftype), requires_grad=False)
 
             '''
@@ -469,29 +523,50 @@ def main():
             print('Joint angle errors in degrees: ',
                   torch.cat([deg_errors[-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
 
-            # Plot the errors & loss
-            colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
-            labels = []
-            if ((it % 4) == 0) or (loss < pargs.loss_threshold):
-                conv = "Converged" if (loss < pargs.loss_threshold) else ""
-                axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k + 1, num_configs,
-                                                                                             (it + 1), loss)) + conv)
-                for j in xrange(7):
-                    axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
-                    labels.append("Jt-{}".format(j))
-                # I'm basically just demonstrating several different legend options here...
-                axes[0].legend(labels, ncol=4, loc='upper center',
-                               bbox_to_anchor=[0.5, 1.1],
-                               columnspacing=1.0, labelspacing=0.0,
-                               handletextpad=0.0, handlelength=1.5,
-                               fancybox=True, shadow=True)
-                axes[1].set_title("Iter: {}, Loss".format(it + 1))
-                axes[1].plot(losses, color='k')
-                fig.canvas.draw()  # Render
-                plt.pause(0.01)
-            if (it % args.disp_freq) == 0:  # Clear now and then
-                for ax in axes:
-                    ax.cla()
+            #### Render stuff
+            curr_pts_f = curr_pts.cpu().float()
+            curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
+            pangolin.update_real_curr(curr_angles.numpy(),
+                                      curr_pts_f[0].numpy(),
+                                      start_poses_f[0].numpy(),
+                                      start_masks_f[0].numpy(),
+                                      start_rgb.numpy(),
+                                      loss,
+                                      curr_deg_errors[0].numpy(),
+                                      0)  # Don't save frame
+
+            # Save for future frame generation!
+            curr_angles_s.append(curr_angles)
+            curr_pts_s.append(curr_pts_f[0])
+            curr_poses_s.append(start_poses_f[0])
+            curr_masks_s.append(start_masks_f[0])
+            curr_rgb_s.append(start_rgb)
+            loss_s.append(loss)
+            curr_deg_errors_s.append(curr_deg_errors[0])
+
+            # # Plot the errors & loss
+            # colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
+            # labels = []
+            # if ((it % 4) == 0) or (loss < pargs.loss_threshold):
+            #     conv = "Converged" if (loss < pargs.loss_threshold) else ""
+            #     axes[0].set_title(("Test: {}/{}, Iter: {}, Loss: {}, Jt angle errors".format(k + 1, num_configs,
+            #                                                                                  (it + 1), loss)) + conv)
+            #     for j in xrange(7):
+            #         axes[0].plot(torch.cat(deg_errors, 0).numpy()[:, j], color=colors[j])
+            #         labels.append("Jt-{}".format(j))
+            #     # I'm basically just demonstrating several different legend options here...
+            #     axes[0].legend(labels, ncol=4, loc='upper center',
+            #                    bbox_to_anchor=[0.5, 1.1],
+            #                    columnspacing=1.0, labelspacing=0.0,
+            #                    handletextpad=0.0, handlelength=1.5,
+            #                    fancybox=True, shadow=True)
+            #     axes[1].set_title("Iter: {}, Loss".format(it + 1))
+            #     axes[1].plot(losses, color='k')
+            #     fig.canvas.draw()  # Render
+            #     plt.pause(0.01)
+            # if (it % args.disp_freq) == 0:  # Clear now and then
+            #     for ax in axes:
+            #         ax.cla()
 
             # Finish
             rest_time.update(time.time() - start)
@@ -552,6 +627,43 @@ def main():
                           'angles': angles, 'ctrls': ctrls,
                           'predctrls': ctrl_grads,
                           'deg_errors': deg_errors, 'losses': losses, 'status': status})
+
+        # ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
+        # ######## Saving frames to disk now!
+        #
+        # pangolin.update_real_init(start_angles.numpy(),
+        #                           start_pts[0].cpu().numpy(),
+        #                           start_poses_f[0].numpy(),
+        #                           start_masks_f[0].numpy(),
+        #                           start_rgb.numpy(),
+        #                           goal_angles.numpy(),
+        #                           goal_pts[0].cpu().numpy(),
+        #                           goal_poses_f[0].numpy(),
+        #                           goal_masks_f[0].numpy(),
+        #                           goal_rgb.numpy(),
+        #                           init_pose_loss.data[0],
+        #                           init_deg_errors)
+        #
+        # # Start saving frames
+        # save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
+        # util.create_dir(save_dir)  # Create directory
+        # pangolin.start_saving_frames(save_dir)  # Start saving frames
+        #
+        # for j in xrange(len(curr_angles_s)):
+        #     if (j % 10 == 0):
+        #         print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
+        #     pangolin.update_real_curr(curr_angles_s[j].numpy(),
+        #                               curr_pts_s[j].numpy(),
+        #                               curr_poses_s[j].numpy(),
+        #                               curr_masks_s[j].numpy(),
+        #                               curr_rgb_s[j].numpy(),
+        #                               loss_s[j],
+        #                               curr_deg_errors_s[j].numpy(),
+        #                               1)  # Save frame
+        #
+        # # Stop saving frames
+        # time.sleep(1)
+        # pangolin.stop_saving_frames()
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors, 0), torch.cat(final_errors, 0)

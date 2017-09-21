@@ -10,7 +10,7 @@ import numpy as np
 cimport numpy as np
 import ctypes
 
-cdef extern from "realctrlviz.hpp":
+cdef extern from "realctrlcompviz.hpp":
     cdef cppclass RealCtrlViz:
         RealCtrlViz(int imgHeight, int imgWidth, float imgScale, int nSE3,
                     float fx, float fy, float cx, float cy,
@@ -32,6 +32,10 @@ cdef extern from "realctrlviz.hpp":
                               const float *curr_poses, const float *curr_masks, const unsigned char *curr_rgb,
                               const float curr_pose_error, const float *curr_pose_errors_indiv,
                               const float *curr_deg_error,
+                              const float *curr_angles_bp, const float *curr_ptcloud_bp,
+                              const float *curr_poses_bp, const float *curr_masks_bp, const unsigned char *curr_rgb_bp,
+                              const float curr_pose_error_bp, const float *curr_pose_errors_indiv_bp,
+                              const float *curr_deg_error_bp,
                               int save_frame);
 
         void update_real_init(const float *start_angles, const float *start_ptcloud,
@@ -51,8 +55,8 @@ def assert_contiguous(arrays):
     for arr in arrays:
         assert arr.flags['C_CONTIGUOUS']
 
-cdef class PyRealCtrlViz:
-    cdef RealCtrlViz *realctrlviz     # hold a C++ instance which we're wrapping
+cdef class PyRealCtrlCompViz:
+    cdef RealCtrlViz *realctrlcompviz     # hold a C++ instance which we're wrapping
     cdef int img_ht
     cdef int img_wd
 
@@ -61,17 +65,17 @@ cdef class PyRealCtrlViz:
                     string savedir, int use_simulator):
         self.img_ht   = img_ht
         self.img_wd   = img_wd
-        self.realctrlviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
+        self.realctrlcompviz = new RealCtrlViz(img_ht, img_wd, img_scale, num_se3,
                                        fx, fy, cx, cy, savedir, use_simulator)
 
     def __dealloc__(self):
-        del self.realctrlviz
+        del self.realctrlcompviz
 
     def render_arm(self, np.ndarray[np.float32_t, ndim=1] config,
                          np.ndarray[np.float32_t, ndim=3] ptcloud,
                          np.ndarray[np.float32_t, ndim=3] labels):
         # Run CPP code
-        self.realctrlviz.render_arm(&config[0],
+        self.realctrlcompviz.render_arm(&config[0],
                                  &ptcloud[0,0,0],
                                  &labels[0,0,0])
 
@@ -81,7 +85,7 @@ cdef class PyRealCtrlViz:
                             np.ndarray[np.float32_t, ndim=3] gtwarped_out,
                             np.ndarray[np.float32_t, ndim=3] gtda_ids):
         # Run CPP code
-        self.realctrlviz.compute_gt_da(&config1[0],
+        self.realctrlcompviz.compute_gt_da(&config1[0],
                                        &config2[0],
                                        winsize,
                                        thresh,
@@ -93,7 +97,7 @@ cdef class PyRealCtrlViz:
                             np.ndarray[np.float32_t, ndim=3] start_pts,
                             np.ndarray[np.float32_t, ndim=3] da_goal_pts):
         # Run CPP code
-        self.realctrlviz.initialize_problem(&config1[0],
+        self.realctrlcompviz.initialize_problem(&config1[0],
                                             &config2[0],
                                             &start_pts[0,0,0],
                                             &da_goal_pts[0,0,0])
@@ -106,9 +110,17 @@ cdef class PyRealCtrlViz:
                                float curr_pose_error,
                                np.ndarray[np.float32_t, ndim=1] curr_pose_error_indiv,
                                np.ndarray[np.float32_t, ndim=1] curr_deg_error,
+                               np.ndarray[np.float32_t, ndim=1] curr_angles_bp,
+                               np.ndarray[np.float32_t, ndim=3] curr_ptcloud_bp,
+                               np.ndarray[np.float32_t, ndim=3] curr_poses_bp,
+                               np.ndarray[np.float32_t, ndim=3] curr_masks_bp,
+                               np.ndarray[np.uint8_t, ndim=3] curr_rgb_bp,
+                               float curr_pose_error_bp,
+                               np.ndarray[np.float32_t, ndim=1] curr_pose_error_indiv_bp,
+                               np.ndarray[np.float32_t, ndim=1] curr_deg_error_bp,
                                int save_frame):
         # Run CPP code
-        self.realctrlviz.update_real_curr(&curr_angles[0],
+        self.realctrlcompviz.update_real_curr(&curr_angles[0],
                                        &curr_ptcloud[0,0,0],
                                        &curr_poses[0,0,0],
                                        &curr_masks[0,0,0],
@@ -116,6 +128,14 @@ cdef class PyRealCtrlViz:
                                        curr_pose_error,
                                        &curr_pose_error_indiv[0],
                                        &curr_deg_error[0],
+                                       &curr_angles_bp[0],
+                                       &curr_ptcloud_bp[0,0,0],
+                                       &curr_poses_bp[0,0,0],
+                                       &curr_masks_bp[0,0,0],
+                                       &curr_rgb_bp[0,0,0],
+                                       curr_pose_error_bp,
+                                       &curr_pose_error_indiv_bp[0],
+                                       &curr_deg_error_bp[0],
                                        save_frame)
 
     def update_real_init(self, np.ndarray[np.float32_t, ndim=1] start_angles,
@@ -132,7 +152,7 @@ cdef class PyRealCtrlViz:
                                np.ndarray[np.float32_t, ndim=1] init_pose_error_indiv,
                                np.ndarray[np.float32_t, ndim=1] init_deg_error):
         # Run CPP code
-        self.realctrlviz.update_real_init(&start_angles[0],
+        self.realctrlcompviz.update_real_init(&start_angles[0],
                                        &start_ptcloud[0,0,0],
                                        &start_poses[0,0,0],
                                        &start_masks[0,0,0],
@@ -147,12 +167,12 @@ cdef class PyRealCtrlViz:
                                        &init_deg_error[0])
     def reset(self):
         # Run CPP code
-        self.realctrlviz.reset()
+        self.realctrlcompviz.reset()
 
     def start_saving_frames(self, string framesavedir):
         # Run CPP code
-        self.realctrlviz.start_saving_frames(framesavedir)
+        self.realctrlcompviz.start_saving_frames(framesavedir)
 
     def stop_saving_frames(self):
         # Run CPP code
-        self.realctrlviz.stop_saving_frames()
+        self.realctrlcompviz.stop_saving_frames()

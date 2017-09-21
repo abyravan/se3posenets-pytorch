@@ -20,7 +20,7 @@
 #include "render/renderer.h"
 
 // Viz class for cython
-#include "realctrl_visualizer.hpp"
+#include "realctrlcomp_visualizer.hpp"
 
 using namespace std;
 
@@ -632,20 +632,65 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
     pangolin::CreatePanel("gui").SetBounds(0.5,1,0,pangolin::Attach::Pix(panelWidth));
     pangolin::CreatePanel("se3gui").SetBounds(0.0,0.5,0,pangolin::Attach::Pix(panelWidth));
 
-    // Add labels
-    std::vector<std::string> jterr_labels;
-    jterr_labels.push_back(std::string("Joint 1"));
-    jterr_labels.push_back(std::string("Joint 2"));
-    jterr_labels.push_back(std::string("Joint 3"));
-    jterr_labels.push_back(std::string("Joint 4"));
-//    jterr_labels.push_back(std::string("Joint 5"));
-//    jterr_labels.push_back(std::string("Joint 6"));
-//    jterr_labels.push_back(std::string("Joint 7"));
-    log_1.SetLabels(jterr_labels);
+//    // Add labels
+//    std::vector<std::string> jterr_labels;
+//    jterr_labels.push_back(std::string("Joint 1"));
+//    jterr_labels.push_back(std::string("Joint 2"));
+//    jterr_labels.push_back(std::string("Joint 3"));
+//    jterr_labels.push_back(std::string("Joint 4"));
+////    jterr_labels.push_back(std::string("Joint 5"));
+////    jterr_labels.push_back(std::string("Joint 6"));
+////    jterr_labels.push_back(std::string("Joint 7"));
+//    log_1.SetLabels(jterr_labels);
 
     // OpenGL 'view' of data. We might have many views of the same data.
-    plotter1 = new pangolin::Plotter(&log_1,0.0f,500.0f,-75.0f,75.0f,50.0f,25.0f);
+    plotter1 = new pangolin::Plotter(&log_1,0.0f,500.0f,0.0f,50.0f,50.0f,25.0f);
     plotter1->SetBounds(0.0f, 1.0f, 0.0f, 0.5f);
+
+    std::vector<float3> plotcolors = {{99/255.0f,220/255.0f,141/255.0f},
+                                      {158/255.0f,107/255.0f,195/255.0f},
+                                      {242/255.0f,234/255.0f,149/255.0f},
+                                      {208/255.0f,92/255.0f,101/255.0f}};
+
+    plotter1->ClearSeries();
+    plotter1->AddSeries("$i", "$0", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(1,0,0), "(GN) Joint Avg");
+//    plotter1->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[1].x, plotcolors[1].y, plotcolors[1].z), "(GN) Joint 2");
+//    plotter1->AddSeries("$i", "$2", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[2].x, plotcolors[2].y, plotcolors[2].z), "(GN) Joint 3");
+//    plotter1->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[3].x, plotcolors[3].y, plotcolors[3].z), "(GN) Joint 4");
+
+    plotter1->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(1,1,0), "(BACKPROP) Joint Avg");
+//    plotter1->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[1].x, plotcolors[1].y, plotcolors[1].z), "(BACKPROP) Joint 2");
+//    plotter1->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[2].x, plotcolors[2].y, plotcolors[2].z), "(BACKPROP) Joint 3");
+//    plotter1->AddSeries("$i", "$7", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[3].x, plotcolors[3].y, plotcolors[3].z), "(BACKPROP) Joint 4");
+
+
+//    plotter1->ClearSeries();
+//    plotter1->AddSeries("$i", "$0", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[0].x, plotcolors[0].y, plotcolors[0].z), "(GN) Joint 1");
+//    plotter1->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[1].x, plotcolors[1].y, plotcolors[1].z), "(GN) Joint 2");
+//    plotter1->AddSeries("$i", "$2", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[2].x, plotcolors[2].y, plotcolors[2].z), "(GN) Joint 3");
+//    plotter1->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(plotcolors[3].x, plotcolors[3].y, plotcolors[3].z), "(GN) Joint 4");
+
+//    plotter1->AddSeries("$i", "$4", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[0].x, plotcolors[0].y, plotcolors[0].z), "(BACKPROP) Joint 1");
+//    plotter1->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[1].x, plotcolors[1].y, plotcolors[1].z), "(BACKPROP) Joint 2");
+//    plotter1->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[2].x, plotcolors[2].y, plotcolors[2].z), "(BACKPROP) Joint 3");
+//    plotter1->AddSeries("$i", "$7", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(plotcolors[3].x, plotcolors[3].y, plotcolors[3].z), "(BACKPROP) Joint 4");
+
 //    plotter1.Track("$i");
 
 //    // Add some sample annotations to the plot
@@ -672,7 +717,7 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 //    log_2.SetLabels(poserr_labels);
 
     // OpenGL 'view' of data. We might have many views of the same data.
-    plotter2 = new pangolin::Plotter(&log_2,0.0f,500.0f,-50.0f,1500.0f,50.0f,1.0f);
+    plotter2 = new pangolin::Plotter(&log_2,0.0f,500.0f,-50.0f,400.0f,50.0f,1.0f);
     //plotter2 = new pangolin::Plotter(&log_2,0.0f,500.0f,0.0f,400.0f,50.0f,10.0f*M_E);
     plotter2->SetBounds(0.0f, 1.0f, 0.5f, 1.0f);
 //    plotter2.Track("$i");
@@ -680,21 +725,38 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
     // Add series plots
     plotter2->ClearSeries();
     plotter2->AddSeries("$i", "$0", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[0].x, colors[0].y, colors[0].z), "Pose-1");
+                        pangolin::Colour(1,0,0), "(GN) Pose-Avg");
+//    plotter2->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[1].x, colors[1].y, colors[1].z), "(GN) Pose-2");
+//    plotter2->AddSeries("$i", "$2", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[2].x, colors[2].y, colors[2].z), "(GN) Pose-3");
+////    plotter2->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
+////                        pangolin::Colour(colors[3].x, colors[3].y, colors[3].z), "(GN) Pose-4");
+//    plotter2->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[4].x, colors[4].y, colors[4].z), "(GN) Pose-5");
+//    plotter2->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[5].x, colors[5].y, colors[5].z), "(GN) Pose-6");
+//    plotter2->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[6].x, colors[6].y, colors[6].z), "(GN) Pose-7");
+//    plotter2->AddSeries("$i", "$7", pangolin::DrawingMode::DrawingModeLine,
+//                        pangolin::Colour(colors[7].x, colors[7].y, colors[7].z), "(GN) Pose-8");
+
     plotter2->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[1].x, colors[1].y, colors[1].z), "Pose-2");
-    plotter2->AddSeries("$i", "$2", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[2].x, colors[2].y, colors[2].z), "Pose-3");
-    plotter2->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[3].x, colors[3].y, colors[3].z), "Pose-4");
-    plotter2->AddSeries("$i", "$4", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[4].x, colors[4].y, colors[4].z), "Pose-5");
-    plotter2->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[5].x, colors[5].y, colors[5].z), "Pose-6");
-    plotter2->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[6].x, colors[6].y, colors[6].z), "Pose-7");
-    plotter2->AddSeries("$i", "$7", pangolin::DrawingMode::DrawingModeLine,
-                        pangolin::Colour(colors[7].x, colors[7].y, colors[7].z), "Pose-8");
+                        pangolin::Colour(1,1,0), "(BACKPROP) Pose-Avg");
+//    plotter2->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[1].x, colors[1].y, colors[1].z), "(BACKPROP) Pose-2");
+//    plotter2->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[2].x, colors[2].y, colors[2].z), "(BACKPROP) Pose-3");
+////    plotter2->AddSeries("$i", "$11", pangolin::DrawingMode::DrawingModeDashed,
+////                        pangolin::Colour(colors[3].x, colors[3].y, colors[3].z), "(BACKPROP) Pose-4");
+//    plotter2->AddSeries("$i", "$7", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[4].x, colors[4].y, colors[4].z), "(BACKPROP) Pose-5");
+//    plotter2->AddSeries("$i", "$13", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[5].x, colors[5].y, colors[5].z), "(BACKPROP) Pose-6");
+//    plotter2->AddSeries("$i", "$14", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[6].x, colors[6].y, colors[6].z), "(BACKPROP) Pose-7");
+//    plotter2->AddSeries("$i", "$15", pangolin::DrawingMode::DrawingModeDashed,
+//                        pangolin::Colour(colors[7].x, colors[7].y, colors[7].z), "(BACKPROP) Pose-8");
 
 //    // Add some sample annotations to the plot
 //    plotter2.AddMarker(pangolin::Marker::Horizontal, -1000, pangolin::Marker::LessThan, pangolin::Colour::White().WithAlpha(1.0f) );
@@ -703,15 +765,21 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
     // Create a display renderer
     pangolin::OpenGlRenderState camState(glK_pangolin);
     pangolin::OpenGlRenderState camStatePose(glK_pangolin);
-    pangolin::View & rgbDisp = pangolin::Display("rgb").SetAspect(glWidth*1.0f/(glHeight*1.0f));
+    pangolin::View & rgbDisp = pangolin::Display("rgb").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & pcDisp  = pangolin::Display("pointcloud").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & maskDisp = pangolin::Display("mask").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & poseDisp = pangolin::Display("pose").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camStatePose));
-    pangolin::View & rgbDispT = pangolin::Display("rgbT").SetAspect(glWidth*1.0f/(glHeight*1.0f));
+    pangolin::View & rgbDispT = pangolin::Display("rgbT").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & pcDispT  = pangolin::Display("pointcloudT").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & maskDispT = pangolin::Display("maskT").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
     pangolin::View & poseDispT = pangolin::Display("poseT").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camStatePose));
-    pangolin::View disp3d, disp3dT, camDisp;
+
+    pangolin::View & rgbDispB  = pangolin::Display("rgbB").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
+    pangolin::View & pcDispB   = pangolin::Display("pointcloudB").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
+    pangolin::View & maskDispB = pangolin::Display("maskB").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
+    pangolin::View & poseDispB = pangolin::Display("poseB").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camStatePose));
+
+    pangolin::View disp3d, disp3dB, disp3dT, camDisp;
     pangolin::View plotDisp, allDisp;
     if (data->use_simulator)
     {
@@ -737,21 +805,28 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
     else
     {
         disp3d = pangolin::Display("3d")
-                .SetBounds(pangolin::Attach::Pix(360), pangolin::Attach::Pix(600), 0.0, 1.0)
+                .SetBounds(pangolin::Attach::Pix(480), pangolin::Attach::Pix(720), 0.0, 1.0)
                 .SetLayout(pangolin::LayoutEqual)
                 .AddDisplay(rgbDisp)
                 .AddDisplay(pcDisp)
                 .AddDisplay(poseDisp)
                 .AddDisplay(maskDisp);
+        disp3dB = pangolin::Display("3dB")
+                .SetBounds(pangolin::Attach::Pix(240), pangolin::Attach::Pix(480), 0.0, 1.0)
+                .SetLayout(pangolin::LayoutEqual)
+                .AddDisplay(rgbDispB)
+                .AddDisplay(pcDispB)
+                .AddDisplay(poseDispB)
+                .AddDisplay(maskDispB);
         disp3dT = pangolin::Display("3dT")
-                .SetBounds(pangolin::Attach::Pix(120), pangolin::Attach::Pix(360), 0.0, 1.0)
+                .SetBounds(pangolin::Attach::Pix(0), pangolin::Attach::Pix(240), 0.0, 1.0)
                 .SetLayout(pangolin::LayoutEqual)
                 .AddDisplay(rgbDispT)
                 .AddDisplay(pcDispT)
                 .AddDisplay(poseDispT)
                 .AddDisplay(maskDispT);
        plotDisp = pangolin::Display("plot")
-                .SetBounds(pangolin::Attach::Pix(600), pangolin::Attach::Pix(840), 0.0, 1.0)
+                .SetBounds(pangolin::Attach::Pix(720), pangolin::Attach::Pix(960), 0.0, 1.0)
                 .AddDisplay(*plotter1)
                 .AddDisplay(*plotter2);
 
@@ -759,6 +834,7 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
                .SetBounds(0.0, 1.0f, pangolin::Attach::Pix(panelWidth), 1.0)
                .AddDisplay(plotDisp)
                .AddDisplay(disp3d)
+               .AddDisplay(disp3dB)
                .AddDisplay(disp3dT);
 
 //        camDisp = pangolin::Display("cam")
@@ -803,10 +879,15 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 //                 0.0857293,	0.913204,	0.398383,	0.0341757,
 //                 -0.548584,	0.377049,	-0.746251,	0.690717,
 //                 0,	0,	0,	1;
-    modelViewPose << -0.902913,	-0.100653,	0.417871,	-0.0470576,
-                     0.181079,	0.792633,	0.582188,	0.00421101,
-                     -0.389818,	0.601333,	-0.697453,	0.4468,
-                     0,	0,	0,	1	;
+//    modelViewPose << -0.902913,	-0.100653,	0.417871,	-0.0470576,
+//                     0.181079,	0.792633,	0.582188,	0.00421101,
+//                     -0.389818,	0.601333,	-0.697453,	0.4468,
+//                     0,	0,	0,	1	;
+
+    modelViewPose << -0.902913,	-0.100653,	0.417871,	0.398764,
+                     0.181079,	0.792633,	0.582188,	0.0520494,
+                     -0.389818,	0.601333,	-0.697453,	1.03481	,
+                     0,	0,	0,	1;
 
     camStatePose.SetModelViewMatrix(modelViewPose);
     poseDisp.SetHandler(new pangolin::Handler3D(camStatePose));
@@ -938,6 +1019,7 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
     // RGB texture
     pangolin::GlTexture texRGB(datac->imgWidth,datac->imgHeight,GL_RGB8);
+    pangolin::GlTexture texRGBBp(datac->imgWidth,datac->imgHeight,GL_RGB8);
     pangolin::GlTexture texRGBTar(datac->imgWidth,datac->imgHeight,GL_RGB8);
 
     // Run till asked to terminate
@@ -1049,9 +1131,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1099,9 +1181,65 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        //glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
+
+        //////////////////// ======= DRAW BACKPROP POINTS ========= ///////////////////////
+
+        //// DISPLAY PT CLOUDS /////
+
+        // Clear the display
+        glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+        pcDispB.ActivateScissorAndClear(camState);
+
+        // Enable flags
+        glEnable(GL_DEPTH_TEST);
+//        glEnable(GL_LIGHT0);
+        glEnable(GL_NORMALIZE);
+//        glEnable(GL_LIGHTING);
+        glEnable(GL_COLOR_MATERIAL);
+        glColor4ub(0xff,0xff,0xff,0xff);
+
+        // Apply inverse of modelview to get pts in model frame
+        glMultMatrixf(modelViewInv.data());
+
+        glPointSize(3.0);
+        glBegin(GL_POINTS);
+        for (int r = 0; r < datac->imgHeight; r++) // copy over from the flow matrix
+        {
+           for (int c = 0; c < datac->imgWidth; c++)
+           {
+               // Get pt index
+               int id = r * datac->imgWidth + c;
+
+               // ==== Target (green)
+               // Color based on 3D point
+//               float3 ptf = make_float3(datac->final_cloud[id + 0*npts],
+//                                        datac->final_cloud[id + 1*npts],
+//                                        datac->final_cloud[id + 2*npts]);
+//               float3 colorf = get_color(ptf, cube_min, cube_max);
+               std::vector<float> colorf = get_color_based_on_depth(datac->curr_cloud_bp[id + 2*npts]);
+               glColor3f(colorf[0],colorf[1],colorf[2]); // flip R & G so that right arm is red & left is green
+
+//               // Render pt and normals
+//               glNormal3f(datac->finalnorm_cloud[id + 0*npts],
+//                          datac->finalnorm_cloud[id + 1*npts],
+//                          datac->finalnorm_cloud[id + 2*npts]);
+               glVertex3f(datac->curr_cloud_bp[id + 0*npts],
+                          datac->curr_cloud_bp[id + 1*npts],
+                          datac->curr_cloud_bp[id + 2*npts]);
+           }
+        }
+        glEnd();
+
+        glPopMatrix(); // Remove inverse transform
+        glColor4ub(255,255,255,255);
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_DEPTH_TEST);
+//        glDisable(GL_LIGHT0);
+        glDisable(GL_NORMALIZE);
+//        glDisable(GL_LIGHTING);
 
         //////////////////// ======= DRAW TARGET POINTS ========= ///////////////////////
 
@@ -1113,9 +1251,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1155,9 +1293,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-       // glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
 
         //////////////////// ======= SHOW ARM CONFIGS ========= ///////////////////////
 
@@ -1191,9 +1329,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1244,9 +1382,74 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        //glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
+
+        //////////////////// ======= SHOW MASKED TARGET PT CLOUD ========= ///////////////////////
+
+        // Clear the display
+        glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+        maskDispB.ActivateScissorAndClear(camState);
+
+        // Enable flags
+        glEnable(GL_DEPTH_TEST);
+//        glEnable(GL_LIGHT0);
+        glEnable(GL_NORMALIZE);
+//        glEnable(GL_LIGHTING);
+        glEnable(GL_COLOR_MATERIAL);
+        glColor4ub(0xff,0xff,0xff,0xff);
+
+        // Apply inverse of modelview to get pts in model frame
+        glMultMatrixf(modelViewInv.data());
+
+        // Render input point cloud and color it based on the masks (opencv color map)
+        glPointSize(3.0);
+        glBegin(GL_POINTS);
+        for (int r = 0; r < datac->imgHeight; r++) // copy over from the flow matrix
+        {
+           for (int c = 0; c < datac->imgWidth; c++)
+           {
+               // Get pt index
+               int id = r * datac->imgWidth + c;
+
+               // Color based on 3D point
+               int maxid = -1; float maxval = -HUGE_VAL;
+               for (int k = 0; k < datac->nSE3; k++)
+               {
+                   if (datac->curr_masks_bp[id + k*npts] > maxval)
+                   {
+                       maxval = datac->curr_masks_bp[id + k*npts];
+                       maxid = k;
+                   }
+               }
+               float3 color = colors[maxid];
+               glColor3f(color.x,color.y,color.z);
+
+//               // Render pt and normals
+//               if (useNormalsForMaskColor)
+//               {
+//                   glNormal3f(datac->finalnorm_cloud[id + 0*npts],
+//                              datac->finalnorm_cloud[id + 1*npts],
+//                              datac->finalnorm_cloud[id + 2*npts]);
+//               }
+
+               // Plot point
+               glVertex3f(datac->curr_cloud_bp[id + 0*npts],
+                          datac->curr_cloud_bp[id + 1*npts],
+                          datac->curr_cloud_bp[id + 2*npts]);
+           }
+        }
+
+        glEnd();
+
+        glPopMatrix(); // Remove inverse transform
+        glColor4ub(255,255,255,255);
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_DEPTH_TEST);
+//        glDisable(GL_LIGHT0);
+        glDisable(GL_NORMALIZE);
+//        glDisable(GL_LIGHTING);
 
         //////////////////// ======= SHOW MASKED TARGET PT CLOUD ========= ///////////////////////
 
@@ -1256,9 +1459,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1309,9 +1512,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        //glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
 
 
         //////////////////// ======= SHOW Frames ========= ///////////////////////
@@ -1325,9 +1528,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1355,12 +1558,54 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        //glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
 
         //if (pangolin::Pushed(printModelView))
-        //cout << camStatePose.GetModelViewMatrix() << endl;
+        cout << camStatePose.GetModelViewMatrix() << endl;
+
+        //////////////////// ======= SHOW Frames ========= ///////////////////////
+
+        // Clear the display
+        glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+        poseDispB.ActivateScissorAndClear(camStatePose);
+
+        // Enable flags
+        glEnable(GL_DEPTH_TEST);
+//        glEnable(GL_LIGHT0);
+        glEnable(GL_NORMALIZE);
+//        glEnable(GL_LIGHTING);
+        glEnable(GL_COLOR_MATERIAL);
+        glColor4ub(0xff,0xff,0xff,0xff);
+
+        // Apply inverse of modelview to get pts in model frame
+        glMultMatrixf(modelViewInv.data());
+
+        // Draw all the poses
+        for(int i = 0; i < datac->nSE3; i++)
+        {
+            // Display or not
+            if(*frameStatus[i])
+            {
+                // Create the different SE3s
+                //dart::SE3 init = createSE3FromRt(&datac->init_poses[i*12]);
+                dart::SE3 tar  = createSE3FromRt(&datac->final_poses[i*12]);
+                dart::SE3 curr = createSE3FromRt(&datac->curr_poses_bp[i*12]);
+                //if (showInitPoses) drawFrame(init, 0.5, frameLength, lineWidth);
+                if (showTarPoses)  drawDashedFrame(tar,  1.0, frameLength, lineWidth, colors[i]);
+                if (showCurrPoses) drawFrame(curr, 1.0, frameLength, lineWidth, colors[i]);
+            }
+        }
+
+        // Finish
+        glPopMatrix(); // Remove inverse transform
+        glColor4ub(255,255,255,255);
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_DEPTH_TEST);
+//        glDisable(GL_LIGHT0);
+        glDisable(GL_NORMALIZE);
+//        glDisable(GL_LIGHTING);
 
         //////////////////// ======= SHOW Final Frames ========= ///////////////////////
 
@@ -1370,9 +1615,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        //glEnable(GL_LIGHT0);
+//        glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        //glEnable(GL_LIGHTING);
+//        glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -1396,9 +1641,9 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        //glDisable(GL_LIGHT0);
+//        glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        //glDisable(GL_LIGHTING);
+//        glDisable(GL_LIGHTING);
 
         //////////////////// ======= Plot errors ========= ///////////////////////
 
@@ -1411,14 +1656,23 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
             {
                 // Joint angle error (show all latest values since last time)
                 std::vector<float> d = data->deg_errors[i];
+                std::vector<float> d1 = data->deg_errors_bp[i];
 //                log_1.Log(d[0], d[1], d[2], d[3], d[4], d[5], d[6]);
-                log_1.Log(d[0], d[1], d[2], d[3]); //, d[4], d[5], d[6]);
+//                log_1.Log(d[0], d[1], d[2], d[3], d1[0], d1[1], d1[2], d1[3]); //, d[4], d[5], d[6]);
+                log_1.Log((fabs(d[0]) +  fabs(d[1]) + fabs(d[2]) + fabs(d[3]) + fabs(d[4]) + fabs(d[5])) / 6.0,
+                          (fabs(d1[0]) +  fabs(d1[1]) + fabs(d1[2]) + fabs(d1[3]) + fabs(d1[4]) + fabs(d1[5])) / 6.0); //, d[4], d[5], d[6]);
+
 
                 // Pose error (show all latest values since last time)
                 //log_2.Log(log10(datac->pose_errors[i]));
                 //log_2.Log(datac->pose_errors[i]);
                 std::vector<float> e = data->pose_errors_indiv[i];
-                log_2.Log(e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7]);
+                std::vector<float> e1 = data->pose_errors_indiv_bp[i];
+//                std::vector<float> v = {e[0], e[1], e[2], e[3], e[4], e[5], e[6], e[7],
+//                                        e1[0], e1[1], e1[2], e1[3], e1[4], e1[5], e1[6], e1[7]};
+                std::vector<float> v = {(e[0] + e[1] + e[2] + e[3] + e[5] + e[6]) / 6.0,
+                                         (e1[0] + e1[1] + e1[2] + e1[3] + e1[5] + e1[6]) / 6.0};
+                log_2.Log(v);
 //                log_2.Log(log10(e[0]), log10(e[1]), log10(e[2]), log10(e[3]), log10(e[4]), log10(e[5]), log10(e[6]), log10(e[7]));
             }
 
@@ -1429,28 +1683,149 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
 
         //////////////////// ==== Text ==== ////
 
-        allDisp.Activate();
-        glColor3f(1,1,1); // Whitei
-        std::string text1 = "Joint angle errors (vs) Iterations";
-        std::string text2 = "Pose error (vs) Iterations";
-        pangolin::GlText txt1 = glFont.Text(text1.c_str());
-        txt1.DrawWindow(300, 240*3-30, 0.1);
-        pangolin::GlText txt2 = glFont.Text(text2.c_str());
-        txt2.DrawWindow(300+640, 240*3-30, 0.1);
+//        allDisp.Activate();
+//        glColor3f(1,1,1); // Whitei
+//        std::string text1 = "Joint angle errors (vs) Iterations";
+//        std::string text2 = "Pose error (vs) Iterations";
+//        pangolin::GlText txt1 = glFont.Text(text1.c_str());
+//        txt1.DrawWindow(300, 240*3-30, 0.1);
+//        pangolin::GlText txt2 = glFont.Text(text2.c_str());
+//        txt2.DrawWindow(300+640, 240*3-30, 0.1);
 
         //////////////////// ==== SHOW RGB ==== /////////////////////
 
         if (!datac->use_simulator)
         {
-            // Display RGB image
-            glColor3f(1,1,1);
-            rgbDisp.ActivateScissorAndClear();
-            texRGB.Upload(datac->curr_rgb,GL_BGR,GL_UNSIGNED_BYTE);
-            texRGB.RenderToViewportFlipY();
+//            // Display RGB image
+//            glColor3f(1,1,1);
+//            rgbDisp.ActivateScissorAndClear();
+//            texRGB.Upload(datac->curr_rgb,GL_BGR,GL_UNSIGNED_BYTE);
+//            texRGB.RenderToViewportFlipY();
 
-            rgbDispT.ActivateScissorAndClear();
-            texRGBTar.Upload(datac->final_rgb,GL_BGR,GL_UNSIGNED_BYTE);
-            texRGBTar.RenderToViewportFlipY();
+//            rgbDispT.ActivateScissorAndClear();
+//            texRGBTar.Upload(datac->final_rgb,GL_BGR,GL_UNSIGNED_BYTE);
+//            texRGBTar.RenderToViewportFlipY();
+
+//            rgbDispB.ActivateScissorAndClear();
+//            texRGBBp.Upload(datac->curr_rgb_bp,GL_BGR,GL_UNSIGNED_BYTE);
+//            texRGBBp.RenderToViewportFlipY();
+
+            ///// ====== CURR
+            // Clear the display
+            glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+            rgbDisp.ActivateScissorAndClear(camState);
+
+            for(int k = 0; k < valid_joint_names.size(); k++)
+            {
+                // Set baxter GT
+                if (joint_name_to_pose_dim.find(valid_joint_names[k]) != joint_name_to_pose_dim.end())
+                {
+                    int pose_dim = joint_name_to_pose_dim[valid_joint_names[k]];
+                    tracker.getPose(baxterID_in).getReducedArticulation()[pose_dim] = datac->curr_jts[k]; // was init_jts
+                }
+            }
+
+            // Update the pose
+            tracker.updatePose(baxterID_in);
+
+
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_NORMALIZE);
+
+            glPushMatrix();
+            //drawAxis(1);
+
+            glColor4ub(0xff,0xff,0xff,0xff);
+
+            glEnable(GL_COLOR_MATERIAL);
+
+            tracker.getModel(baxterID_in).render(modelAlphas[m]);
+
+            /////////////////
+            glPopMatrix();
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_NORMALIZE);
+            glColor4ub(255,255,255,255);
+
+            ///// ====== BACKPROP
+            // Clear the display
+            glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+            rgbDispB.ActivateScissorAndClear(camState);
+
+            for(int k = 0; k < valid_joint_names.size(); k++)
+            {
+                // Set baxter GT
+                if (joint_name_to_pose_dim.find(valid_joint_names[k]) != joint_name_to_pose_dim.end())
+                {
+                    int pose_dim = joint_name_to_pose_dim[valid_joint_names[k]];
+                    tracker.getPose(baxterID_in).getReducedArticulation()[pose_dim] = datac->curr_jts_bp[k]; // was init_jts
+                }
+            }
+
+            // Update the pose
+            tracker.updatePose(baxterID_in);
+
+
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_NORMALIZE);
+
+            glPushMatrix();
+            //drawAxis(1);
+
+            glColor4ub(0xff,0xff,0xff,0xff);
+
+            glEnable(GL_COLOR_MATERIAL);
+
+            tracker.getModel(baxterID_in).render(modelAlphas[m]);
+
+            /////////////////
+            glPopMatrix();
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_NORMALIZE);
+            glColor4ub(255,255,255,255);
+
+
+            ///// ======  TARGET
+            // Clear the display
+            glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+            rgbDispT.ActivateScissorAndClear(camState);
+
+            for(int k = 0; k < valid_joint_names.size(); k++)
+            {
+                // Set baxter GT
+                if (joint_name_to_pose_dim.find(valid_joint_names[k]) != joint_name_to_pose_dim.end())
+                {
+                    int pose_dim = joint_name_to_pose_dim[valid_joint_names[k]];
+                    tracker.getPose(baxterID_in).getReducedArticulation()[pose_dim] = datac->final_jts[k]; // was init_jts
+                }
+            }
+
+            // Update the pose
+            tracker.updatePose(baxterID_in);
+
+
+            glEnable(GL_DEPTH_TEST);
+            glEnable(GL_NORMALIZE);
+
+            glPushMatrix();
+            //drawAxis(1);
+
+            glColor4ub(0xff,0xff,0xff,0xff);
+
+            glEnable(GL_COLOR_MATERIAL);
+
+            tracker.getModel(baxterID_in).render(modelAlphas[m]);
+
+            /////////////////
+            glPopMatrix();
+            glDisable(GL_DEPTH_TEST);
+            glDisable(GL_NORMALIZE);
+            glColor4ub(255,255,255,255);
+
+            /// Finish frame
+            pangolin::FinishFrame();
+
+
         }
 
         //////////////////// ======= Finish ========= ///////////////////////
@@ -1618,6 +1993,14 @@ void RealCtrlViz::update_real_curr(const float *curr_angles,
                                    const float curr_pose_error,
                                    const float* curr_pose_errors_indiv,
                                    const float *curr_deg_errors,
+                                   const float *curr_angles_bp,
+                                   const float *curr_ptcloud_bp,
+                                   const float *curr_poses_bp,
+                                   const float *curr_masks_bp,
+                                   const unsigned char *curr_rgb_bp,
+                                   const float curr_pose_error_bp,
+                                   const float* curr_pose_errors_indiv_bp,
+                                   const float *curr_deg_errors_bp,
                                    int save_frame)
 {
     // Update PCL viewer
@@ -1634,6 +2017,17 @@ void RealCtrlViz::update_real_curr(const float *curr_angles,
     data->pose_errors.push_back(curr_pose_error);
     data->pose_errors_indiv.push_back(std::vector<float>(curr_pose_errors_indiv, curr_pose_errors_indiv+data->nSE3));
     data->deg_errors.push_back(std::vector<float>(curr_deg_errors, curr_deg_errors+7));
+
+    memcpy(data->curr_jts_bp,   curr_angles_bp,  7 * sizeof(float));
+    memcpy(data->curr_cloud_bp, curr_ptcloud_bp, data->imgHeight * data->imgWidth * 3 * sizeof(float));
+    memcpy(data->curr_masks_bp, curr_masks_bp,   data->imgHeight * data->imgWidth * data->nSE3 * sizeof(float));
+    memcpy(data->curr_poses_bp, curr_poses_bp,   data->nSE3 * 12 * sizeof(float));
+    memcpy(data->curr_rgb_bp, curr_rgb_bp, data->imgHeight * data->imgWidth * 3 * sizeof(unsigned char));
+
+    // Append to the errors
+    data->pose_errors_bp.push_back(curr_pose_error_bp);
+    data->pose_errors_indiv_bp.push_back(std::vector<float>(curr_pose_errors_indiv_bp, curr_pose_errors_indiv_bp+data->nSE3));
+    data->deg_errors_bp.push_back(std::vector<float>(curr_deg_errors_bp, curr_deg_errors_bp+7));
 
     // Frame saved set to false
     frame_saved = false;
@@ -1687,29 +2081,34 @@ void RealCtrlViz::update_real_init(const float *start_angles, const float *start
 
     // Reset the loggers, dynamically change the max values of the loggers here
     this->reset();
-    plotter1->SetDefaultView(pangolin::XYRangef(pangolin::Rangef(0.0f, 200.0f), pangolin::Rangef(min_deg_error, max_deg_error)));
-    plotter2->SetDefaultView(pangolin::XYRangef(pangolin::Rangef(0.0f, 200.0f), pangolin::Rangef(0.0f, start_pose_error)));
+    //plotter1->SetDefaultView(pangolin::XYRangef(pangolin::Rangef(0.0f, 200.0f), pangolin::Rangef(min_deg_error, max_deg_error)));
+    //plotter2->SetDefaultView(pangolin::XYRangef(pangolin::Rangef(0.0f, 200.0f), pangolin::Rangef(0.0f, start_pose_error)));
 
     // Append to the errors
     data->pose_errors.push_back(start_pose_error);
     data->pose_errors_indiv.push_back(std::vector<float>(start_pose_errors_indiv, start_pose_errors_indiv+data->nSE3));
     data->deg_errors.push_back(std::vector<float>(start_deg_errors, start_deg_errors+7));
 
+    // Append to the errors
+    data->pose_errors_bp.push_back(start_pose_error);
+    data->pose_errors_indiv_bp.push_back(std::vector<float>(start_pose_errors_indiv, start_pose_errors_indiv+data->nSE3));
+    data->deg_errors_bp.push_back(std::vector<float>(start_deg_errors, start_deg_errors+7));
+
     // Compute normals for init & final clouds
     compute_normals(data->init_cloud, data->initnorm_cloud, data->imgWidth, data->imgHeight);
     compute_normals(data->final_cloud, data->finalnorm_cloud, data->imgWidth, data->imgHeight);
 
-    // Init data->init_rgba
-    int ct1 = 0, ct2 = 0;
-    for(int i = 0; i < data->imgHeight; i++)
-        for (int j = 0; j < data->imgWidth; j++)
-        {
-            data->init_rgba[ct1+0] = start_rgb[ct2+0];
-            data->init_rgba[ct1+1] = start_rgb[ct2+1];
-            data->init_rgba[ct1+2] = start_rgb[ct2+2];
-            data->init_rgba[ct1+3] = 128;
-            ct1 += 4; ct2 += 3;
-        }
+//    // Init data->init_rgba
+//    int ct1 = 0, ct2 = 0;
+//    for(int i = 0; i < data->imgHeight; i++)
+//        for (int j = 0; j < data->imgWidth; j++)
+//        {
+//            data->init_rgba[ct1+0] = start_rgb[ct2+0];
+//            data->init_rgba[ct1+1] = start_rgb[ct2+1];
+//            data->init_rgba[ct1+2] = start_rgb[ct2+2];
+//            data->init_rgba[ct1+3] = 128;
+//            ct1 += 4; ct2 += 3;
+//        }
 
     // Reset frame counter
     framectr = 0;
@@ -1727,6 +2126,9 @@ void RealCtrlViz::reset()
     data->deg_errors.clear();
     data->pose_errors.clear();
     data->pose_errors_indiv.clear();
+    data->deg_errors_bp.clear();
+    data->pose_errors_bp.clear();
+    data->pose_errors_indiv_bp.clear();
     log_1.Clear();
     log_2.Clear();
     prevctr = 0;

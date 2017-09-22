@@ -107,6 +107,10 @@ parser.add_argument('--num-configs', type=int, default=-1, metavar='N',
 # Display/Save options
 parser.add_argument('-s', '--save-dir', default='', type=str,
                     metavar='PATH', help='directory to save results in. (default: <checkpoint_dir>/planlogs/)')
+parser.add_argument('--save-frames', action='store_true', default=False,
+                    help='Enables post-saving of generated frames, very slow process (default: False)')
+parser.add_argument('--save-frame-stats', action='store_true', default=False,
+                    help='Saves all necessary data for genering rendered frames later (default: False)')
 
 def main():
     # Parse args
@@ -461,19 +465,20 @@ def main():
                                   init_deg_errors)
 
         # For saving:
-        initstats = [start_angles.numpy(),
-                     start_pts[0].cpu().numpy(),
-                     start_poses_f[0].numpy(),
-                     start_masks_f[0].numpy(),
-                     start_rgb.numpy(),
-                     goal_angles.numpy(),
-                     goal_pts[0].cpu().numpy(),
-                     goal_poses_f[0].numpy(),
-                     goal_masks_f[0].numpy(),
-                     goal_rgb.numpy(),
-                     init_pose_loss.data[0],
-                     init_pose_err_indiv.data.cpu().numpy(),
-                     init_deg_errors];
+        if pargs.save_frame_stats:
+            initstats = [start_angles.numpy(),
+                         start_pts[0].cpu().numpy(),
+                         start_poses_f[0].numpy(),
+                         start_masks_f[0].numpy(),
+                         start_rgb.numpy(),
+                         goal_angles.numpy(),
+                         goal_pts[0].cpu().numpy(),
+                         goal_poses_f[0].numpy(),
+                         goal_masks_f[0].numpy(),
+                         goal_rgb.numpy(),
+                         init_pose_loss.data[0],
+                         init_pose_err_indiv.data.cpu().numpy(),
+                         init_deg_errors]
 
         ########################
         ############ Run the controller
@@ -487,17 +492,14 @@ def main():
         init_ctrl_v  = util.to_var(torch.zeros(1,args.num_ctrl).type(deftype), requires_grad=True) # Need grad w.r.t this
         goal_poses_v = util.to_var(goal_poses.data, requires_grad=False)
 
-        # Save for final frame saving
-        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [], []
-        curr_rgb_s, loss_s, curr_deg_errors_s = [], [], []
-
         # # Plots for errors and loss
         # fig, axes = plt.subplots(2, 1)
         # fig.show()
 
         # Save for final frame saving
-        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
-        curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
+        if pargs.save_frames or pargs.save_frame_stats:
+            curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
+            curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
 
         # Run the controller for max_iter iterations
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -606,14 +608,15 @@ def main():
                                       0)  # Don't save frame
 
             # Save for future frame generation!
-            curr_angles_s.append(curr_angles)
-            curr_pts_s.append(curr_pts_f[0])
-            curr_poses_s.append(curr_poses_f[0])
-            curr_masks_s.append(curr_masks_f[0])
-            curr_rgb_s.append(curr_rgb)
-            loss_s.append(loss)
-            err_indiv_s.append(curr_pose_err_indiv.data.cpu())
-            curr_deg_errors_s.append(curr_deg_errors[0])
+            if pargs.save_frames or pargs.save_frame_stats:
+                curr_angles_s.append(curr_angles)
+                curr_pts_s.append(curr_pts_f[0])
+                curr_poses_s.append(curr_poses_f[0])
+                curr_masks_s.append(curr_masks_f[0])
+                curr_rgb_s.append(curr_rgb)
+                loss_s.append(loss)
+                err_indiv_s.append(curr_pose_err_indiv.data.cpu())
+                curr_deg_errors_s.append(curr_deg_errors[0])
 
             # # Plot the errors & loss
             # colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
@@ -698,45 +701,47 @@ def main():
                           'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
         # Save
-        datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
-                          curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
+        if pargs.save_frame_stats:
+            datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
+                              curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
 
-        # ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
-        # ######## Saving frames to disk now!
-        #
-        # pangolin.update_real_init(start_angles.numpy(),
-        #                           start_pts[0].cpu().numpy(),
-        #                           start_poses_f[0].numpy(),
-        #                           start_masks_f[0].numpy(),
-        #                           start_rgb.numpy(),
-        #                           goal_angles.numpy(),
-        #                           goal_pts[0].cpu().numpy(),
-        #                           goal_poses_f[0].numpy(),
-        #                           goal_masks_f[0].numpy(),
-        #                           goal_rgb.numpy(),
-        #                           init_pose_loss.data[0],
-        #                           init_deg_errors)
-        #
-        # # Start saving frames
-        # save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
-        # util.create_dir(save_dir)  # Create directory
-        # pangolin.start_saving_frames(save_dir)  # Start saving frames
-        #
-        # for j in xrange(len(curr_angles_s)):
-        #     if (j % 10 == 0):
-        #         print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
-        #     pangolin.update_real_curr(curr_angles_s[j].numpy(),
-        #                               curr_pts_s[j].numpy(),
-        #                               curr_poses_s[j].numpy(),
-        #                               curr_masks_s[j].numpy(),
-        #                               curr_rgb_s[j].numpy(),
-        #                               loss_s[j],
-        #                               curr_deg_errors_s[j].numpy(),
-        #                               1)  # Save frame
-        #
-        # # Stop saving frames
-        # time.sleep(1)
-        # pangolin.stop_saving_frames()
+        ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
+        ######## Saving frames to disk now!
+        if pargs.save_frames:
+            pangolin.update_real_init(start_angles.numpy(),
+                                      start_pts[0].cpu().numpy(),
+                                      start_poses_f[0].numpy(),
+                                      start_masks_f[0].numpy(),
+                                      start_rgb.numpy(),
+                                      goal_angles.numpy(),
+                                      goal_pts[0].cpu().numpy(),
+                                      goal_poses_f[0].numpy(),
+                                      goal_masks_f[0].numpy(),
+                                      goal_rgb.numpy(),
+                                      init_pose_loss.data[0],
+                                      init_deg_errors)
+
+            # Start saving frames
+            save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
+            util.create_dir(save_dir)  # Create directory
+            pangolin.start_saving_frames(save_dir)  # Start saving frames
+            print("Rendering frames for example: {} and saving them to: {}".format(k, save_dir))
+
+            for j in xrange(len(curr_angles_s)):
+                if (j % 10 == 0):
+                    print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
+                pangolin.update_real_curr(curr_angles_s[j].numpy(),
+                                          curr_pts_s[j].numpy(),
+                                          curr_poses_s[j].numpy(),
+                                          curr_masks_s[j].numpy(),
+                                          curr_rgb_s[j].numpy(),
+                                          loss_s[j],
+                                          curr_deg_errors_s[j].numpy(),
+                                          1)  # Save frame
+
+            # Stop saving frames
+            time.sleep(1)
+            pangolin.stop_saving_frames()
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors,0), torch.cat(final_errors,0)
@@ -753,7 +758,8 @@ def main():
     ))
 
     # Save data stats
-    torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
+    if pargs.save_frame_stats:
+        torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
 
     # Save stats across all iterations
     stats = {'args': args, 'pargs': pargs, 'data_path': data_path, 'start_angles_all': start_angles_all,

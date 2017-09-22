@@ -759,6 +759,10 @@ def main():
                         metavar='CTYPE', help='Type of controller to use: [blockpos] | noblockpos | smoothpos | vel')
     parser.add_argument('--filter-eps', default=0.012488, type=float, metavar='EPS',
                         help='Weight for current position in the smooth position filter (default: 0.012488)')
+    parser.add_argument('--save-frames', action='store_true', default=False,
+                        help='Enables post-saving of generated frames, very slow process (default: False)')
+    parser.add_argument('--save-frame-stats', action='store_true', default=False,
+                        help='Saves all necessary data for genering rendered frames later (default: False)')
 
     # Parse args
     pargs = parser.parse_args(rospy.myargv()[1:])
@@ -831,55 +835,53 @@ def main():
     #########
     # SOME TEST CONFIGS:
     # TODO: Get more challenging test configs by moving arm physically
-    start_angles_all = torch.FloatTensor(
-        [
-         #[6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
-         [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
-         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-         [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
-         # [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
-         # [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
-         # [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
-         # [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-         # [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
-         # [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
-         # [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
-        ]
-        )
-    goal_angles_all  = torch.FloatTensor(
-        [
-         #[0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
-         [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
-         [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
-         [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
-         # [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
-         # [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
-         # [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
-         # [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
-         # [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
-         # [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
-         # [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
-        ]
-        )
+    # start_angles_all = torch.FloatTensor(
+    #     [
+    #      #[6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
+    #      [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+    #      [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #      [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
+    #      # [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+    #      # [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+    #      # [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+    #      # [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #      # [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
+    #      # [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+    #      # [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
+    #     ]
+    #     )
+    # goal_angles_all  = torch.FloatTensor(
+    #     [
+    #      #[0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
+    #      [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+    #      [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
+    #      [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
+    #      # [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+    #      # [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+    #      # [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+    #      # [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+    #      # [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
+    #      # [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+    #      # [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
+    #     ]
+    #     )
 
     # ###
-    # start_angles_all = torch.FloatTensor(
-    #      [
-    #          [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-    #          [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
-    #          [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-    #      ]
-    # )
-    #
-    # goal_angles_all = torch.FloatTensor(
-    #     [
-    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
-    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
-    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
-    #     ]
-    # )
+    start_angles_all = torch.FloatTensor(
+         [
+             [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+             [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+             [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+         ]
+    )
 
-
+    goal_angles_all = torch.FloatTensor(
+        [
+            [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+            [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+            [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+        ]
+    )
 
     # start_angles_all = torch.FloatTensor(
     #     [
@@ -950,7 +952,7 @@ def main():
     print("Running tests over {} configs".format(num_configs))
     iterstats = []
     init_errors, final_errors = [], []
-    datastats = []
+    framestats = []
     for k in xrange(num_configs):
         # Get start/goal angles
         print("========================================")
@@ -1041,19 +1043,20 @@ def main():
                                   init_deg_errors)
 
         # For saving:
-        initstats = [start_angles.numpy(),
-                     start_pts[0].cpu().numpy(),
-                     start_poses_f[0].numpy(),
-                     start_masks_f[0].numpy(),
-                     start_rgb.numpy(),
-                     goal_angles.numpy(),
-                     goal_pts[0].cpu().numpy(),
-                     goal_poses_f[0].numpy(),
-                     goal_masks_f[0].numpy(),
-                     goal_rgb.numpy(),
-                     init_pose_loss.data[0],
-                     init_pose_err_indiv.data.cpu().numpy(),
-                     init_deg_errors];
+        if pargs.save_frame_stats:
+            initstats = [start_angles.numpy(),
+                         start_pts[0].cpu().numpy(),
+                         start_poses_f[0].numpy(),
+                         start_masks_f[0].numpy(),
+                         start_rgb.numpy(),
+                         goal_angles.numpy(),
+                         goal_pts[0].cpu().numpy(),
+                         goal_poses_f[0].numpy(),
+                         goal_masks_f[0].numpy(),
+                         goal_rgb.numpy(),
+                         init_pose_loss.data[0],
+                         init_pose_err_indiv.data.cpu().numpy(),
+                         init_deg_errors]
 
         ########################
         ############ Run the controller
@@ -1076,8 +1079,9 @@ def main():
         # fig.show()
 
         # Save for final frame saving
-        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
-        curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
+        if pargs.save_frames or pargs.save_frame_stats:
+            curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
+            curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
 
         # Run the controller
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), \
@@ -1185,14 +1189,15 @@ def main():
 
 
             # Save for future frame generation!
-            curr_angles_s.append(curr_angles)
-            curr_pts_s.append(curr_pts_f[0])
-            curr_poses_s.append(curr_poses_f[0])
-            curr_masks_s.append(curr_masks_f[0])
-            curr_rgb_s.append(curr_rgb)
-            loss_s.append(loss)
-            err_indiv_s.append(curr_pose_err_indiv.data.cpu())
-            curr_deg_errors_s.append(curr_deg_errors[0])
+            if pargs.save_frames or pargs.save_frame_stats:
+                curr_angles_s.append(curr_angles)
+                curr_pts_s.append(curr_pts_f[0])
+                curr_poses_s.append(curr_poses_f[0])
+                curr_masks_s.append(curr_masks_f[0])
+                curr_rgb_s.append(curr_rgb)
+                loss_s.append(loss)
+                err_indiv_s.append(curr_pose_err_indiv.data.cpu())
+                curr_deg_errors_s.append(curr_deg_errors[0])
 
             # Log time
             viz_time.update(time.time() - start)
@@ -1299,47 +1304,49 @@ def main():
                           'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
         # Save
-        datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
-                          curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
+        if pargs.save_frame_stats:
+            framestats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
+                              curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
 
         ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
         ######## Saving frames to disk now!
-        #
-        # pangolin.update_real_init(start_angles.numpy(),
-        #                           start_pts[0].cpu().numpy(),
-        #                           start_poses_f[0].numpy(),
-        #                           start_masks_f[0].numpy(),
-        #                           start_rgb.numpy(),
-        #                           goal_angles.numpy(),
-        #                           goal_pts[0].cpu().numpy(),
-        #                           goal_poses_f[0].numpy(),
-        #                           goal_masks_f[0].numpy(),
-        #                           goal_rgb.numpy(),
-        #                           init_pose_loss.data[0],
-        #                           init_pose_err_indiv.data.cpu().numpy(),
-        #                           init_deg_errors)
-        #
-        # # Start saving frames
-        # save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
-        # util.create_dir(save_dir)  # Create directory
-        # pangolin.start_saving_frames(save_dir)  # Start saving frames
-        #
-        # for j in xrange(len(curr_angles_s)):
-        #     if (j%10  == 0):
-        #         print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
-        #     pangolin.update_real_curr(curr_angles_s[j].numpy(),
-        #                               curr_pts_s[j].numpy(),
-        #                               curr_poses_s[j].numpy(),
-        #                               curr_masks_s[j].numpy(),
-        #                               curr_rgb_s[j].numpy(),
-        #                               loss_s[j],
-        #                               err_indiv_s[j].numpy(),
-        #                               curr_deg_errors_s[j].numpy(),
-        #                               1) # Save frame
-        #
-        # # Stop saving frames
-        # time.sleep(1)
-        # pangolin.stop_saving_frames()
+        if pargs.save_frames:
+            pangolin.update_real_init(start_angles.numpy(),
+                                      start_pts[0].cpu().numpy(),
+                                      start_poses_f[0].numpy(),
+                                      start_masks_f[0].numpy(),
+                                      start_rgb.numpy(),
+                                      goal_angles.numpy(),
+                                      goal_pts[0].cpu().numpy(),
+                                      goal_poses_f[0].numpy(),
+                                      goal_masks_f[0].numpy(),
+                                      goal_rgb.numpy(),
+                                      init_pose_loss.data[0],
+                                      init_pose_err_indiv.data.cpu().numpy(),
+                                      init_deg_errors)
+
+            # Start saving frames
+            save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
+            util.create_dir(save_dir)  # Create directory
+            pangolin.start_saving_frames(save_dir)  # Start saving frames
+            print("Rendering frames for example: {} and saving them to: {}".format(k, save_dir))
+
+            for j in xrange(len(curr_angles_s)):
+                if (j%10  == 0):
+                    print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
+                pangolin.update_real_curr(curr_angles_s[j].numpy(),
+                                          curr_pts_s[j].numpy(),
+                                          curr_poses_s[j].numpy(),
+                                          curr_masks_s[j].numpy(),
+                                          curr_rgb_s[j].numpy(),
+                                          loss_s[j],
+                                          err_indiv_s[j].numpy(),
+                                          curr_deg_errors_s[j].numpy(),
+                                          1) # Save frame
+
+            # Stop saving frames
+            time.sleep(1)
+            pangolin.stop_saving_frames()
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors, 0), torch.cat(final_errors, 0)
@@ -1356,7 +1363,8 @@ def main():
     ))
 
     # Save data stats
-    torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
+    if pargs.save_frame_stats:
+        torch.save(framestats, pargs.save_dir + '/framestats.pth.tar')
 
     # Save stats across all iterations
     stats = {'args': se3optim.args, 'pargs': pargs, 'start_angles_all': start_angles_all,
@@ -1372,4 +1380,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-#python run_baxter_se3_ctrl.py -l right --checkpoint trained_nets/realdata/latest/oursbestfixed/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar --optimization gn --max-iter 500 --gn-perturb 1e-3 --max-ctrl-mag 1.0 --ctrl-mag-decay 1.0 --real-robot --loss-threshold 5e-3 --only-top4-jts --save-dir temp --ctrlr-type noblockpos --filter-eps 1.0
+##################
+## Command for ICRA video results:

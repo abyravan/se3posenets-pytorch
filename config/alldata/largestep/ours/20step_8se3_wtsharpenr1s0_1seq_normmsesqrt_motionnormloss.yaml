@@ -65,5 +65,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/oursbestfixed/20step_8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss
+save-dir:  trained_nets/alldata/largestep/ours/20step_8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss
 disp-err-per-mask: False

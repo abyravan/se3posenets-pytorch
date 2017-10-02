@@ -6,7 +6,7 @@ num-workers:  8
 train-per:    0.6
 val-per:      0.15
 img-scale:    1e-4
-step-len:     5
+step-len:     20
 seq-len:      1
 ctrl-type:    actdiffvel
 da-threshold: 0.01
@@ -48,7 +48,7 @@ backprop-only-first-delta: False
 
 # Training options
 no-cuda:        False
-use-pin-memory: False
+use-pin-memory: True
 epochs:         20
 start-epoch:    0
 train-ipe:      5000
@@ -65,5 +65,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/oursbestfixed/5step_8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss
+save-dir:  trained_nets/alldata/oursbestfixed/20step_8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss
 disp-err-per-mask: False

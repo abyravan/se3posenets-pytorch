@@ -61,7 +61,7 @@ def read_baxter_se3state_file(filename):
         data = lines[ctr + 1].view(3, 4)  # Transform data
         T = torch.eye(4)
         T[0:3, 0:3] = data[0:3, 1:4]; T[0:3, 3] = data[0:3, 0]
-        ret[id] = T  # Add to list of transforms
+        ret[id] = T # Add to list of transforms
         ctr += 2  # Increment counter
     return ret
 
@@ -127,7 +127,6 @@ def read_depth_image(filename, ht=240, wd=320, scale=1e-4):
     else:
         imgscale = imgf
     return torch.Tensor(imgscale).unsqueeze(0)  # Add extra dimension
-
 
 # Read flow image from disk
 def read_flow_image_xyz(filename, ht=240, wd=320, scale=1e-4):

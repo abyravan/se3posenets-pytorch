@@ -1,10 +1,11 @@
+#!/usr/bin/env python
+
 # Global imports
 import _init_paths
-import argparse
-import os
 
 # Load pangolin visualizer library
 from torchviz import pangoposeviz
+from torchviz import realctrlviz # Had to add this to get the file to work, otherwise gave static TLS error
 pangolin = pangoposeviz.PyPangolinPoseViz()
 
 ##########
@@ -24,6 +25,10 @@ import torch.utils.data
 import data
 import ctrlnets
 import util
+
+# Other imports
+import argparse
+import os
 
 ##########
 # Parse arguments
@@ -151,11 +156,12 @@ def main():
     #### Run forever
     poses     = torch.zeros(1,8,3,4)
     predposes = torch.zeros(1,8,3,4)
+    predmasks = torch.zeros(1,8,240,320)
     config    = torch.zeros(1,7)
     ptcloud   = torch.zeros(1,3,240,320)
     while True:
         # Send to pangolin
-        pangolin.update_viz(poses[0].numpy(), predposes[0].numpy(),
+        pangolin.update_viz(poses[0].numpy(), predposes[0].numpy(), predmasks[0].numpy(),
                             config[0].numpy(), ptcloud[0].numpy())
 
         # Run through net
@@ -166,9 +172,9 @@ def main():
         if args.use_gt_masks:  # GT masks are provided!
             predposes_n    = posemaskpredfn(inp)
         else:
-            predposes_n, _ = posemaskpredfn(inp)
+            predposes_n, predmasks_n = posemaskpredfn(inp, train_iter=num_train_iter)
+            predmasks.copy_(predmasks_n.data.cpu())
         predposes.copy_(predposes_n.data.cpu())
-
 
 ################ RUN MAIN
 if __name__ == '__main__':

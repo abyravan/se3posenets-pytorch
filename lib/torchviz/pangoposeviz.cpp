@@ -1423,6 +1423,7 @@ static const char __pyx_k_config[] = "config";
 static const char __pyx_k_ctypes[] = "ctypes";
 static const char __pyx_k_import[] = "__import__";
 static const char __pyx_k_ptcloud[] = "ptcloud";
+static const char __pyx_k_predmasks[] = "predmasks";
 static const char __pyx_k_predposes[] = "predposes";
 static const char __pyx_k_ValueError[] = "ValueError";
 static const char __pyx_k_ImportError[] = "ImportError";
@@ -1452,6 +1453,7 @@ static PyObject *__pyx_n_s_numpy;
 static PyObject *__pyx_kp_s_numpy_core_multiarray_failed_to;
 static PyObject *__pyx_kp_s_numpy_core_umath_failed_to_impor;
 static PyObject *__pyx_n_s_poses;
+static PyObject *__pyx_n_s_predmasks;
 static PyObject *__pyx_n_s_predposes;
 static PyObject *__pyx_n_s_ptcloud;
 static PyObject *__pyx_n_s_range;
@@ -1459,7 +1461,7 @@ static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_kp_u_unknown_dtype_code_in_numpy_pxd;
 static int __pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz___cinit__(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self); /* proto */
 static void __pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_2__dealloc__(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_predposes, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud); /* proto */
+static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_predposes, PyArrayObject *__pyx_v_predmasks, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud); /* proto */
 static int __pyx_pf_5numpy_7ndarray___getbuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info, int __pyx_v_flags); /* proto */
 static void __pyx_pf_5numpy_7ndarray_2__releasebuffer__(PyArrayObject *__pyx_v_self, Py_buffer *__pyx_v_info); /* proto */
 static PyObject *__pyx_tp_new_8torchviz_12pangoposeviz_PyPangolinPoseViz(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
@@ -1574,7 +1576,7 @@ static void __pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_2__dealloc__(s
  * 
  *     def update_viz(self, np.ndarray[np.float32_t, ndim=3] poses,             # <<<<<<<<<<<<<<
  *                          np.ndarray[np.float32_t, ndim=3] predposes,
- *                          np.ndarray[np.float32_t, ndim=1] config,
+ *                          np.ndarray[np.float32_t, ndim=3] predmasks,
  */
 
 /* Python wrapper */
@@ -1582,18 +1584,20 @@ static PyObject *__pyx_pw_8torchviz_12pangoposeviz_17PyPangolinPoseViz_5update_v
 static PyObject *__pyx_pw_8torchviz_12pangoposeviz_17PyPangolinPoseViz_5update_viz(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   PyArrayObject *__pyx_v_poses = 0;
   PyArrayObject *__pyx_v_predposes = 0;
+  PyArrayObject *__pyx_v_predmasks = 0;
   PyArrayObject *__pyx_v_config = 0;
   PyArrayObject *__pyx_v_ptcloud = 0;
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("update_viz (wrapper)", 0);
   {
-    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_poses,&__pyx_n_s_predposes,&__pyx_n_s_config,&__pyx_n_s_ptcloud,0};
-    PyObject* values[4] = {0,0,0,0};
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_poses,&__pyx_n_s_predposes,&__pyx_n_s_predmasks,&__pyx_n_s_config,&__pyx_n_s_ptcloud,0};
+    PyObject* values[5] = {0,0,0,0,0};
     if (unlikely(__pyx_kwds)) {
       Py_ssize_t kw_args;
       const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
       switch (pos_args) {
+        case  5: values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
         case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
         case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
         case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
@@ -1609,38 +1613,45 @@ static PyObject *__pyx_pw_8torchviz_12pangoposeviz_17PyPangolinPoseViz_5update_v
         case  1:
         if (likely((values[1] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_predposes)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 4, 4, 1); __PYX_ERR(0, 30, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 5, 5, 1); __PYX_ERR(0, 30, __pyx_L3_error)
         }
         case  2:
-        if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_config)) != 0)) kw_args--;
+        if (likely((values[2] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_predmasks)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 4, 4, 2); __PYX_ERR(0, 30, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 5, 5, 2); __PYX_ERR(0, 30, __pyx_L3_error)
         }
         case  3:
-        if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ptcloud)) != 0)) kw_args--;
+        if (likely((values[3] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_config)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 4, 4, 3); __PYX_ERR(0, 30, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 5, 5, 3); __PYX_ERR(0, 30, __pyx_L3_error)
+        }
+        case  4:
+        if (likely((values[4] = PyDict_GetItem(__pyx_kwds, __pyx_n_s_ptcloud)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("update_viz", 1, 5, 5, 4); __PYX_ERR(0, 30, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
         if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "update_viz") < 0)) __PYX_ERR(0, 30, __pyx_L3_error)
       }
-    } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 5) {
       goto __pyx_L5_argtuple_error;
     } else {
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
       values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
       values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
       values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+      values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
     }
     __pyx_v_poses = ((PyArrayObject *)values[0]);
     __pyx_v_predposes = ((PyArrayObject *)values[1]);
-    __pyx_v_config = ((PyArrayObject *)values[2]);
-    __pyx_v_ptcloud = ((PyArrayObject *)values[3]);
+    __pyx_v_predmasks = ((PyArrayObject *)values[2]);
+    __pyx_v_config = ((PyArrayObject *)values[3]);
+    __pyx_v_ptcloud = ((PyArrayObject *)values[4]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("update_viz", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 30, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("update_viz", 1, 5, 5, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 30, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("torchviz.pangoposeviz.PyPangolinPoseViz.update_viz", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -1648,9 +1659,10 @@ static PyObject *__pyx_pw_8torchviz_12pangoposeviz_17PyPangolinPoseViz_5update_v
   __pyx_L4_argument_unpacking_done:;
   if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_poses), __pyx_ptype_5numpy_ndarray, 1, "poses", 0))) __PYX_ERR(0, 30, __pyx_L1_error)
   if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_predposes), __pyx_ptype_5numpy_ndarray, 1, "predposes", 0))) __PYX_ERR(0, 31, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config), __pyx_ptype_5numpy_ndarray, 1, "config", 0))) __PYX_ERR(0, 32, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "ptcloud", 0))) __PYX_ERR(0, 33, __pyx_L1_error)
-  __pyx_r = __pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(((struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *)__pyx_v_self), __pyx_v_poses, __pyx_v_predposes, __pyx_v_config, __pyx_v_ptcloud);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_predmasks), __pyx_ptype_5numpy_ndarray, 1, "predmasks", 0))) __PYX_ERR(0, 32, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_config), __pyx_ptype_5numpy_ndarray, 1, "config", 0))) __PYX_ERR(0, 33, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_ptcloud), __pyx_ptype_5numpy_ndarray, 1, "ptcloud", 0))) __PYX_ERR(0, 34, __pyx_L1_error)
+  __pyx_r = __pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(((struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *)__pyx_v_self), __pyx_v_poses, __pyx_v_predposes, __pyx_v_predmasks, __pyx_v_config, __pyx_v_ptcloud);
 
   /* function exit code */
   goto __pyx_L0;
@@ -1661,11 +1673,13 @@ static PyObject *__pyx_pw_8torchviz_12pangoposeviz_17PyPangolinPoseViz_5update_v
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_predposes, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud) {
+static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_viz(struct __pyx_obj_8torchviz_12pangoposeviz_PyPangolinPoseViz *__pyx_v_self, PyArrayObject *__pyx_v_poses, PyArrayObject *__pyx_v_predposes, PyArrayObject *__pyx_v_predmasks, PyArrayObject *__pyx_v_config, PyArrayObject *__pyx_v_ptcloud) {
   __Pyx_LocalBuf_ND __pyx_pybuffernd_config;
   __Pyx_Buffer __pyx_pybuffer_config;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_poses;
   __Pyx_Buffer __pyx_pybuffer_poses;
+  __Pyx_LocalBuf_ND __pyx_pybuffernd_predmasks;
+  __Pyx_Buffer __pyx_pybuffer_predmasks;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_predposes;
   __Pyx_Buffer __pyx_pybuffer_predposes;
   __Pyx_LocalBuf_ND __pyx_pybuffernd_ptcloud;
@@ -1683,6 +1697,9 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   Py_ssize_t __pyx_t_9;
   Py_ssize_t __pyx_t_10;
   Py_ssize_t __pyx_t_11;
+  Py_ssize_t __pyx_t_12;
+  Py_ssize_t __pyx_t_13;
+  Py_ssize_t __pyx_t_14;
   __Pyx_RefNannySetupContext("update_viz", 0);
   __pyx_pybuffer_poses.pybuffer.buf = NULL;
   __pyx_pybuffer_poses.refcount = 0;
@@ -1692,6 +1709,10 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   __pyx_pybuffer_predposes.refcount = 0;
   __pyx_pybuffernd_predposes.data = NULL;
   __pyx_pybuffernd_predposes.rcbuffer = &__pyx_pybuffer_predposes;
+  __pyx_pybuffer_predmasks.pybuffer.buf = NULL;
+  __pyx_pybuffer_predmasks.refcount = 0;
+  __pyx_pybuffernd_predmasks.data = NULL;
+  __pyx_pybuffernd_predmasks.rcbuffer = &__pyx_pybuffer_predmasks;
   __pyx_pybuffer_config.pybuffer.buf = NULL;
   __pyx_pybuffer_config.refcount = 0;
   __pyx_pybuffernd_config.data = NULL;
@@ -1712,6 +1733,11 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   __pyx_pybuffernd_predposes.diminfo[0].strides = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_predposes.diminfo[0].shape = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_predposes.diminfo[1].strides = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_predposes.diminfo[1].shape = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_predposes.diminfo[2].strides = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_predposes.diminfo[2].shape = __pyx_pybuffernd_predposes.rcbuffer->pybuffer.shape[2];
   {
     __Pyx_BufFmt_StackElem __pyx_stack[1];
+    if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_predmasks.rcbuffer->pybuffer, (PyObject*)__pyx_v_predmasks, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 3, 0, __pyx_stack) == -1)) __PYX_ERR(0, 30, __pyx_L1_error)
+  }
+  __pyx_pybuffernd_predmasks.diminfo[0].strides = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_predmasks.diminfo[0].shape = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_predmasks.diminfo[1].strides = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_predmasks.diminfo[1].shape = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_predmasks.diminfo[2].strides = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_predmasks.diminfo[2].shape = __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.shape[2];
+  {
+    __Pyx_BufFmt_StackElem __pyx_stack[1];
     if (unlikely(__Pyx_GetBufferAndValidate(&__pyx_pybuffernd_config.rcbuffer->pybuffer, (PyObject*)__pyx_v_config, &__Pyx_TypeInfo_nn___pyx_t_5numpy_float32_t, PyBUF_FORMAT| PyBUF_STRIDES, 1, 0, __pyx_stack) == -1)) __PYX_ERR(0, 30, __pyx_L1_error)
   }
   __pyx_pybuffernd_config.diminfo[0].strides = __pyx_pybuffernd_config.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_config.diminfo[0].shape = __pyx_pybuffernd_config.rcbuffer->pybuffer.shape[0];
@@ -1721,12 +1747,12 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   }
   __pyx_pybuffernd_ptcloud.diminfo[0].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[0]; __pyx_pybuffernd_ptcloud.diminfo[0].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[0]; __pyx_pybuffernd_ptcloud.diminfo[1].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[1]; __pyx_pybuffernd_ptcloud.diminfo[1].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[1]; __pyx_pybuffernd_ptcloud.diminfo[2].strides = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.strides[2]; __pyx_pybuffernd_ptcloud.diminfo[2].shape = __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.shape[2];
 
-  /* "torchviz/pangoposeviz.pyx":35
+  /* "torchviz/pangoposeviz.pyx":36
  *                          np.ndarray[np.float32_t, ndim=3] ptcloud):
  *         # Run CPP code
  *         self.pangoposeviz.update_viz(&poses[0,0,0],             # <<<<<<<<<<<<<<
  *                                      &predposes[0,0,0],
- *                                      &config[0],
+ *                                      &predmasks[0,0,0],
  */
   __pyx_t_1 = 0;
   __pyx_t_2 = 0;
@@ -1746,15 +1772,15 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   } else if (unlikely(__pyx_t_3 >= __pyx_pybuffernd_poses.diminfo[2].shape)) __pyx_t_4 = 2;
   if (unlikely(__pyx_t_4 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_4);
-    __PYX_ERR(0, 35, __pyx_L1_error)
+    __PYX_ERR(0, 36, __pyx_L1_error)
   }
 
-  /* "torchviz/pangoposeviz.pyx":36
+  /* "torchviz/pangoposeviz.pyx":37
  *         # Run CPP code
  *         self.pangoposeviz.update_viz(&poses[0,0,0],
  *                                      &predposes[0,0,0],             # <<<<<<<<<<<<<<
+ *                                      &predmasks[0,0,0],
  *                                      &config[0],
- *                                      &ptcloud[0,0,0])
  */
   __pyx_t_5 = 0;
   __pyx_t_6 = 0;
@@ -1774,67 +1800,95 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   } else if (unlikely(__pyx_t_7 >= __pyx_pybuffernd_predposes.diminfo[2].shape)) __pyx_t_4 = 2;
   if (unlikely(__pyx_t_4 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_4);
-    __PYX_ERR(0, 36, __pyx_L1_error)
-  }
-
-  /* "torchviz/pangoposeviz.pyx":37
- *         self.pangoposeviz.update_viz(&poses[0,0,0],
- *                                      &predposes[0,0,0],
- *                                      &config[0],             # <<<<<<<<<<<<<<
- *                                      &ptcloud[0,0,0])
- */
-  __pyx_t_8 = 0;
-  __pyx_t_4 = -1;
-  if (__pyx_t_8 < 0) {
-    __pyx_t_8 += __pyx_pybuffernd_config.diminfo[0].shape;
-    if (unlikely(__pyx_t_8 < 0)) __pyx_t_4 = 0;
-  } else if (unlikely(__pyx_t_8 >= __pyx_pybuffernd_config.diminfo[0].shape)) __pyx_t_4 = 0;
-  if (unlikely(__pyx_t_4 != -1)) {
-    __Pyx_RaiseBufferIndexError(__pyx_t_4);
     __PYX_ERR(0, 37, __pyx_L1_error)
   }
 
   /* "torchviz/pangoposeviz.pyx":38
+ *         self.pangoposeviz.update_viz(&poses[0,0,0],
  *                                      &predposes[0,0,0],
+ *                                      &predmasks[0,0,0],             # <<<<<<<<<<<<<<
  *                                      &config[0],
- *                                      &ptcloud[0,0,0])             # <<<<<<<<<<<<<<
+ *                                      &ptcloud[0,0,0])
  */
+  __pyx_t_8 = 0;
   __pyx_t_9 = 0;
   __pyx_t_10 = 0;
-  __pyx_t_11 = 0;
   __pyx_t_4 = -1;
+  if (__pyx_t_8 < 0) {
+    __pyx_t_8 += __pyx_pybuffernd_predmasks.diminfo[0].shape;
+    if (unlikely(__pyx_t_8 < 0)) __pyx_t_4 = 0;
+  } else if (unlikely(__pyx_t_8 >= __pyx_pybuffernd_predmasks.diminfo[0].shape)) __pyx_t_4 = 0;
   if (__pyx_t_9 < 0) {
-    __pyx_t_9 += __pyx_pybuffernd_ptcloud.diminfo[0].shape;
-    if (unlikely(__pyx_t_9 < 0)) __pyx_t_4 = 0;
-  } else if (unlikely(__pyx_t_9 >= __pyx_pybuffernd_ptcloud.diminfo[0].shape)) __pyx_t_4 = 0;
+    __pyx_t_9 += __pyx_pybuffernd_predmasks.diminfo[1].shape;
+    if (unlikely(__pyx_t_9 < 0)) __pyx_t_4 = 1;
+  } else if (unlikely(__pyx_t_9 >= __pyx_pybuffernd_predmasks.diminfo[1].shape)) __pyx_t_4 = 1;
   if (__pyx_t_10 < 0) {
-    __pyx_t_10 += __pyx_pybuffernd_ptcloud.diminfo[1].shape;
-    if (unlikely(__pyx_t_10 < 0)) __pyx_t_4 = 1;
-  } else if (unlikely(__pyx_t_10 >= __pyx_pybuffernd_ptcloud.diminfo[1].shape)) __pyx_t_4 = 1;
-  if (__pyx_t_11 < 0) {
-    __pyx_t_11 += __pyx_pybuffernd_ptcloud.diminfo[2].shape;
-    if (unlikely(__pyx_t_11 < 0)) __pyx_t_4 = 2;
-  } else if (unlikely(__pyx_t_11 >= __pyx_pybuffernd_ptcloud.diminfo[2].shape)) __pyx_t_4 = 2;
+    __pyx_t_10 += __pyx_pybuffernd_predmasks.diminfo[2].shape;
+    if (unlikely(__pyx_t_10 < 0)) __pyx_t_4 = 2;
+  } else if (unlikely(__pyx_t_10 >= __pyx_pybuffernd_predmasks.diminfo[2].shape)) __pyx_t_4 = 2;
   if (unlikely(__pyx_t_4 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_4);
     __PYX_ERR(0, 38, __pyx_L1_error)
   }
 
-  /* "torchviz/pangoposeviz.pyx":35
+  /* "torchviz/pangoposeviz.pyx":39
+ *                                      &predposes[0,0,0],
+ *                                      &predmasks[0,0,0],
+ *                                      &config[0],             # <<<<<<<<<<<<<<
+ *                                      &ptcloud[0,0,0])
+ */
+  __pyx_t_11 = 0;
+  __pyx_t_4 = -1;
+  if (__pyx_t_11 < 0) {
+    __pyx_t_11 += __pyx_pybuffernd_config.diminfo[0].shape;
+    if (unlikely(__pyx_t_11 < 0)) __pyx_t_4 = 0;
+  } else if (unlikely(__pyx_t_11 >= __pyx_pybuffernd_config.diminfo[0].shape)) __pyx_t_4 = 0;
+  if (unlikely(__pyx_t_4 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_4);
+    __PYX_ERR(0, 39, __pyx_L1_error)
+  }
+
+  /* "torchviz/pangoposeviz.pyx":40
+ *                                      &predmasks[0,0,0],
+ *                                      &config[0],
+ *                                      &ptcloud[0,0,0])             # <<<<<<<<<<<<<<
+ */
+  __pyx_t_12 = 0;
+  __pyx_t_13 = 0;
+  __pyx_t_14 = 0;
+  __pyx_t_4 = -1;
+  if (__pyx_t_12 < 0) {
+    __pyx_t_12 += __pyx_pybuffernd_ptcloud.diminfo[0].shape;
+    if (unlikely(__pyx_t_12 < 0)) __pyx_t_4 = 0;
+  } else if (unlikely(__pyx_t_12 >= __pyx_pybuffernd_ptcloud.diminfo[0].shape)) __pyx_t_4 = 0;
+  if (__pyx_t_13 < 0) {
+    __pyx_t_13 += __pyx_pybuffernd_ptcloud.diminfo[1].shape;
+    if (unlikely(__pyx_t_13 < 0)) __pyx_t_4 = 1;
+  } else if (unlikely(__pyx_t_13 >= __pyx_pybuffernd_ptcloud.diminfo[1].shape)) __pyx_t_4 = 1;
+  if (__pyx_t_14 < 0) {
+    __pyx_t_14 += __pyx_pybuffernd_ptcloud.diminfo[2].shape;
+    if (unlikely(__pyx_t_14 < 0)) __pyx_t_4 = 2;
+  } else if (unlikely(__pyx_t_14 >= __pyx_pybuffernd_ptcloud.diminfo[2].shape)) __pyx_t_4 = 2;
+  if (unlikely(__pyx_t_4 != -1)) {
+    __Pyx_RaiseBufferIndexError(__pyx_t_4);
+    __PYX_ERR(0, 40, __pyx_L1_error)
+  }
+
+  /* "torchviz/pangoposeviz.pyx":36
  *                          np.ndarray[np.float32_t, ndim=3] ptcloud):
  *         # Run CPP code
  *         self.pangoposeviz.update_viz(&poses[0,0,0],             # <<<<<<<<<<<<<<
  *                                      &predposes[0,0,0],
- *                                      &config[0],
+ *                                      &predmasks[0,0,0],
  */
-  __pyx_v_self->pangoposeviz->update_viz((&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_poses.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_poses.diminfo[0].strides, __pyx_t_2, __pyx_pybuffernd_poses.diminfo[1].strides, __pyx_t_3, __pyx_pybuffernd_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_predposes.rcbuffer->pybuffer.buf, __pyx_t_5, __pyx_pybuffernd_predposes.diminfo[0].strides, __pyx_t_6, __pyx_pybuffernd_predposes.diminfo[1].strides, __pyx_t_7, __pyx_pybuffernd_predposes.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config.rcbuffer->pybuffer.buf, __pyx_t_8, __pyx_pybuffernd_config.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_9, __pyx_pybuffernd_ptcloud.diminfo[0].strides, __pyx_t_10, __pyx_pybuffernd_ptcloud.diminfo[1].strides, __pyx_t_11, __pyx_pybuffernd_ptcloud.diminfo[2].strides))));
+  __pyx_v_self->pangoposeviz->update_viz((&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_poses.rcbuffer->pybuffer.buf, __pyx_t_1, __pyx_pybuffernd_poses.diminfo[0].strides, __pyx_t_2, __pyx_pybuffernd_poses.diminfo[1].strides, __pyx_t_3, __pyx_pybuffernd_poses.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_predposes.rcbuffer->pybuffer.buf, __pyx_t_5, __pyx_pybuffernd_predposes.diminfo[0].strides, __pyx_t_6, __pyx_pybuffernd_predposes.diminfo[1].strides, __pyx_t_7, __pyx_pybuffernd_predposes.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_predmasks.rcbuffer->pybuffer.buf, __pyx_t_8, __pyx_pybuffernd_predmasks.diminfo[0].strides, __pyx_t_9, __pyx_pybuffernd_predmasks.diminfo[1].strides, __pyx_t_10, __pyx_pybuffernd_predmasks.diminfo[2].strides))), (&(*__Pyx_BufPtrStrided1d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_config.rcbuffer->pybuffer.buf, __pyx_t_11, __pyx_pybuffernd_config.diminfo[0].strides))), (&(*__Pyx_BufPtrStrided3d(__pyx_t_5numpy_float32_t *, __pyx_pybuffernd_ptcloud.rcbuffer->pybuffer.buf, __pyx_t_12, __pyx_pybuffernd_ptcloud.diminfo[0].strides, __pyx_t_13, __pyx_pybuffernd_ptcloud.diminfo[1].strides, __pyx_t_14, __pyx_pybuffernd_ptcloud.diminfo[2].strides))));
 
   /* "torchviz/pangoposeviz.pyx":30
  *         del self.pangoposeviz
  * 
  *     def update_viz(self, np.ndarray[np.float32_t, ndim=3] poses,             # <<<<<<<<<<<<<<
  *                          np.ndarray[np.float32_t, ndim=3] predposes,
- *                          np.ndarray[np.float32_t, ndim=1] config,
+ *                          np.ndarray[np.float32_t, ndim=3] predmasks,
  */
 
   /* function exit code */
@@ -1847,6 +1901,7 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
     __Pyx_ErrFetch(&__pyx_type, &__pyx_value, &__pyx_tb);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_config.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_poses.rcbuffer->pybuffer);
+    __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_predmasks.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_predposes.rcbuffer->pybuffer);
     __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_ptcloud.rcbuffer->pybuffer);
   __Pyx_ErrRestore(__pyx_type, __pyx_value, __pyx_tb);}
@@ -1856,6 +1911,7 @@ static PyObject *__pyx_pf_8torchviz_12pangoposeviz_17PyPangolinPoseViz_4update_v
   __pyx_L0:;
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_config.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_poses.rcbuffer->pybuffer);
+  __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_predmasks.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_predposes.rcbuffer->pybuffer);
   __Pyx_SafeReleaseBuffer(&__pyx_pybuffernd_ptcloud.rcbuffer->pybuffer);
   __pyx_L2:;
@@ -4513,6 +4569,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_kp_s_numpy_core_multiarray_failed_to, __pyx_k_numpy_core_multiarray_failed_to, sizeof(__pyx_k_numpy_core_multiarray_failed_to), 0, 0, 1, 0},
   {&__pyx_kp_s_numpy_core_umath_failed_to_impor, __pyx_k_numpy_core_umath_failed_to_impor, sizeof(__pyx_k_numpy_core_umath_failed_to_impor), 0, 0, 1, 0},
   {&__pyx_n_s_poses, __pyx_k_poses, sizeof(__pyx_k_poses), 0, 0, 1, 1},
+  {&__pyx_n_s_predmasks, __pyx_k_predmasks, sizeof(__pyx_k_predmasks), 0, 0, 1, 1},
   {&__pyx_n_s_predposes, __pyx_k_predposes, sizeof(__pyx_k_predposes), 0, 0, 1, 1},
   {&__pyx_n_s_ptcloud, __pyx_k_ptcloud, sizeof(__pyx_k_ptcloud), 0, 0, 1, 1},
   {&__pyx_n_s_range, __pyx_k_range, sizeof(__pyx_k_range), 0, 0, 1, 1},

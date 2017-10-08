@@ -1,3 +1,5 @@
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "layers"))
 from layers.CollapseRtPivots import CollapseRtPivots
 from layers.ComposeRtPair import ComposeRtPair
 from layers.ComposeRt import ComposeRt

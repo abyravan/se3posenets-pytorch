@@ -407,7 +407,7 @@ class SE3ToRtFunction(Function):
             rotzy = torch.bmm(rotz, roty)  # Rzy = R32
 
             # Gradient w.r.t Euler angles from Barfoot's book (http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf)
-            for k in xrange(3):
+            for k in range(3):
                 gradr = grad_rot_params.narrow(1, k, 1)  # Gradient w.r.t angle (k)
                 vec = torch.zeros(1, 3).type_as(gradr)
                 vec[0][k] = 1  # Unit vector
@@ -437,7 +437,7 @@ class SE3ToRtFunction(Function):
 
             # Iterate over the 3-axis angle parameters to compute their gradients
             # ([v * v' + v x (Id - R)] / ||v||^2 _ k) x (R) .* gradOutput  where "x" is the cross product
-            for k in xrange(3):
+            for k in range(3):
                 # Create skew symmetric matrix
                 skewsym = self.create_skew_symmetric_matrix(vV.narrow(2, k, 1))
 
@@ -447,7 +447,7 @@ class SE3ToRtFunction(Function):
                     vec = torch.zeros(1, 3).type_as(skewsym);
                     vec[0][k] = 1  # Unit vector
                     idskewsym = self.create_skew_symmetric_matrix(vec);
-                    for i in xrange(tot_se3):
+                    for i in range(tot_se3):
                         if (angle2[i].squeeze()[0] < self.eps):
                             skewsym[i].copy_(idskewsym)  # Use the new skew sym matrix (around identity)
 

@@ -39,6 +39,13 @@ parser.add_argument('--pt-wt', default=1, type=float,
 parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
                     help='Use angles of all joints as inputs to the networks (default: False)')
 
+# Define xrange
+try:
+    a = xrange(1)
+except NameError: # Not defined in Python 3.x
+    def xrange(*args):
+        return iter(range(*args))
+
 ################ MAIN
 #@profile
 def main():
@@ -346,6 +353,9 @@ def main():
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
+        # Delete train and val loaders
+        #del train_loader, val_loader
+
         # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')
         test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
@@ -514,10 +524,10 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
     # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
-    #ptpredlayer = se3nn.NTfm3D
+    ptpredlayer = se3nn.NTfm3D
 
     # Type of loss (mixture of experts = wt sharpening or sigmoid)
-    #mex_loss = True
+    mex_loss = True
 
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
@@ -611,7 +621,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Predict transformed 3D points
                 # We back-propagate only to the first predicted delta, so we break the graph between the later deltas and the predicted 3D points
                 compdelta = compdeltaposes[k] if (k == 0) else util.to_var(compdeltaposes[k].data.clone(), requires_grad=False)
-                nextpts = se3nn.NTfm3D()(pts[:,0], initmask, compdelta)
+                nextpts = ptpredlayer()(pts[:,0], initmask, compdelta)
 
                 # Setup inputs & targets for loss
                 # NOTE: These losses are correct for the masks, but for any delta other than the first, the errors are
@@ -623,7 +633,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Predict transformed 3D points
                 # We do not want to backpropagate across the chain of predicted points so we break the graph here
                 currpts = pts[:,0] if (k == 0) else util.to_var(predpts[k-1].data.clone(), requires_grad=False)
-                nextpts = se3nn.NTfm3D()(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
+                nextpts = ptpredlayer()(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
 
                 # Setup inputs & targets for loss
                 # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
@@ -838,8 +848,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Print the predicted delta-SE3s
                 if not args.use_gt_poses:
-                    print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
-                                                                                                 args.se3_dim).cpu()
+                    print('\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
+                                                                                                 args.se3_dim).cpu())
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

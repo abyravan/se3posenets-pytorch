@@ -38,7 +38,7 @@ def get_se3_dimension(se3_type, use_pivot):
 
 ### Hook for backprops of variables, just prints min, max, mean of grads along with num of "NaNs"
 def variable_hook(grad, txt):
-    print txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0]
+    print(txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0])
 
 ### Initialize the SE3 prediction layer to identity
 def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):

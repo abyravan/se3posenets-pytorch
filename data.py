@@ -13,22 +13,28 @@ from layers._ext import se3layers
 ############
 ### Helper functions for reading baxter data
 
+try:
+    a = xrange(1)
+except NameError: # Not defined in Python 3.x
+    def xrange(*args):
+        return iter(range(*args))
+
 # Read baxter state files
 def read_baxter_state_file(filename):
     ret = {}
-    with open(filename, 'rb') as csvfile:
+    with open(filename, 'rt') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-        ret['actjtpos']     = torch.Tensor(spamreader.next()[0:-1])  # Last element is a string due to the way the file is created
-        ret['actjtvel']     = torch.Tensor(spamreader.next()[0:-1])
-        ret['actjteff']     = torch.Tensor(spamreader.next()[0:-1])
-        ret['comjtpos']     = torch.Tensor(spamreader.next()[0:-1])
-        ret['comjtvel']     = torch.Tensor(spamreader.next()[0:-1])
-        ret['comjtacc']     = torch.Tensor(spamreader.next()[0:-1])
-        ret['tarendeffpos'] = torch.Tensor(spamreader.next()[0:-1])
+        ret['actjtpos']     = torch.Tensor(next(spamreader)[0:-1])  # Last element is a string due to the way the file is created
+        ret['actjtvel']     = torch.Tensor(next(spamreader)[0:-1])
+        ret['actjteff']     = torch.Tensor(next(spamreader)[0:-1])
+        ret['comjtpos']     = torch.Tensor(next(spamreader)[0:-1])
+        ret['comjtvel']     = torch.Tensor(next(spamreader)[0:-1])
+        ret['comjtacc']     = torch.Tensor(next(spamreader)[0:-1])
+        ret['tarendeffpos'] = torch.Tensor(next(spamreader)[0:-1])
         try:
-            trackdata = spamreader.next()[0:-1]
+            trackdata = next(spamreader)[0:-1]
             ret['trackerjtpos'] = torch.Tensor(trackdata if trackdata[-1] != '' else trackdata[:-1])
-            ret['timestamp']    = spamreader.next()[0]
+            ret['timestamp']    = next(spamreader)[0]
         except:
             ret['trackerjtpos'] = None
             ret['timestamp']    = None
@@ -39,41 +45,40 @@ def read_baxter_state_file(filename):
 def read_baxter_se3state_file(filename):
     # Read all the lines in the SE3-state file
     lines = []
-    with open(filename, 'rb') as csvfile:
-        spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
+    with open(filename, 'rt') as csvfile:
+        spamreader = csv.reader(csvfile,  delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
         for row in spamreader:
             if len(row) == 0:
                 continue
             if type(row[-1]) == str:  # In case we have a string at the end of the list
                 row = row[0:-1]
             lines.append(torch.Tensor(row))
+
     # Parse the SE3-states
     ret, ctr = {}, 0
     while (ctr < len(lines)):
         id = int(lines[ctr][0])  # ID of mesh
         data = lines[ctr + 1].view(3, 4)  # Transform data
         T = torch.eye(4)
-        T[0:3, 0:4] = torch.cat([data[0:3, 1:4], data[0:3, 0]], 1)  # [R | t; 0 | 1]
+        T[0:3, 0:3] = data[0:3, 1:4]; T[0:3, 3] = data[0:3, 0]
         ret[id] = T  # Add to list of transforms
         ctr += 2  # Increment counter
     return ret
 
-
 # Read baxter joint labels and their corresponding mesh index value
 def read_statelabels_file(filename):
     ret = {}
-    with open(filename, 'rb') as csvfile:
+    with open(filename, 'rt') as csvfile:
         spamreader      = csv.reader(csvfile, delimiter=' ')
-        ret['frames']   = spamreader.next()[0:-1]
-        ret['meshIds']  = torch.IntTensor([int(x) for x in spamreader.next()[0:-1]])
+        ret['frames']   = next(spamreader)[0:-1]
+        ret['meshIds']  = torch.IntTensor([int(x) for x in next(spamreader)[0:-1]])
     return ret
-
 
 # Read baxter camera data file
 def read_cameradata_file(filename):
     # Read lines in the file
     lines = []
-    with open(filename, 'rb') as csvfile:
+    with open(filename, 'rt') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=' ')
         for row in spamreader:
             lines.append([x for x in row if x != ''])
@@ -87,10 +92,10 @@ def read_cameradata_file(filename):
 def read_intrinsics_file(filename):
     # Read lines in the file
     ret = {}
-    with open(filename, 'rb') as csvfile:
+    with open(filename, 'rt') as csvfile:
         spamreader = csv.reader(csvfile, delimiter=' ')
-        label = spamreader.next()
-        data = spamreader.next()
+        label = next(spamreader)
+        data = next(spamreader)
         assert(len(label) == len(data))
         for k in xrange(len(label)):
             ret[label[k]] = float(data[k])
@@ -101,12 +106,12 @@ def read_intrinsics_file(filename):
 def read_statectrllabels_file(filename):
     # Read lines in the file
     ret = {}
-    with open(filename, 'rb') as csvfile:
-        spamreader = csv.reader(csvfile, delimiter=' ')
-        statenames = spamreader.next()[:-1]
-        ctrlnames  = spamreader.next()[:-1]
+    with open(filename, 'rt') as csvfile:
+        spamreader = csv.reader(csvfile,  delimiter=' ')
+        statenames = next(spamreader)[:-1]
+        ctrlnames  = next(spamreader)[:-1]
         try:
-            trackernames = spamreader.next()[:-1]
+            trackernames = next(spamreader)[:-1]
         except:
             trackernames = []
     return statenames, ctrlnames, trackernames
@@ -326,9 +331,9 @@ def valid_data_filter(path, nexamples, step, seq, state_labels,
             right_ids = [state_labels.index(x) for x in ['right_s0', 'right_s1', 'right_e0', 'right_e1', 'right_w0', 'right_w1', 'right_w2']]
             jtangles = np.zeros((nexamples+step*(seq+1), nstate), dtype=np.float32)
             for k in xrange(nexamples+step*(seq+1)):
-                with open(path + 'state' + str(k) + '.txt', 'rb') as csvfile:
+                with open(path + 'state' + str(k) + '.txt', 'rt') as csvfile:
                     spamreader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-                    jtangles[k]  = spamreader.next()[0:-1]
+                    jtangles[k]  = next(spamreader)[0:-1]
         ## Compute all the valid examples
         validids = []
         for k in xrange(nexamples):
@@ -379,7 +384,7 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
             # Load stats file, get num images & sub-dirs
             statsfilename = load_dir + '/postprocessstats.txt'
             max_flow_step = (step_len * seq_len) # This is the maximum future step (k) for which we need flows (flow_k/)
-            with open(statsfilename, 'rb') as csvfile:
+            with open(statsfilename, 'rt') as csvfile:
                 reader = csv.reader(csvfile, delimiter=' ')
                 dirnames, numdata, numinvalid = [], [], 0
                 for row in reader:
@@ -437,9 +442,9 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                     statsfilename = os.path.join(path, 'postprocessstats.txt')
                     assert (os.path.exists(statsfilename))
                     max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows (flow_k/)
-                    with open(statsfilename, 'rb') as csvfile:
+                    with open(statsfilename, 'rt') as csvfile:
                         reader = csv.reader(csvfile, delimiter=' ', quoting=csv.QUOTE_NONNUMERIC)
-                        nexamples = int(reader.next()[0]) - max_flow_step # We only have flows for these many images!
+                        nexamples = int(next(reader)[0]) - max_flow_step # We only have flows for these many images!
 
                     # This function checks all examples "apriori" to see if they are valid
                     # and returns a set of ids such that the sequence of examples from that id
@@ -482,7 +487,7 @@ def generate_baxter_sequence(dataset, idx):
     # Get stuff from the dataset
     step, seq, suffix = dataset['step'], dataset['seq'], dataset['suffix']
     # If the dataset has subdirs, find the proper sub-directory to use
-    if (dataset.has_key('subdirs')):
+    if ('subdirs' in dataset) :#dataset.has_key('subdirs')):
         # Find the sub-directory the data falls into
         assert (idx < dataset['numdata']);  # Check if we are within limits
         did = np.searchsorted(dataset['subdirs']['datahist'], idx, 'right') - 1  # ID of sub-directory. If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
@@ -564,7 +569,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Setup temp var for depth
     depths = points.narrow(1,2,1)  # Last channel in points is the depth
-
+    
     # Setup vars for BWD flow computation
     if compute_bwdflows:
         masks = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
@@ -622,7 +627,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         if allposes.nelement() == 0:
             allposes.resize_(seq_len + 1, len(se3state)+1, 3, 4).fill_(0) # Setup size
         allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
-        for id, tfm in se3state.iteritems():
+        for id, tfm in se3state.items():
             se3tfm = torch.mm(camera_extrinsics['modelView'], tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
             allposes[k][id] = se3tfm[0:3, :] # 3 x 4 transform (id is 1-indexed already, 0 is BG)
 

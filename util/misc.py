@@ -73,12 +73,12 @@ class DataEnumerator(object):
         self.ids = [] # Used in case we want to keep track of the ids in the data
     def next(self):
         try:
-            sample = self.enumerator.next() # Get next sample
+            sample = next(self.enumerator) #self.enumerator.next() # Get next sample
         except StopIteration:
             self.enumerator = enumerate(self.data) # Reset enumerator once it reaches the end
             self.nruns += 1 # Done with one complete run of the data
             self.niters = 0 # Num iters in current run
-            sample = self.enumerator.next() # Get next sample
+            sample = next(self.enumerator) #self.enumerator.next() # Get next sample
             #print('Completed a run over the data. Num total runs: {}, Num total iters: {}'.format(
             #    self.nruns, self.niters+1))
         self.niters += 1 # Increment iteration count
@@ -86,7 +86,7 @@ class DataEnumerator(object):
         #     self.ids.append(sample[1]['id']) # Append if it exists
         # except:
         #     pass
-        return sample # Return sample
+        return sample
 
     def __len__(self):
         return len(self.data)

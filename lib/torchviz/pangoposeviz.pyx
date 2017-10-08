@@ -15,7 +15,7 @@ cdef extern from "pangoposeviz.hpp":
     cdef cppclass PangolinPoseViz:
         PangolinPoseViz();
 
-        void update_viz(const float *gtpose, const float *predpose,
+        void update_viz(const float *gtpose, const float *predpose, const float *predmask,
                         float *config, float *ptcloud);
 
 cdef class PyPangolinPoseViz:
@@ -29,10 +29,12 @@ cdef class PyPangolinPoseViz:
 
     def update_viz(self, np.ndarray[np.float32_t, ndim=3] poses,
                          np.ndarray[np.float32_t, ndim=3] predposes,
+                         np.ndarray[np.float32_t, ndim=3] predmasks,
                          np.ndarray[np.float32_t, ndim=1] config,
                          np.ndarray[np.float32_t, ndim=3] ptcloud):
         # Run CPP code
         self.pangoposeviz.update_viz(&poses[0,0,0],
                                      &predposes[0,0,0],
+                                     &predmasks[0,0,0],
                                      &config[0],
                                      &ptcloud[0,0,0])

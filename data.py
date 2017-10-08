@@ -47,17 +47,17 @@ def read_baxter_se3state_file(filename):
             if type(row[-1]) == str:  # In case we have a string at the end of the list
                 row = row[0:-1]
             lines.append(torch.Tensor(row))
+
     # Parse the SE3-states
     ret, ctr = {}, 0
     while (ctr < len(lines)):
         id = int(lines[ctr][0])  # ID of mesh
         data = lines[ctr + 1].view(3, 4)  # Transform data
         T = torch.eye(4)
-        T[0:3, 0:4] = torch.cat([data[0:3, 1:4], data[0:3, 0]], 1)  # [R | t; 0 | 1]
-        ret[id] = T  # Add to list of transforms
+        T[0:3, 0:3] = data[0:3, 1:4]; T[0:3, 3] = data[0:3, 0]
+        ret[id] = T # Add to list of transforms
         ctr += 2  # Increment counter
     return ret
-
 
 # Read baxter joint labels and their corresponding mesh index value
 def read_statelabels_file(filename):
@@ -67,7 +67,6 @@ def read_statelabels_file(filename):
         ret['frames']   = spamreader.next()[0:-1]
         ret['meshIds']  = torch.IntTensor([int(x) for x in spamreader.next()[0:-1]])
     return ret
-
 
 # Read baxter camera data file
 def read_cameradata_file(filename):
@@ -564,7 +563,6 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Setup temp var for depth
     depths = points.narrow(1,2,1)  # Last channel in points is the depth
-
     # Setup vars for BWD flow computation
     if compute_bwdflows:
         masks = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)

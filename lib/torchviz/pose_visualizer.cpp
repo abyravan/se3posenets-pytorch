@@ -108,7 +108,8 @@ void drawAxis(const float lineWidth)
     glEnd();
 }
 
-void drawFrame(const dart::SE3 se3, const float colorScale, const float frameLength, const float lineWidth)
+///////// == Draw a 3D frame
+void drawFrame(const dart::SE3 se3, const float colorScale, const float frameLength, const float lineWidth, const float3 color)
 {
     // Get the 3D points (x,y,z axis at frameLength distance from the center)
     float4 c = se3 * make_float4(0,0,0,1); // Center
@@ -120,21 +121,21 @@ void drawFrame(const dart::SE3 se3, const float colorScale, const float frameLen
     glLineWidth(lineWidth);
 
     // Draw x-axis
-    glColor3f(colorScale, 0.0, 0.0);
+    glColor3f(colorScale*color.x, colorScale*color.y, colorScale*color.z);
     glBegin(GL_LINES);
     glVertex3f(c.x, c.y, c.z);
     glVertex3f(x.x, x.y, x.z);
     glEnd();
 
     // Draw y-axis
-    glColor3f(0.0, colorScale, 0.0);
+    glColor3f(colorScale*color.x, colorScale*color.y, colorScale*color.z);
     glBegin(GL_LINES);
     glVertex3f(c.x, c.y, c.z);
     glVertex3f(y.x, y.y, y.z);
     glEnd();
 
     // Draw z-axis
-    glColor3f(0.0, 0.0, colorScale);
+    glColor3f(colorScale*color.x, colorScale*color.y, colorScale*color.z);
     glBegin(GL_LINES);
     glVertex3f(c.x, c.y, c.z);
     glVertex3f(z.x, z.y, z.z);
@@ -239,19 +240,21 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
     pangolin::OpenGlMatrixSpec glK_pangolin = pangolin::ProjectionMatrixRDF_TopLeft(glWidth,glHeight,glFLx,glFLy,glPPx,glPPy,0.01,1000);
 
     // Create a display renderer
-    pangolin::OpenGlRenderState camState(glK_pangolin);
     pangolin::OpenGlRenderState camStatePose(glK_pangolin);
-    pangolin::View & poseDisp = pangolin::Display("pose").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camStatePose));
-    pangolin::View & allDisp = pangolin::Display("multi")
+    pangolin::View & poseDisp = pangolin::Display("pose")
             .SetBounds(0.0, 0.5, pangolin::Attach::Pix(panelWidth), 1.0)
-            .SetLayout(pangolin::LayoutEqual)
-            .AddDisplay(poseDisp);
+            .SetAspect(glWidth*1.0f/(glHeight*1.0f))
+            .SetHandler(new pangolin::Handler3D(camStatePose));
 
     // Cam Disp is separate from others
-    pangolin::View & camDisp = pangolin::Display("cam")
+    pangolin::OpenGlRenderState camState(glK_pangolin);
+    pangolin::View & camDisp  = pangolin::Display("cam").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camState));
+    pangolin::View & maskDisp = pangolin::Display("mask").SetAspect(glWidth*1.0f/(glHeight*1.0f)).SetHandler(new pangolin::Handler3D(camStatePose));
+    pangolin::View & allDisp1 = pangolin::Display("cammask")
             .SetBounds(0.5, 1.0, pangolin::Attach::Pix(panelWidth), 1.0)
-            .SetAspect(glWidth*1.0f/(glHeight*1.0f))
-            .SetHandler(new pangolin::Handler3D(camState));
+            .SetLayout(pangolin::LayoutEqual)
+            .AddDisplay(camDisp)
+            .AddDisplay(maskDisp);
 
     /// ===== Pangolin options
 
@@ -499,6 +502,70 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
             r1++;
         }
 
+        //////////////////// ======= SHOW MASKED CURRENT PT CLOUD ========= ///////////////////////
+
+        // Get max val
+        std::vector<float3> colors = {make_float3(0.75,0.25,0.5),
+                                      make_float3(1,0,0),
+                                      make_float3(0,1,0),
+                                      make_float3(0,0,1),
+                                      make_float3(1,1,0),
+                                      make_float3(1,0,1),
+                                      make_float3(0,1,1),
+                                      make_float3(1,1,1)
+                                     };
+
+        // Clear the display
+        glClearColor(0.0,0.0,0.0,1.0); // This sets the value that all points that do not have a geometry render to (it was set to 1m before which messed up my rendering)
+        maskDisp.ActivateScissorAndClear(camState);
+
+        // Enable flags
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_NORMALIZE);
+        glEnable(GL_COLOR_MATERIAL);
+        glColor4ub(0xff,0xff,0xff,0xff);
+
+        // Apply inverse of modelview to get pts in model frame
+        glMultMatrixf(modelViewInv.data());
+
+        // Render input point cloud and color it based on the masks (opencv color map)
+        glPointSize(3.0);
+        glBegin(GL_POINTS);
+        for (int r = 0; r < 240; r++) // copy over from the flow matrix
+        {
+           for (int c = 0; c < 320; c++)
+           {
+               // Get pt index
+               int id = r * 320 + c;
+
+               // Color based on 3D point
+               int maxid = -1; float maxval = -HUGE_VAL;
+               for (int k = 0; k < data->nSE3; k++)
+               {
+                   if (data->predmask[id + k*npts] > maxval)
+                   {
+                       maxval = data->predmask[id + k*npts];
+                       maxid = k;
+                   }
+               }
+               float3 color = colors[maxid];
+               glColor3f(color.x,color.y,color.z);
+
+               // Plot point
+               glVertex3f(data->ptcloud[id + 0*npts],
+                          data->ptcloud[id + 1*npts],
+                          data->ptcloud[id + 2*npts]);
+           }
+        }
+
+        glEnd();
+
+        glPopMatrix(); // Remove inverse transform
+        glColor4ub(255,255,255,255);
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_DEPTH_TEST);
+        glDisable(GL_NORMALIZE);
+
         /// ================ Render the poses
         if (showAllFrames)
             for(int i = 0; i < data->nSE3; i++) *frameStatus[i] = true; // Reset options
@@ -509,9 +576,9 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
 
         // Enable flags
         glEnable(GL_DEPTH_TEST);
-        glEnable(GL_LIGHT0);
+        //glEnable(GL_LIGHT0);
         glEnable(GL_NORMALIZE);
-        glEnable(GL_LIGHTING);
+        //glEnable(GL_LIGHTING);
         glEnable(GL_COLOR_MATERIAL);
         glColor4ub(0xff,0xff,0xff,0xff);
 
@@ -529,8 +596,8 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
                 dart::SE3 p1_p = createSE3FromRt(&data->predpose[i*data->se3Dim]); // Pred pose 1
 
                 // Render the different frames
-                if (showPose) drawFrame(p1, 0.5, frameLength, lineWidth);
-                if (showPredPose) drawFrame(p1_p, 1.0, frameLength, lineWidth);
+                if (showPose) drawFrame(p1, 0.5, frameLength, lineWidth, colors[i]);
+                if (showPredPose) drawFrame(p1_p, 1.0, frameLength, lineWidth, colors[i]);
             }
         }
         // Finish
@@ -538,9 +605,9 @@ void run_pangolin(const boost::shared_ptr<LuaData> data)
         glColor4ub(255,255,255,255);
         glDisable(GL_COLOR_MATERIAL);
         glDisable(GL_DEPTH_TEST);
-        glDisable(GL_LIGHT0);
+        //glDisable(GL_LIGHT0);
         glDisable(GL_NORMALIZE);
-        glDisable(GL_LIGHTING);
+        //glDisable(GL_LIGHTING);
 
         // Unlock lock on data
         data_lock.unlock();
@@ -586,7 +653,7 @@ PangolinPoseViz::~PangolinPoseViz()
 ///
 /// \brief update_viz - Get new data from the lua code
 ///
-void PangolinPoseViz::update_viz(const float *pose, const float *predpose,
+void PangolinPoseViz::update_viz(const float *pose, const float *predpose, const float *predmask,
                                  float *config, float *ptcloud)
 {
 
@@ -595,6 +662,7 @@ void PangolinPoseViz::update_viz(const float *pose, const float *predpose,
 
     memcpy(data->pose, pose, data->nSE3 * data->se3Dim * sizeof(float));
     memcpy(data->predpose, predpose, data->nSE3 * data->se3Dim * sizeof(float));
+    memcpy(data->predmask, predmask, data->nSE3 * 240 * 320 * sizeof(float));
     memcpy(config, data->config, 7 * sizeof(float));
     memcpy(ptcloud, data->ptcloud, 3*240*320* sizeof(float));
 

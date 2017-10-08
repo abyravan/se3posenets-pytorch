@@ -18,6 +18,7 @@ public:
     boost::mutex dataMutex;
     float *pose;
     float *predpose;
+    float *predmask;
     float *config;
     float *rendered_img, *ptcloud;
     int nSE3;
@@ -35,8 +36,10 @@ public:
         int npose = nSE3 * se3Dim;
         pose     = new float[npose];
         predpose = new float[npose];
+        predmask = new float[nSE3*240*320];
         memset(pose, 0, npose * sizeof(float));
         memset(predpose, 0, npose * sizeof(float));
+        memset(predmask, 0, nSE3*240*320 * sizeof(float));
 
         // Configs
         int nconfig = 7;
@@ -77,7 +80,7 @@ class PangolinPoseViz
         PangolinPoseViz();
         ~PangolinPoseViz();
 
-        void update_viz(const float *gtpose, const float *predpose,
+        void update_viz(const float *gtpose, const float *predpose, const float *predmask,
                         float *config, float *ptcloud);
 
     private:

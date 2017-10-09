@@ -869,9 +869,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Print the predicted delta-SE3s
                 if not args.use_gt_poses:
-                    print('\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3, -1).cpu())
+                    deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
                     if len(pivots) > 0:
-                        print('\tPredicted pivots @ t=2:', pivots[-1].data[id].view(args.num_se3,-1).cpu())
+                        deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
+                    print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

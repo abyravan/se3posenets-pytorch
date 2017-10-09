@@ -51,7 +51,7 @@ class WeightedAveragePointsFunction(Function):
 			G = grad_output.view(B,K,J,1).narrow(1,i,1) / S # g_o / sum_j w_ij
 
 			# Gradient w.r.t points
-			grad_points += (M * G.expand(B,1,J,H*W)).view(B,J,H,W) # g_o * ( w_ij / sum (w_ij) )
+			grad_points += (M * G.expand(B,1,J,H*W).squeeze()) # g_o * ( w_ij / sum (w_ij) )
 
 			# Gradients w.r.t wts (scale difference of each point from output by gradient & normalize by sum of wts)
 			O = output.view(B,K,J,1).narrow(1,i,1).expand(B,1,J,H*W) # i^th output

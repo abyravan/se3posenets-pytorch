@@ -266,7 +266,7 @@ def compute_pivots(ptcloud, masks, poses, pivottype):
         # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
         assert masks is not None, "Need to pass masks as input for pivot type: [maskmeannograd]"
         masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
-        pivots = se3nn.WeightedAveragePoints()(ptcloud, masks)
+        pivots = se3nn.WeightedAveragePoints()(ptcloud, masksc)
     elif pivottype == 'posecenter':
         assert poses is not None, "Need to pass poses as input for pivot type: [posecenter]"
         pivots = poses.narrow(3,3,1).clone().view(bsz, nse3, 3)

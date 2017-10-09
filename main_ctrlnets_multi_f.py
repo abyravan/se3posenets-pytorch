@@ -597,7 +597,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 poses.append(p)
                 masks.append(m)
                 # Compute pivots
-                pivots.append(ctrlnets.compute_pivots(pts[:,k], p, m, args.delta_pivot))
+                pivots.append(ctrlnets.compute_pivots(pts[:,k], m, p, args.delta_pivot))
                 # Get initial mask
                 if (k == 0):
                     initmask = masks[0]

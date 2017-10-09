@@ -586,6 +586,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
                 else:
                     p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
+                poses.append(p)
             else:
                 # Predict the poses and masks for all timesteps
                 if args.use_gt_masks:

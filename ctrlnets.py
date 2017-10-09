@@ -255,7 +255,7 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
 def compute_pivots(ptcloud, masks, poses, pivottype):
     bsz, nse3 = poses.size(0), poses.size(1)
     if pivottype == 'ptmean':
-        ptmean = ptcloud.view(bsz,3,-1).clone().sum(2) / (ptcloud.size(2) * ptcloud.size(3)) # Avg over all pts (H*W)
+        ptmean = ptcloud.clone().view(bsz,3,-1).sum(2) / (ptcloud.size(2) * ptcloud.size(3)) # Avg over all pts (H*W)
         pivots = ptmean.view(bsz,1,3).expand(bsz,nse3,3).clone() # Use same mean for all pts
     elif pivottype == 'maskmean':
         assert masks is not None, "Need to pass masks as input for pivot type: [maskmean]"

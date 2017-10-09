@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from  torch.autograd import Variable
 import se3layers as se3nn
+import util
 
 ################################################################################
 '''
@@ -248,6 +249,29 @@ def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
         input = input + noise
     input = (torch.clamp(input, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
     return F.normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
+
+### Pivot computation (returns a Bsz x nSE3 x 3 dimensional pivot)
+### Types: ptmean | maskmean | maskmeannograd | posecenter
+def compute_pivots(ptcloud, masks, poses, pivottype):
+    bsz, nse3 = poses.size(0), poses.size(1)
+    if pivottype == 'ptmean':
+        npts   = ptcloud.view(bsz,3,-1).narrow(1,2,1).ne(0).sum(2).float() # Get number of points that have non-zero depth
+        ptmean = ptcloud.view(bsz,3,-1).sum(2) / npts # Only average over pts that have non-zero depth
+        pivots = ptmean.view(bsz,1,3).expand(bsz,nse3,3).clone() # Use same mean for all pts
+    elif pivottype == 'maskmean':
+        assert(masks is not None, "Need to pass masks as input for pivot type: [maskmean]")
+        pivots = se3nn.WeightedAveragePoints()(ptcloud, masks)
+    elif pivottype == 'maskmeannograd':
+        # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
+        assert(masks is not None, "Need to pass masks as input for pivot type: [maskmeannograd]")
+        masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
+        pivots = se3nn.WeightedAveragePoints()(ptcloud, masks)
+    elif pivottype == 'posecenter':
+        assert(poses is not None, "Need to pass poses as input for pivot type: [posecenter]")
+        pivots = poses.narrow(3,3,1).clone().view(bsz, nse3, 3)
+    else:
+        assert False, 'Unknown pivot type input: {}'.format(pivottype)
+    return pivots
 
 ################################################################################
 '''
@@ -610,11 +634,11 @@ class PoseMaskEncoder(nn.Module):
 ### Transition model (predicts change in poses based on the applied control)
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
 class TransitionModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, use_pivot=False, se3_type='se3aa',
+    def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
                  local_delta_se3=False, use_jt_angles=False, num_state=7):
         super(TransitionModel, self).__init__()
-        self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=use_pivot)
+        self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
 
         # Pose encoder
@@ -663,9 +687,11 @@ class TransitionModel(nn.Module):
             init_se3layer_identity(layer, num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
+        self.delta_pivot = delta_pivot
+        self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
         self.deltaposedecoder = nn.Sequential()
-        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, use_pivot))  # Convert to Rt
-        if use_pivot:
+        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        if (self.delta_pivot != ''):
             self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
         if use_kinchain:
             self.deltaposedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False))  # Kinematic chain
@@ -688,9 +714,15 @@ class TransitionModel(nn.Module):
     def forward(self, x):
         # Run the forward pass
         if self.use_jt_angles:
-            p, j, c = x # Pose, Jtangles, Control
+            if self.inp_pivot:
+                p, j, c, pivot = x # Pose, Jtangles, Control, Pivot
+            else:
+                p, j, c = x # Pose, Jtangles, Control
         else:
-            p, c = x # Pose, Control
+            if self.inp_pivot:
+                p, c, pivot = x # Pose, Control, Pivot
+            else:
+                p, c = x # Pose, Control
         pv = p.view(-1, self.num_se3*12) # Reshape pose
         pe = self.poseencoder(pv)    # Encode pose
         ce = self.ctrlencoder(c)     # Encode ctrl
@@ -701,6 +733,8 @@ class TransitionModel(nn.Module):
             x = torch.cat([pe,ce], 1)    # Concatenate encoded vectors
         x = self.deltase3decoder(x)  # Predict delta-SE3
         x = x.view(-1, self.num_se3, self.se3_dim)
+        if self.inp_pivot: # For these two cases, we don't need to handle anything
+            x = torch.cat([x, pivot.view(-1, self.num_se3, 3)], 2) # Use externally provided pivots
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly
@@ -718,7 +752,7 @@ class TransitionModel(nn.Module):
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### [pose_t, mask_t], [pose_t+1, mask_t+1], [delta-pose, poset_t+1]
 class SE3PoseModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -735,7 +769,7 @@ class SE3PoseModel(nn.Module):
                                              use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                              use_jt_angles=use_jt_angles, num_state=num_state)
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
@@ -758,6 +792,9 @@ class SE3PoseModel(nn.Module):
 
         # Get transition model predicton of pose_1
         inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        if self.transitionmodel.inp_pivot:
+            self.pivots = compute_pivots(ptcloud_1, mask_1, pose_1, self.transitionmodel.delta_pivot) # Compute pivot
+            inp3.append(self.pivots)
         deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
@@ -767,7 +804,7 @@ class SE3PoseModel(nn.Module):
 ### SE3-OnlyPose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### pose_t, pose_t+1, [delta-pose, poset_t+1]
 class SE3OnlyPoseModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -782,7 +819,7 @@ class SE3OnlyPoseModel(nn.Module):
                                      nonlinearity=nonlinearity, wide=wide,
                                      use_jt_angles=use_jt_angles, num_state=num_state)
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
@@ -805,6 +842,10 @@ class SE3OnlyPoseModel(nn.Module):
 
         # Get transition model predicton of pose_1
         inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        if self.transitionmodel.inp_pivot:
+            ## TODO: Need to pass the GT masks as input to this network to compute the correct pivots
+            self.pivots = compute_pivots(ptcloud_1, None, pose_1, self.transitionmodel.delta_pivot) # Compute pivot
+            inp3.append(self.pivots)
         deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
@@ -814,7 +855,7 @@ class SE3OnlyPoseModel(nn.Module):
 ### SE3-OnlyMask-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### mask_t, mask_t+1
 class SE3OnlyMaskModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -845,7 +886,7 @@ class SE3OnlyMaskModel(nn.Module):
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### [pose_t, mask_t], [pose_t+1, mask_t+1], [delta-pose, poset_t+1]
 class SE3DecompModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -868,7 +909,7 @@ class SE3DecompModel(nn.Module):
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide)
 
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
@@ -895,6 +936,9 @@ class SE3DecompModel(nn.Module):
 
         # Get transition model predicton of pose_1
         inp3 = [pose_1, jtangles_1, ctrl_1] if self.use_jt_angles_trans else [pose_1, ctrl_1]
+        if self.transitionmodel.inp_pivot:
+            self.pivots = compute_pivots(ptcloud_1, mask_1, pose_1, self.transitionmodel.delta_pivot) # Compute pivot
+            inp3.append(self.pivots)
         deltapose_t_12, pose_t_2 = self.transitionmodel(inp3)  # Predicts [delta-pose, pose]
 
         # Return outputs
@@ -905,7 +949,7 @@ class SE3DecompModel(nn.Module):
 ### Currently, this has a separate pose & mask predictor as well as a transition model
 ### NOTE: The forward pass is not currently implemented, this needs to be done outside
 class MultiStepSE3PoseModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -938,7 +982,7 @@ class MultiStepSE3PoseModel(nn.Module):
                                                  use_jt_angles=use_jt_angles, num_state=num_state)
 
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
@@ -969,11 +1013,11 @@ class MultiStepSE3PoseModel(nn.Module):
             return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
 
     # Predict next pose based on current pose and control
-    def forward_next_pose(self, pose, ctrl, jtangles=None):
-        if self.use_jt_angles_trans:
-            return self.transitionmodel([pose, jtangles, ctrl])
-        else:
-            return self.transitionmodel([pose, ctrl])
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        inp = [pose, jtangles, ctrl] if self.use_jt_angles_trans else [pose, ctrl]
+        if self.transitionmodel.inp_pivot:
+            inp.append(pivots)
+        return self.transitionmodel(inp)
 
     # Forward pass through the model
     def forward(self, x):
@@ -985,7 +1029,7 @@ class MultiStepSE3PoseModel(nn.Module):
 ### Predicts only poses, uses GT masks
 ### NOTE: The forward pass is not currently implemented, this needs to be done outside
 class MultiStepSE3OnlyPoseModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
@@ -1002,7 +1046,7 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
 
 
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, use_pivot=use_pivot,
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
                                                nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
                                                local_delta_se3=local_delta_se3,
@@ -1023,11 +1067,11 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
         raise NotImplementedError
 
     # Predict next pose based on current pose and control
-    def forward_next_pose(self, pose, ctrl, jtangles=None):
-        if self.use_jt_angles_trans:
-            return self.transitionmodel([pose, jtangles, ctrl])
-        else:
-            return self.transitionmodel([pose, ctrl])
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        inp = [pose, jtangles, ctrl] if self.use_jt_angles_trans else [pose, ctrl]
+        if self.transitionmodel.inp_pivot:
+            inp.append(pivots)
+        return self.transitionmodel(inp)
 
     # Forward pass through the model
     def forward(self, x):
@@ -1037,7 +1081,7 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
 ####################################
 ### Multi-step version of the SE3-OnlyMask-Model (Only predicts mask)
 class MultiStepSE3OnlyMaskModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False,
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
                  use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,

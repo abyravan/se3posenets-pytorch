@@ -172,8 +172,12 @@ def main():
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
-    args.se3_dim = ctrlnets.get_se3_dimension(args.se3_type, args.pred_pivot)
-    print('Predicting {} SE3s of type: {}. Dim: {}'.format(args.num_se3, args.se3_type, args.se3_dim))
+    assert (args.delta_pivot in ['', 'pred', 'ptmean', 'maskmean', 'maskmeannograd', 'posecenter']),\
+        'Unknown delta pivot type: ' + args.delta_pivot
+    delta_pivot_type = ' Delta pivot type: {}'.format(args.delta_pivot) if (args.delta_pivot != '') else ''
+    #args.se3_dim       = ctrlnets.get_se3_dimension(args.se3_type)
+    #args.delta_se3_dim = ctrlnets.get_se3_dimension(args.se3_type, (args.delta_pivot != '')) # Delta SE3 type
+    print('Predicting {} SE3s of type: {}.{}'.format(args.num_se3, args.se3_type, delta_pivot_type))
 
     # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
@@ -305,7 +309,7 @@ def main():
     else:
         modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                    se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                    se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
                     input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
@@ -569,18 +573,33 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Run a FWD pass through the network (multi-step)
         # Predict the poses and masks
         poses, initmask = [], None
+        masks, pivots = [], []
         for k in xrange(pts.size(1)):
-            # Predict the pose and mask at time t = 0
-            # For all subsequent timesteps, predict only the poses
-            if(k == 0):
-                if args.use_gt_masks:
-                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]]) # We can only predict poses
-                    initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
+            if (args.delta_pivot == '') or (args.delta_pivot == 'pred'):
+                # Predict the pose and mask at time t = 0
+                # For all subsequent timesteps, predict only the poses
+                if(k == 0):
+                    if args.use_gt_masks:
+                        p = model.forward_only_pose([pts[:,k], jtangles[:,k]]) # We can only predict poses
+                        initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
+                    else:
+                        p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
                 else:
-                    p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
+                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
             else:
-                p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
-            poses.append(p)
+                # Predict the poses and masks for all timesteps
+                if args.use_gt_masks:
+                    p = model.forward_only_pose([pts[:, k], jtangles[:, k]])  # We can only predict poses
+                    m = util.to_var(sample['masks'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT masks
+                else:
+                    p, m = model.forward_pose_mask([pts[:, k], jtangles[:, k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
+                poses.append(p)
+                masks.append(m)
+                # Compute pivots
+                pivots.append(ctrlnets.compute_pivots(pts[:,k], p, m, args.delta_pivot))
+                # Get initial mask
+                if (k == 0):
+                    initmask = masks[0]
 
         ## Make next-pose predictions & corresponding 3D point predictions using the transition model
         ## We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
@@ -597,7 +616,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 pose = util.to_var(transposes[k-1].data.clone(), requires_grad=False) # Use previous predicted pose (NOTE: This is a copy with the graph cut)
 
             # Predict next pose based on curr pose, control
-            delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k])
+            delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k],
+                                                   pivots[k] if (len(pivots) > 0) else None)
             deltaposes.append(delta)
             transposes.append(trans)
 
@@ -848,8 +868,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Print the predicted delta-SE3s
                 if not args.use_gt_poses:
-                    print('\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
-                                                                                                 args.se3_dim).cpu())
+                    print('\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3, -1).cpu())
+                    if len(pivots) > 0:
+                        print('\tPredicted pivots @ t=2:', pivots[-1].data[id].view(args.num_se3,-1).cpu())
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

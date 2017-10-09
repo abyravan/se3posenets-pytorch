@@ -23,7 +23,7 @@ class WeightedAveragePointsFunction(Function):
 
 		# Compute output = B x K x J
 		output = points.new().resize_(B, K, J)
-		for i in xrange(K):
+		for i in range(K):
 			M = weights.view(B,K,H*W).narrow(1,i,1).expand(B,J,H*W) # Get weights
 			S = M.sum(2).clamp_(min=1e-12) # Clamp normalizing constant
 			output.narrow(1,i,1).copy_((M * points).sum(2) / S) # Compute convex combination
@@ -42,7 +42,7 @@ class WeightedAveragePointsFunction(Function):
 		# Compute grad points and weights
 		grad_points  = points.new().resize_as_(points).zero_()
 		grad_weights = weights.new().resize_as_(weights).zero_()
-		for i in xrange(K):
+		for i in range(K):
 			# Get the weights
 			M = weights.view(B,K,H*W).narrow(1,i,1).expand(B,J,H*W)  # Get weights
 			S = M.sum(2).clamp_(min=1e-12)  # Clamp normalizing constant

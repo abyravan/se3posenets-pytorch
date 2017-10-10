@@ -889,7 +889,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Details on the centers
                 if len(posecenters) > 0:
-                    centers = torch.cat([maskcenters[-1].data[id].cpu(), posecenters[-1].data[id].cpu(), poses[-1].data[id].cpu()], 1)
+                    centers = torch.cat([maskcenters[-1].data[id].cpu(), posecenters[-1].data[id].cpu(), poses[-1].data[id,:,:,3].cpu()], 1)
                     print('\tMaskCenters | PoseCenters (Init) | PoseCenters (Final)', centers)
 
                 ## Print the predicted mask values

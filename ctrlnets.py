@@ -284,18 +284,17 @@ def update_pose_centers(ptcloud, masks, poses, centertype):
     if centertype == 'predwmaskmean':
         assert masks is not None, "Need to pass masks as input for pivot type: [predwmaskmean]"
         maskcent = se3nn.WeightedAveragePoints()(ptcloud, masks)
-        posecent = poses[:,:,:,3].clone()
-        poses[:,:,:,3] = posecent + maskcent # Add mask weighted avg to the pose centers
+        posecent = poses[:,:,:,3]
+        return torch.cat([poses[:,:,:,0:3], (posecent+maskcent).view(bsz,nse3,3,1)], 3), posecent, maskcent
     elif centertype == 'predwmaskmeannograd':
         # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
         assert masks is not None, "Need to pass masks as input for pivot type: [predwmaskmeannograd]"
         masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
         maskcent = se3nn.WeightedAveragePoints()(ptcloud, masksc)
-        posecent = poses[:,:,:,3].clone()
-        poses[:,:,:,3] = posecent + maskcent # Add mask weighted avg to the pose centers
+        posecent = poses[:,:,:,3]
+        return torch.cat([poses[:,:,:,0:3], (posecent+maskcent).view(bsz,nse3,3,1)], 3), posecent, maskcent
     else:
         assert False, 'Unknown pose center type input: {}'.format(centertype)
-    return poses, posecent, maskcent
 
 ################################################################################
 '''

@@ -39,6 +39,13 @@ parser.add_argument('--pt-wt', default=1, type=float,
 parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
                     help='Use angles of all joints as inputs to the networks (default: False)')
 
+# Pivot options
+parser.add_argument('--pose-center', default='pred', type=str,
+                    metavar='STR', help='Different options for pose center positions: [pred] | predwmaskmean | predwmaskmeannograd')
+parser.add_argument('--delta-pivot', default='', type=str,
+                    metavar='STR', help='Pivot prediction for the delta-tfm: [] | pred | ptmean | maskmean | '
+                                        'maskmeannograd | posecenter')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -574,8 +581,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Predict the poses and masks
         poses, initmask = [], None
         masks, pivots = [], []
+        maskcenters, posecenters = [], []
         for k in xrange(pts.size(1)):
-            if (args.delta_pivot == '') or (args.delta_pivot == 'pred'):
+            if ((args.delta_pivot == '') or (args.delta_pivot == 'pred')) and args.pose_center == 'pred':
                 # Predict the pose and mask at time t = 0
                 # For all subsequent timesteps, predict only the poses
                 if(k == 0):
@@ -594,8 +602,13 @@ def iterate(data_loader, model, tblogger, num_iters,
                     m = util.to_var(sample['masks'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT masks
                 else:
                     p, m = model.forward_pose_mask([pts[:, k], jtangles[:, k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
-                poses.append(p)
                 masks.append(m)
+                # Update poses if there is a center option provided
+                p, pc, mc = ctrlnets.update_pose_centers(pts[:,k], m, p, args.pose_center)
+                poses.append(p)
+                if pc is not None:
+                    posecenters.append(pc)
+                    maskcenters.append(mc)
                 # Compute pivots
                 pivots.append(ctrlnets.compute_pivots(pts[:,k], m, p, args.delta_pivot))
                 # Get initial mask
@@ -873,6 +886,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                     if len(pivots) > 0:
                         deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
                     print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+
+                ## Details on the centers
+                if len(posecenters) > 0:
+                    centers = torch.cat([maskcenters[-1].data[id].cpu(), posecenters[-1].data[id].cpu(), poses[-1].data[id].cpu()], 1)
+                    print('\tMaskCenters | PoseCenters (Init) | PoseCenters (Final)', centers)
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

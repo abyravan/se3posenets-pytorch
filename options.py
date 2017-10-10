@@ -61,9 +61,6 @@ def setup_comon_options():
                         metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu')
     parser.add_argument('--se3-type', default='se3aa', type=str,
                         metavar='SE3', help='SE3 parameterization: [se3aa] | se3quat | se3spquat | se3euler | affine')
-    parser.add_argument('--delta-pivot', default='', type=str,
-                        metavar='STR', help='Pivot prediction for the delta-tfm: [] | pred | ptmean | maskmean | '
-                                            'maskmeannograd | posecenter')
     parser.add_argument('-n', '--num-se3', type=int, default=8,
                         help='Number of SE3s to predict (default: 8)')
     parser.add_argument('--init-transse3-iden', action='store_true', default=False,

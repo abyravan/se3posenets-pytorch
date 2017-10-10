@@ -274,6 +274,29 @@ def compute_pivots(ptcloud, masks, poses, pivottype):
         assert False, 'Unknown pivot type input: {}'.format(pivottype)
     return pivots
 
+### Pose center update (returns the input poses with updated pose centers)
+### Types: pred | predwmaskmean | predwmaskmeannograd
+def update_pose_centers(ptcloud, masks, poses, centertype):
+    if centertype == 'pred':
+        return poses, None, None # No change to poses
+    bsz, nse3 = poses.size(0), poses.size(1)
+    assert poses.size(2) == 3 and poses.size(3) == 4, "Poses not of proper dimension: {}x{}x3x4".format(bsz,nse3)
+    if centertype == 'predwmaskmean':
+        assert masks is not None, "Need to pass masks as input for pivot type: [predwmaskmean]"
+        maskcent = se3nn.WeightedAveragePoints()(ptcloud, masks)
+        posecent = poses[:,:,:,3].clone()
+        poses[:,:,:,3] = posecent + maskcent # Add mask weighted avg to the pose centers
+    elif centertype == 'predwmaskmeannograd':
+        # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
+        assert masks is not None, "Need to pass masks as input for pivot type: [predwmaskmeannograd]"
+        masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
+        maskcent = se3nn.WeightedAveragePoints()(ptcloud, masksc)
+        posecent = poses[:,:,:,3].clone()
+        poses[:,:,:,3] = posecent + maskcent # Add mask weighted avg to the pose centers
+    else:
+        assert False, 'Unknown pose center type input: {}'.format(centertype)
+    return poses, posecent, maskcent
+
 ################################################################################
 '''
     Single step / Recurrent models

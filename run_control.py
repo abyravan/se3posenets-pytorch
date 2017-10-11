@@ -175,6 +175,8 @@ def main():
     if not hasattr(args, "mean_dt"):
         args.mean_dt = args.step_len * (1.0/30.0)
         args.std_dt  = 0.005 # Default params
+    if not hasattr(args, "delta_pivot"):
+        args.delta_pivot = ''
 
     if not hasattr(args, "use_full_jt_angles"):
         args.use_full_jt_angles = True
@@ -219,7 +221,7 @@ def main():
     #         assert False, "No need to run tests with GT poses provided"
     #     else:
     modelfn = ctrlnets.MultiStepSE3PoseModel
-    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                     se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
                     input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                     init_posese3_iden=args.init_posese3_iden,
@@ -247,7 +249,7 @@ def main():
     assert(args.num_se3 == num_se3)
     assert(args.img_scale == img_scale)
     try:
-        cam_i = args.cam_intrinsics
+        cam_i = args.cam_intrinsics[0] if type(args.cam_intrinsics) is list else args.cam_intrinsics
         for _, key in enumerate(cam_intrinsics):
             assert(cam_intrinsics[key] == cam_i[key])
     except AttributeError:
@@ -309,53 +311,53 @@ def main():
     #########
     # SOME TEST CONFIGS:
     # TODO: Get more challenging test configs by moving arm physically
-    start_angles_all = torch.FloatTensor(
-        [
-         [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
-         [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
-         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-         [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
-         [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
-         [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
-         [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
-         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-         [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
-         [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
-         [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
-        ]
-        )
-    goal_angles_all  = torch.FloatTensor(
-        [
-         [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
-         [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
-         [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
-         [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
-         [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
-         [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
-         [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
-         [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
-         [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
-         [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
-         [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
-        ]
-        )
-
-    # # ###
     # start_angles_all = torch.FloatTensor(
     #     [
-    #         [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
-    #         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-    #         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #      [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
+    #      [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+    #      [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #      [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
+    #      [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+    #      [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+    #      [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+    #      [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #      [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
+    #      [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+    #      [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
     #     ]
-    # )
-    #
-    # goal_angles_all = torch.FloatTensor(
+    #     )
+    # goal_angles_all  = torch.FloatTensor(
     #     [
-    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
-    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
-    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+    #      [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
+    #      [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+    #      [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
+    #      [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
+    #      [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+    #      [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+    #      [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+    #      [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+    #      [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
+    #      [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+    #      [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
     #     ]
-    # )
+    #     )
+
+    ### More test configs
+    start_angles_all = torch.FloatTensor(
+        [
+            [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+            [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+            [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+        ]
+    )
+
+    goal_angles_all = torch.FloatTensor(
+        [
+            [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+            [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+            [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+        ]
+    )
 
     # Iterate over test configs
     num_configs = start_angles_all.size(0)
@@ -504,7 +506,7 @@ def main():
         # Run the controller for max_iter iterations
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
         conv_iter = pargs.max_iter
-        inc_ctr, max_ctr = 0, 100 # Num consecutive times we've seen an increase in loss
+        inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
         status, prev_loss = 0, np.float("inf")
         for it in xrange(pargs.max_iter):
             # Print
@@ -532,6 +534,11 @@ def main():
             curr_rgb = start_rgb
             posemask_time.update(time.time() - start)
 
+            # Compute pivots
+            curr_pivots = None
+            if not ((args.delta_pivot == '') or (args.delta_pivot == 'pred')):
+                curr_pivots = ctrlnets.compute_pivots(util.to_var(curr_pts), curr_masks, curr_poses, args.delta_pivot)
+
             # Render poses and masks using Pangolin
             start = time.time()
             #_, curr_labels = curr_masks_f.max(dim=1)
@@ -552,7 +559,8 @@ def main():
             ctrl_grad, loss = optimize_ctrl(model=model.transitionmodel,
                                             poses=curr_poses, ctrl=init_ctrl_v,
                                             angles=angles[it].view(1,-1),
-                                            goal_poses=goal_poses_v)
+                                            goal_poses=goal_poses_v,
+                                            pivots=curr_pivots)
             optim_time.update(time.time() - start)
             ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
 
@@ -775,7 +783,7 @@ def main():
 
 ### Function to generate the optimized control
 # Note: assumes that it get Variables
-def optimize_ctrl(model, poses, ctrl, angles, goal_poses):
+def optimize_ctrl(model, poses, ctrl, angles, goal_poses, pivots=None):
 
     # Do specific optimization based on the type
     if pargs.optimization == 'backprop':
@@ -784,14 +792,20 @@ def optimize_ctrl(model, poses, ctrl, angles, goal_poses):
 
         # ============ FWD pass + Compute loss ============#
 
-        # FWD pass + loss
+        # Setup inputs for FWD pass
         poses_1 = util.to_var(poses.data, requires_grad=False)
         ctrl_1  = util.to_var(ctrl.data, requires_grad=True)
         if args.use_jt_angles_trans:
             angles_1 = util.to_var(angles.type_as(poses.data), requires_grad=False)
-            _, pred_poses = model([poses_1, angles_1, ctrl_1])
+            inp = [poses_1, angles_1, ctrl_1]
         else:
-            _, pred_poses = model([poses_1, ctrl_1])
+            inp = [poses_1, ctrl_1]
+        if pivots is not None:
+            pivots_1 = util.to_var(pivots.data, requires_grad=False)
+            inp.append(pivots_1)
+
+        # Run FWD pass & Compute loss
+        _, pred_poses = model(inp)
         loss = args.loss_scale * ctrlnets.BiMSELoss(pred_poses, goal_poses) # Get distance from goal
 
         # ============ BWD pass ============#
@@ -821,13 +835,19 @@ def optimize_ctrl(model, poses, ctrl, angles, goal_poses):
 
         # ============ FWD pass ============#
 
-        # FWD pass
+        # Setup inputs for FWD pass
         if args.use_jt_angles_trans:
             angles_p = util.to_var(angles.repeat(nperturb+1,1).type_as(poses.data))  # Replicate angles
-            _, pred_poses_p = model([poses_p, angles_p, ctrl_p])
+            inp = [poses_p, angles_p, ctrl_p]
         else:
-            _, pred_poses_p = model([poses_p, ctrl_p])
+            inp = [poses_p, ctrl_p]
+        if pivots is not None:
+            pivots_p = util.to_var(pivots.data.repeat(nperturb+1,1,1).type_as(poses.data))  # Replicate pivots
+            inp.append(pivots_p)
         #_, pred_poses_p = model([poses_p, ctrl_p])
+
+        # Run FWD pass
+        _, pred_poses_p = model(inp)
 
         # Backprop only over the loss!
         pred_poses = util.to_var(pred_poses_p.data.narrow(0,0,1), requires_grad=True) # Need grad of loss w.r.t true pred

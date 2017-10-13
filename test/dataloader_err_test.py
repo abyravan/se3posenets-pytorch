@@ -60,13 +60,8 @@ except NameError: # Not defined in Python 3.x
         return iter(range(*args))
 
 ################ MAIN
-### Create save directory and start tensorboard logger
-util.create_dir(args.save_dir)  # Create directory
-now = time.strftime("%c")
-tblogger = util.TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
-
 # Create logfile to save prints
-logfile = open(args.save_dir + '/logs/' + now + '/logfile.txt', 'w')
+logfile = open('logfile.txt', 'w')
 backup = sys.stdout
 sys.stdout = Tee(sys.stdout, logfile)
 

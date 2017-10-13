@@ -1,6 +1,7 @@
 # Global imports
 import os
 import sys
+sys.path.append("/home/barun/Projects/se3nets-pytorch/")
 import shutil
 import time
 import numpy as np

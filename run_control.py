@@ -177,6 +177,8 @@ def main():
         args.std_dt  = 0.005 # Default params
     if not hasattr(args, "delta_pivot"):
         args.delta_pivot = ''
+    if not hasattr(args, "pose_center"):
+        args.pose_center = 'pred'
 
     if not hasattr(args, "use_full_jt_angles"):
         args.use_full_jt_angles = True
@@ -421,6 +423,10 @@ def main():
             start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
             goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
 
+        # Update poses if there is a center option
+        start_poses, _, _ = ctrlnets.update_pose_centers(sinp[0], start_masks, start_poses, args.pose_center)
+        goal_poses, _, _  = ctrlnets.update_pose_centers(tinp[0], goal_masks, goal_poses, args.pose_center)
+
         # Display the masks as an image summary
         maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
                                                          0).cpu().view(-1, 1, args.img_ht, args.img_wd),
@@ -530,6 +536,11 @@ def main():
                 curr_poses = posemaskpredfn(inp)
             else:
                 curr_poses, curr_masks = posemaskpredfn(inp, train_iter=num_train_iter)
+
+            # Update poses (based on pivots)
+            curr_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(curr_pts), curr_masks, curr_poses, args.pose_center)
+
+            # Get CPU stuff
             curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
             curr_rgb = start_rgb
             posemask_time.update(time.time() - start)

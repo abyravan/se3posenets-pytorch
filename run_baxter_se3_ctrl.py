@@ -203,7 +203,8 @@ class DepthImageSubscriber:
     def callback(self,data):
         try:
             # By default, we assume input image is 640x480, we subsample to 320x240
-            self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1")[::2,::2].astype(np.int16) * self.scale
+            #self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1")[::2,::2].astype(np.int16) * self.scale
+            self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1").astype(np.int16) * self.scale
             self.flag = True
         except CvBridgeError as e:
             print(e)
@@ -245,7 +246,8 @@ class RGBImageSubscriber:
     def callback(self, data):
         try:
             # By default, we assume input image is 640x480, we subsample to 320x240
-            self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3")[::2, ::2].astype(np.uint8)
+            #self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3")[::2, ::2].astype(np.uint8)
+            self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3").astype(np.uint8)
             self.flag = True
         except CvBridgeError as e:
             print(e)
@@ -311,7 +313,7 @@ def setup_model(checkpoint, args, use_cuda=False):
     #                                       num_state=args.num_state_net)  # TODO: pre-conv
     #         posemaskpredfn = model.posemaskmodel.forward
     # else:
-    model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+    model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                                            se3_type=args.se3_type, use_pivot=args.pred_pivot,
                                            use_kinchain=False,
                                            input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
@@ -497,6 +499,10 @@ class SE3PoseSpaceOptimizer(object):
             self.args.num_state_net = self.args.num_state
         else:
             self.args.num_state_net = self.args.num_ctrl
+        if not hasattr(self.args, "delta_pivot"):
+            self.args.delta_pivot = ''
+        if not hasattr(self.args, "pose_center"):
+            self.args.pose_center = 'pred'
 
         # Setup model
         self.model, self.posemaskfn = setup_model(self.checkpoint, self.args, self.pargs.cuda)
@@ -574,7 +580,7 @@ class SE3PoseSpaceOptimizer(object):
 
     ### Function to generate the optimized control
     # Note: assumes that it get Variables
-    def optimize_ctrl(self, poses, ctrl, goal_poses):
+    def optimize_ctrl(self, poses, ctrl, goal_poses, pivots=None):
 
         # Do specific optimization based on the type
         if self.pargs.optimization == 'backprop':
@@ -586,7 +592,11 @@ class SE3PoseSpaceOptimizer(object):
             # FWD pass + loss
             poses_1 = util.to_var(poses.data, requires_grad=False)
             ctrl_1  = util.to_var(ctrl.data, requires_grad=True)
-            _, pred_poses = self.model.transitionmodel([poses_1, ctrl_1])
+            inp = [poses_1, ctrl_1]
+            if pivots is not None:
+                pivots_1 = util.to_var(pivots.data, requires_grad=False)
+                inp.append(pivots_1)
+            _, pred_poses = self.model.transitionmodel(inp)
             loss = self.args.loss_scale * ctrlnets.BiMSELoss(pred_poses, goal_poses)  # Get distance from goal
 
             # ============ BWD pass ============#
@@ -613,11 +623,15 @@ class SE3PoseSpaceOptimizer(object):
             poses_p = util.to_var(poses.data.repeat(nperturb + 1, 1, 1, 1))  # Replicate poses
             ctrl_p = util.to_var(ctrl.data.repeat(nperturb + 1, 1))  # Replicate controls
             ctrl_p.data[1:, :] += I * eps  # Perturb the controls
+            inp = [poses_p, ctrl_p]
+            if pivots is not None:
+                pivots_p = util.to_var(pivots.data.repeat(nperturb + 1, 1, 1).type_as(poses.data))  # Replicate pivots
+                inp.append(pivots_p)
 
             # ============ FWD pass ============#
 
             # FWD pass
-            _, pred_poses_p = self.model.transitionmodel([poses_p, ctrl_p])
+            _, pred_poses_p = self.model.transitionmodel(inp)
 
             # Backprop only over the loss!
             pred_poses = util.to_var(pred_poses_p.data.narrow(0, 0, 1),
@@ -1016,6 +1030,10 @@ def main():
         # Compute goal poses
         start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
 
+        # Update poses if there is a center option
+        start_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(start_pts), start_masks, start_poses, se3optim.args.pose_center)
+        goal_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(goal_pts), goal_masks, goal_poses, se3optim.args.pose_center)
+
         # Compute initial pose loss
         init_pose_loss  = se3optim.args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
         init_pose_err_indiv = se3optim.args.loss_scale * (start_poses - goal_poses).pow(2).view(se3optim.args.num_se3,12).mean(1)
@@ -1110,7 +1128,18 @@ def main():
             # Predict poses and masks
             start = time.time()
             curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
+
+            # Update poses (based on pivots)
+            curr_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(curr_pts), curr_masks, curr_poses,
+                                                            se3optim.args.pose_center)
+
+            # Get CPU stuff
             curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
+
+            # Compute pivots
+            curr_pivots = None
+            if not ((se3optim.args.delta_pivot == '') or (se3optim.args.delta_pivot == 'pred')):
+                curr_pivots = ctrlnets.compute_pivots(util.to_var(curr_pts), curr_masks, curr_poses, se3optim.args.delta_pivot)
 
             posemask_time.update(time.time() - start)
 
@@ -1119,7 +1148,8 @@ def main():
 
             ctrl_grad, loss = se3optim.optimize_ctrl(curr_poses,
                                                      init_ctrl_v,
-                                                     goal_poses=goal_poses_v)
+                                                     goal_poses=goal_poses_v,
+                                                     pivots=curr_pivots)
             ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
 
             # Set last 3 joint's controls to zero

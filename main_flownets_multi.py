@@ -501,7 +501,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get a sample
         j, sample = data_loader.next()
-        stats.data_ids.append(sample['id'])
+        stats.data_ids.append(sample['id'].clone())
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension

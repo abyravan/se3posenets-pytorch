@@ -309,7 +309,6 @@ def main():
         assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
         modelfn = se2nets.MultiStepSE2OnlyPoseModel if args.se2_data else ctrlnets.MultiStepSE3OnlyPoseModel
     elif args.use_gt_poses:
-        assert NotImplementedError # We don't have stuff for this
         print('Using GT poses & delta poses. Model predicts only masks')
         assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
         modelfn = se2nets.MultiStepSE2OnlyMaskModel if args.se2_data else ctrlnets.MultiStepSE3OnlyMaskModel
@@ -590,18 +589,27 @@ def iterate(data_loader, model, tblogger, num_iters,
                     if args.use_gt_masks:
                         p = model.forward_only_pose([pts[:,k], jtangles[:,k]]) # We can only predict poses
                         initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
+                    elif args.use_gt_poses:
+                        p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                        initmask = model.forward_only_mask(pts[:,k], train_iter=num_train_iter)  # Predict masks
                     else:
                         p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
                 else:
-                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
+                    if args.use_gt_poses:
+                        p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                    else:
+                        p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
                 poses.append(p)
             else:
                 # Predict the poses and masks for all timesteps
                 if args.use_gt_masks:
-                    p = model.forward_only_pose([pts[:, k], jtangles[:, k]])  # We can only predict poses
-                    m = util.to_var(sample['masks'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT masks
+                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]])  # We can only predict poses
+                    m = util.to_var(sample['masks'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT masks
+                elif args.use_gt_poses:
+                    p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                    m = model.forward_only_mask(pts[:,k], train_iter=num_train_iter) # Predict masks
                 else:
-                    p, m = model.forward_pose_mask([pts[:, k], jtangles[:, k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
+                    p, m = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
                 masks.append(m)
                 # Update poses if there is a center option provided
                 p, pc, mc = ctrlnets.update_pose_centers(pts[:,k], m, p, args.pose_center)
@@ -881,11 +889,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.image_summary(tag, images, iterct)
 
                 ## Print the predicted delta-SE3s
-                if not args.use_gt_poses:
-                    deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                    if len(pivots) > 0:
-                        deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
-                    print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+                deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
+                if len(pivots) > 0:
+                    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
+                print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
                 ## Details on the centers
                 if len(posecenters) > 0:

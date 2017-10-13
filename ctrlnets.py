@@ -1119,6 +1119,16 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide)
 
+        # Initialize the transition model
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
+                                               se3_type=se3_type, use_kinchain=use_kinchain,
+                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+
+        # Options
+        self.use_jt_angles_trans = use_jt_angles_trans
+
     # Predict mask only
     def forward_only_mask(self, x, train_iter=0):
         mask = self.maskmodel(x, train_iter=train_iter)
@@ -1133,8 +1143,11 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
         raise NotImplementedError
 
     # Predict next pose based on current pose and control
-    def forward_next_pose(self, pose, ctrl):
-        raise NotImplementedError
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        inp = [pose, jtangles, ctrl] if self.use_jt_angles_trans else [pose, ctrl]
+        if self.transitionmodel.inp_pivot:
+            inp.append(pivots)
+        return self.transitionmodel(inp)
 
     # Forward pass through the model
     def forward(self, x):

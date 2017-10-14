@@ -284,6 +284,7 @@ else:
 
 #########################################
 ###################### Test loading data
+train_ids, val_ids = [], []
 for epoch in range(args.epochs):
     ## Setup avg time & stats:
     train_time, val_time = AverageMeter(), AverageMeter()
@@ -296,6 +297,7 @@ for epoch in range(args.epochs):
 
         # Get a sample
         j, sample = train_loader.next()
+        train_ids.append(sample['id'].clone())
 
         # Measure data loading time
         train_time.update(time.time() - start)
@@ -313,6 +315,7 @@ for epoch in range(args.epochs):
 
         # Get a sample
         j, sample = val_loader.next()
+        val_ids.append(sample['id'].clone())
 
         # Measure data loading time
         val_time.update(time.time() - start)

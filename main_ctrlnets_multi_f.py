@@ -440,7 +440,7 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, savedir=args.save_dir, filename='checkpoint_{}.pth.tar'.format(epoch+1))
+        }, is_best, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders

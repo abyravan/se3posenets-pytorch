@@ -45,6 +45,8 @@ parser.add_argument('--pose-center', default='pred', type=str,
 parser.add_argument('--delta-pivot', default='', type=str,
                     metavar='STR', help='Pivot prediction for the delta-tfm: [] | pred | ptmean | maskmean | '
                                         'maskmeannograd | posecenter')
+parser.add_argument('--consis-rt-loss', action='store_true', default=False,
+                    help='Use RT loss for the consistency measure (default: False)')
 
 # Define xrange
 try:
@@ -701,7 +703,10 @@ def iterate(data_loader, model, tblogger, num_iters,
             # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
             delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
             nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
-            currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
+            if args.consis_rt_loss:
+                currconsisloss = consis_wt * ctrlnets.PoseConsistencyLoss(nextpose_trans, poses[k+1])
+            else:
+                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
 
             # Add a loss for pose dis-similarity & delta dis-similarity
             dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale

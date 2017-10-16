@@ -71,6 +71,19 @@ def init_sigmoidmask_bg(layer, num_se3=8):
 # TODO: The weights are only supposed to be binary here. Non binary weights will do weird things
 
 # MSE Loss that gives gradients w.r.t both input & target
+# Input/Target: Bsz x nSE3 x 3 x 4
+# NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
+def PoseConsistencyLoss(input, target, size_average=True):
+    delta = se3nn.ComposeRtPair()(input, se3nn.RtInverse()(target)) # input * target^-1
+    rot, trans = delta.narrow(3,0,3), delta.narrow(3,3,1)
+    costheta = 0.5 * ((rot[:,:,0,0] + rot[:,:,1,1] + rot[:,:,2,2]) - 1.0) # torch.acos(0.5*(tr(R)-1)); Eqn 9.19: https://pixhawk.org/_media/dev/know-how/jlblanco2010geometry3d_techrep.pdf
+    if size_average:
+        loss = trans.norm(2,2).mean() + (costheta-1.0).abs().mean()
+    else:
+        loss = trans.norm(2,2).sum() + (costheta-1.0).abs().sum()
+    return loss
+
+# MSE Loss that gives gradients w.r.t both input & target
 # NOTE: This scales the loss by 0.5 while the default nn.MSELoss does not
 def BiMSELoss(input, target, size_average=True, wts=None):
     weights = wts.expand_as(input) if wts is not None else 1 # Per-pixel scalar

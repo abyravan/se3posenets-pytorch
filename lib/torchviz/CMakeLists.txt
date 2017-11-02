@@ -334,6 +334,18 @@ add_library(realctrlviz
              src/render/renderer.cpp)
 target_link_libraries(realctrlviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
 
+# Sim-Ctrl Visualizer
+add_library(simctrlviz
+             simctrl_visualizer.cpp
+             src/render/renderer.cpp)
+target_link_libraries(simctrlviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
+
+# Comparison Visualizer
+add_library(compviz
+             comp_visualizer.cpp
+             src/render/renderer.cpp)
+target_link_libraries(compviz dart ${Boost_LIBRARIES} ${OpenCV_LIBRARIES} ${UtilFuncs_LIBRARIES})
+
 # Real-Ctrl Visualizer
 add_library(realctrlcompviz
              realctrlcomp_visualizer.cpp

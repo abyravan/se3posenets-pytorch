@@ -20,13 +20,14 @@ cam_intrinsics = {'fx': 589.3664541825391 / 2,
                   'cx': 320.5 / 2,
                   'cy': 240.5 / 2}
 savedir = 'temp' # TODO: Fix this!
+posenets = 1 # Using pose nets here!
 
 # Load pangolin visualizer library
-from torchviz import realctrlviz
-pangolin = realctrlviz.PyRealCtrlViz(img_ht, img_wd, img_scale, num_se3,
-                                     cam_intrinsics['fx'], cam_intrinsics['fy'],
-                                     cam_intrinsics['cx'], cam_intrinsics['cy'],
-                                     savedir, 0)
+from torchviz import simctrlviz
+pangolin = simctrlviz.PySimCtrlViz(img_ht, img_wd, img_scale, num_se3,
+                                   cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                   cam_intrinsics['cx'], cam_intrinsics['cy'],
+                                   savedir, posenets)
 
 ##########
 # NOTE: When importing torch before initializing the pangolin window, I get the error:
@@ -222,7 +223,7 @@ def main():
     #     elif args.use_gt_poses:
     #         assert False, "No need to run tests with GT poses provided"
     #     else:
-    modelfn = ctrlnets.MultiStepSE3PoseModel
+    modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                     se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
                     input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
@@ -310,56 +311,73 @@ def main():
     goal_angles  = goal_sample['actconfigs'][0]
     '''
 
-    #########
-    # SOME TEST CONFIGS:
-    # TODO: Get more challenging test configs by moving arm physically
-    # start_angles_all = torch.FloatTensor(
-    #     [
-    #      [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
-    #      [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
-    #      [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-    #      [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
-    #      [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
-    #      [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
-    #      [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
-    #      [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-    #      [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
-    #      [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
-    #      [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
-    #     ]
-    #     )
-    # goal_angles_all  = torch.FloatTensor(
-    #     [
-    #      [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
-    #      [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
-    #      [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
-    #      [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
-    #      [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
-    #      [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
-    #      [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
-    #      [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
-    #      [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
-    #      [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
-    #      [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
-    #     ]
-    #     )
-
-    ### More test configs
+    # #########
+    # # SOME TEST CONFIGS:
+    # # TODO: Get more challenging test configs by moving arm physically
     start_angles_all = torch.FloatTensor(
         [
-            [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
-            [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-            [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+         [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
+         [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+         [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
+         [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+         [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+         [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+         [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
+         [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+         [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
         ]
-    )
-
-    goal_angles_all = torch.FloatTensor(
+        )
+    goal_angles_all  = torch.FloatTensor(
         [
-            [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
-            [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
-            [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+         [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
+         [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+         [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
+         [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
+         [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+         [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+         [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+         [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+         [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
+         [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+         [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
         ]
-    )
+        )
+
+    # ### More test configs
+    # start_angles_all = torch.FloatTensor(
+    #     [
+    #         [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+    #         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #     ]
+    # )
+    #
+    # goal_angles_all = torch.FloatTensor(
+    #     [
+    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+    #     ]
+    # )
+
+    # # ###
+    # start_angles_all = torch.FloatTensor(
+    #      [
+    #          [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #          [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+    #          [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #      ]
+    # )
+    #
+    # goal_angles_all = torch.FloatTensor(
+    #     [
+    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+    #     ]
+    # )
 
     # Iterate over test configs
     num_configs = start_angles_all.size(0)
@@ -415,8 +433,8 @@ def main():
         if args.use_gt_masks: # GT masks are provided!
             _, start_rlabels = generate_ptcloud(start_angles)
             _, goal_rlabels  = generate_ptcloud(goal_angles)
-            start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids))
-            goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids))
+            start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))
+            goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids).type(deftype))
             start_poses = posemaskpredfn(sinp)
             goal_poses  = posemaskpredfn(tinp)
         else:
@@ -456,21 +474,21 @@ def main():
         print("Initializing the visualizer...")
         start_masks_f, goal_masks_f = start_masks.data.cpu().float(), goal_masks.data.cpu().float()
         start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
-        start_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
-        goal_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
-        pangolin.update_real_init(start_angles.numpy(),
-                                  start_pts[0].cpu().numpy(),
-                                  start_poses_f[0].numpy(),
-                                  start_masks_f[0].numpy(),
-                                  start_rgb.numpy(),
-                                  goal_angles.numpy(),
-                                  goal_pts[0].cpu().numpy(),
-                                  goal_poses_f[0].numpy(),
-                                  goal_masks_f[0].numpy(),
-                                  goal_rgb.numpy(),
-                                  init_pose_loss.data[0],
-                                  init_pose_err_indiv.data.cpu().numpy(),
-                                  init_deg_errors)
+        #start_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        #goal_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        pangolin.update_init(start_angles.numpy(),
+                             start_pts[0].cpu().numpy(),
+                             start_poses_f[0].numpy(),
+                             start_masks_f[0].numpy(),
+                             #start_rgb.numpy(),
+                             goal_angles.numpy(),
+                             goal_pts[0].cpu().numpy(),
+                             goal_poses_f[0].numpy(),
+                             goal_masks_f[0].numpy(),
+                             #goal_rgb.numpy(),
+                             init_pose_loss.data[0],
+                             init_pose_err_indiv.data.cpu().numpy(),
+                             init_deg_errors)
 
         # For saving:
         if pargs.save_frame_stats:
@@ -478,12 +496,12 @@ def main():
                          start_pts[0].cpu().numpy(),
                          start_poses_f[0].numpy(),
                          start_masks_f[0].numpy(),
-                         start_rgb.numpy(),
+                         #start_rgb.numpy(),
                          goal_angles.numpy(),
                          goal_pts[0].cpu().numpy(),
                          goal_poses_f[0].numpy(),
                          goal_masks_f[0].numpy(),
-                         goal_rgb.numpy(),
+                         #goal_rgb.numpy(),
                          init_pose_loss.data[0],
                          init_pose_err_indiv.data.cpu().numpy(),
                          init_deg_errors]
@@ -507,7 +525,8 @@ def main():
         # Save for final frame saving
         if pargs.save_frames or pargs.save_frame_stats:
             curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
-            curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s = [], [], [], []
+            #curr_rgb_s = []
+            loss_s, err_indiv_s, curr_deg_errors_s = [], [], []
 
         # Run the controller for max_iter iterations
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -532,7 +551,7 @@ def main():
             #else:
             #    inp = util.to_var(curr_pts)
             if args.use_gt_masks:
-                curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids))
+                curr_masks = util.to_var(compute_masks_from_labels(curr_rlabels, args.mesh_ids).type(deftype))
                 curr_poses = posemaskpredfn(inp)
             else:
                 curr_poses, curr_masks = posemaskpredfn(inp, train_iter=num_train_iter)
@@ -542,7 +561,7 @@ def main():
 
             # Get CPU stuff
             curr_poses_f, curr_masks_f = curr_poses.data.cpu().float(), curr_masks.data.cpu().float()
-            curr_rgb = start_rgb
+            #curr_rgb = start_rgb
             posemask_time.update(time.time() - start)
 
             # Compute pivots
@@ -616,15 +635,15 @@ def main():
             curr_pts_f = curr_pts.cpu().float()
             curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
             curr_pose_err_indiv = args.loss_scale * (curr_poses - goal_poses).pow(2).view(args.num_se3, 12).mean(1)
-            pangolin.update_real_curr(curr_angles.numpy(),
-                                      curr_pts_f[0].numpy(),
-                                      curr_poses_f[0].numpy(),
-                                      curr_masks_f[0].numpy(),
-                                      curr_rgb.numpy(),
-                                      loss,
-                                      curr_pose_err_indiv.data.cpu().numpy(),
-                                      curr_deg_errors[0].numpy(),
-                                      0)  # Don't save frame
+            pangolin.update_curr(curr_angles.numpy(),
+                                 curr_pts_f[0].numpy(),
+                                 curr_poses_f[0].numpy(),
+                                 curr_masks_f[0].numpy(),
+                                 #curr_rgb.numpy(),
+                                 loss,
+                                 curr_pose_err_indiv.data.cpu().numpy(),
+                                 curr_deg_errors[0].numpy(),
+                                 0)  # Don't save frame
 
             # Save for future frame generation!
             if pargs.save_frames or pargs.save_frame_stats:
@@ -632,7 +651,7 @@ def main():
                 curr_pts_s.append(curr_pts_f[0])
                 curr_poses_s.append(curr_poses_f[0])
                 curr_masks_s.append(curr_masks_f[0])
-                curr_rgb_s.append(curr_rgb)
+                #curr_rgb_s.append(curr_rgb)
                 loss_s.append(loss)
                 err_indiv_s.append(curr_pose_err_indiv.data.cpu())
                 curr_deg_errors_s.append(curr_deg_errors[0])
@@ -722,23 +741,23 @@ def main():
         # Save
         if pargs.save_frame_stats:
             datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
-                              curr_masks_s, curr_rgb_s, loss_s, err_indiv_s, curr_deg_errors_s])
+                              curr_masks_s, loss_s, err_indiv_s, curr_deg_errors_s]) # curr_rgb_s
 
         ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
         ######## Saving frames to disk now!
         if pargs.save_frames:
-            pangolin.update_real_init(start_angles.numpy(),
-                                      start_pts[0].cpu().numpy(),
-                                      start_poses_f[0].numpy(),
-                                      start_masks_f[0].numpy(),
-                                      start_rgb.numpy(),
-                                      goal_angles.numpy(),
-                                      goal_pts[0].cpu().numpy(),
-                                      goal_poses_f[0].numpy(),
-                                      goal_masks_f[0].numpy(),
-                                      goal_rgb.numpy(),
-                                      init_pose_loss.data[0],
-                                      init_deg_errors)
+            pangolin.update_init(start_angles.numpy(),
+                                 start_pts[0].cpu().numpy(),
+                                 start_poses_f[0].numpy(),
+                                 start_masks_f[0].numpy(),
+                                 #start_rgb.numpy(),
+                                 goal_angles.numpy(),
+                                 goal_pts[0].cpu().numpy(),
+                                 goal_poses_f[0].numpy(),
+                                 goal_masks_f[0].numpy(),
+                                 #goal_rgb.numpy(),
+                                 init_pose_loss.data[0],
+                                 init_deg_errors)
 
             # Start saving frames
             save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
@@ -749,14 +768,14 @@ def main():
             for j in xrange(len(curr_angles_s)):
                 if (j % 10 == 0):
                     print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
-                pangolin.update_real_curr(curr_angles_s[j].numpy(),
-                                          curr_pts_s[j].numpy(),
-                                          curr_poses_s[j].numpy(),
-                                          curr_masks_s[j].numpy(),
-                                          curr_rgb_s[j].numpy(),
-                                          loss_s[j],
-                                          curr_deg_errors_s[j].numpy(),
-                                          1)  # Save frame
+                pangolin.update_curr(curr_angles_s[j].numpy(),
+                                     curr_pts_s[j].numpy(),
+                                     curr_poses_s[j].numpy(),
+                                     curr_masks_s[j].numpy(),
+                                     #curr_rgb_s[j].numpy(),
+                                     loss_s[j],
+                                     curr_deg_errors_s[j].numpy(),
+                                     1)  # Save frame
 
             # Stop saving frames
             time.sleep(1)

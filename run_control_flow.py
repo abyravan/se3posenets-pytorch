@@ -12,13 +12,14 @@ cam_intrinsics = {'fx': 589.3664541825391 / 2,
                   'cx': 320.5 / 2,
                   'cy': 240.5 / 2}
 savedir = 'temp'  # TODO: Fix this!
+posenets = 0 # Not using pose nets here!
 
 # Load pangolin visualizer library
-from torchviz import realctrlviz
-pangolin = realctrlviz.PyRealCtrlViz(img_ht, img_wd, img_scale, num_se3,
-                                     cam_intrinsics['fx'], cam_intrinsics['fy'],
-                                     cam_intrinsics['cx'], cam_intrinsics['cy'],
-                                     savedir, 1)
+from torchviz import simctrlviz
+pangolin = simctrlviz.PySimCtrlViz(img_ht, img_wd, img_scale, num_se3,
+                                   cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                   cam_intrinsics['cx'], cam_intrinsics['cy'],
+                                   savedir, posenets)
 
 import argparse
 import os
@@ -110,7 +111,10 @@ parser.add_argument('--num-configs', type=int, default=-1, metavar='N',
 # Display/Save options
 parser.add_argument('-s', '--save-dir', default='', type=str,
                     metavar='PATH', help='directory to save results in. (default: <checkpoint_dir>/planlogs/)')
-
+parser.add_argument('--save-frames', action='store_true', default=False,
+                    help='Enables post-saving of generated frames, very slow process (default: False)')
+parser.add_argument('--save-frame-stats', action='store_true', default=False,
+                    help='Saves all necessary data for genering rendered frames later (default: False)')
 
 def main():
     # Parse args
@@ -281,32 +285,32 @@ def main():
     # TODO: Get more challenging test configs by moving arm physically
     start_angles_all = torch.FloatTensor(
         [
-            [6.5207e-01, -2.6608e-01, 8.2490e-01, 1.0400e+00, -2.9203e-01, 2.1293e-01, 1.1197e-06],
-            [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+            #[6.5207e-01, -2.6608e-01, 8.2490e-01, 1.0400e+00, -2.9203e-01, 2.1293e-01, 1.1197e-06],
+            #[0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
             [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
             [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
-            [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
-            [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
-            [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
-            [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+            #[-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+            #[0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+            #[0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+            #[0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
             [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
-            [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
-            [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
+            #[-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+            #[0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
         ]
     )
     goal_angles_all = torch.FloatTensor(
         [
-            [0.5793, -0.0749, 0.9222, 1.4660, -0.7369, -0.6797, -0.4747],
-            [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+            #[0.5793, -0.0749, 0.9222, 1.4660, -0.7369, -0.6797, -0.4747],
+            #[0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
             [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
             [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
-            [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
-            [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
-            [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
-            [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+            #[-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+            #[0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+            #[0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+            #[4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
             [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
-            [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
-            [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
+            #[-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+            #[0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
         ]
     )
 
@@ -334,6 +338,7 @@ def main():
     print("Running tests over {} configs".format(num_configs))
     iterstats = []
     init_errors, final_errors = [], []
+    datastats = []
     for k in xrange(num_configs):
         # Get start/goal angles
         print("========================================")
@@ -373,7 +378,7 @@ def main():
         # Masks & poses init to zeros
         start_masks, start_poses = torch.zeros(1, 8, 240, 320), torch.zeros(1, 8, 3, 4)
         goal_masks, goal_poses = start_masks, start_poses
-        start_rgb, goal_rgb = torch.zeros(3,240,320).byte(), torch.zeros(3,240,320).byte()
+        #start_rgb, goal_rgb = torch.zeros(3,240,320).byte(), torch.zeros(3,240,320).byte()
 
         # Print error
         print('Initial jt angle error:')
@@ -383,6 +388,7 @@ def main():
 
         # Compute initial pose loss
         init_pose_loss = args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
+        init_pose_err_indiv = args.loss_scale * (start_poses - goal_poses).pow(2).view(args.num_se3,12).mean(1)
         init_deg_errors = full_deg_error.view(7).numpy()
 
         # Render the poses
@@ -391,20 +397,37 @@ def main():
 
         start_masks_f, goal_masks_f = start_masks.cpu().float(), goal_masks.cpu().float()
         start_poses_f, goal_poses_f = start_poses.cpu().float(), goal_poses.cpu().float()
-        start_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
-        goal_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
-        pangolin.update_real_init(start_angles.numpy(),
-                                  start_pts[0].cpu().numpy(),
-                                  start_poses_f[0].numpy(),
-                                  start_masks_f[0].numpy(),
-                                  start_rgb.numpy(),
-                                  goal_angles.numpy(),
-                                  goal_pts[0].cpu().numpy(),
-                                  goal_poses_f[0].numpy(),
-                                  goal_masks_f[0].numpy(),
-                                  goal_rgb.numpy(),
-                                  init_pose_loss,
-                                  init_deg_errors)
+        #start_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        #goal_rgb = torch.zeros(3, args.img_ht, args.img_wd).byte()
+        pangolin.update_init(start_angles.numpy(),
+                             start_pts[0].cpu().numpy(),
+                             start_poses_f[0].numpy(),
+                             start_masks_f[0].numpy(),
+                             #start_rgb.numpy(),
+                             goal_angles.numpy(),
+                             goal_pts[0].cpu().numpy(),
+                             goal_poses_f[0].numpy(),
+                             goal_masks_f[0].numpy(),
+                             #goal_rgb.numpy(),
+                             init_pose_loss,
+                             init_pose_err_indiv.numpy(),
+                             init_deg_errors)
+
+        # For saving:
+        if pargs.save_frame_stats:
+            initstats = [start_angles.numpy(),
+                         start_pts[0].cpu().numpy(),
+                         start_poses_f[0].numpy(),
+                         start_masks_f[0].numpy(),
+                         # start_rgb.numpy(),
+                         goal_angles.numpy(),
+                         goal_pts[0].cpu().numpy(),
+                         goal_poses_f[0].numpy(),
+                         goal_masks_f[0].numpy(),
+                         # goal_rgb.numpy(),
+                         init_pose_loss,
+                         init_pose_err_indiv.numpy(),
+                         init_deg_errors]
 
         ########################
         ############ Run the controller
@@ -420,8 +443,10 @@ def main():
         # target_flows_v = util.to_var(flow_target.type(deftype), requires_grad=False)
 
         # Save for final frame saving
-        curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [], []
-        curr_rgb_s, loss_s, curr_deg_errors_s = [], [], []
+        if pargs.save_frames or pargs.save_frame_stats:
+            curr_angles_s, curr_pts_s, curr_poses_s, curr_masks_s = [], [], [] ,[]
+            #curr_rgb_s = []
+            loss_s, err_indiv_s, curr_deg_errors_s = [], [], []
 
         # # Plots for errors and loss
         # fig, axes = plt.subplots(2, 1)
@@ -479,11 +504,11 @@ def main():
             start = time.time()
             if args.use_se3_nets:
                 init_ctrl_v.data.uniform_(-0.1, 0.1)
-            ctrl_grad, loss = optimize_ctrl(model=model, pts = curr_pts,
-                                            ctrl = init_ctrl_v,
-                                            angles=angles[it].view(1, -1),
-                                            warpedtarget=warpedtarget,
-                                            warpedmask=warpedmask)
+            ctrl_grad, loss, curr_masks = optimize_ctrl(model=model, pts = curr_pts,
+                                                         ctrl = init_ctrl_v,
+                                                         angles=angles[it].view(1,-1),
+                                                         warpedtarget=warpedtarget,
+                                                         warpedmask=warpedmask)
             optim_time.update(time.time() - start)
             ctrl_grads.append(ctrl_grad.cpu().float())  # Save this
 
@@ -500,6 +525,8 @@ def main():
                 #    ctrl_grad = init_ctrl_v.data.cpu() - 0.1 * ctrl_grad.cpu().float() # Take a step in control dirn
                 ctrl_dirn = ctrl_grad.cpu().float() / ctrl_grad.norm(2)  # Dirn
                 curr_ctrl = ctrl_dirn * ctrl_mag  # Scale dirn by mag
+                if args.use_se3_nets:
+                    curr_ctrl = -(init_ctrl_v.data.cpu().squeeze() - curr_ctrl.squeeze())
                 ctrl_mag *= pargs.ctrl_mag_decay  # Decay control magnitude
             else:
                 curr_ctrl = ctrl_grad.cpu().float()
@@ -523,26 +550,39 @@ def main():
             print('Joint angle errors in degrees: ',
                   torch.cat([deg_errors[-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
 
+            #### Get new masks (so that things look good :P)
+            if args.use_se3_nets:
+                pts_1 = util.to_var(curr_pts, requires_grad=False)
+                ctrl_1 = util.to_var(curr_ctrl.view(1,-1).type_as(curr_pts), requires_grad=False)
+                angles_1 = util.to_var(curr_angles.view(1,-1).type_as(curr_pts), requires_grad=False)
+                _, [_, curr_masks_v] = model([pts_1, angles_1, ctrl_1], train_iter=num_train_iter)
+                curr_masks = curr_masks_v.data.cpu()
+
             #### Render stuff
             curr_pts_f = curr_pts.cpu().float()
             curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
-            pangolin.update_real_curr(curr_angles.numpy(),
-                                      curr_pts_f[0].numpy(),
-                                      start_poses_f[0].numpy(),
-                                      start_masks_f[0].numpy(),
-                                      start_rgb.numpy(),
-                                      loss,
-                                      curr_deg_errors[0].numpy(),
-                                      0)  # Don't save frame
+            curr_pose_err_indiv = args.loss_scale * (start_poses - goal_poses).pow(2).view(args.num_se3, 12).mean(1)
+            curr_masks_f = curr_masks if curr_masks is not None else compute_masks_from_labels(curr_rlabels, args.mesh_ids)
+            pangolin.update_curr(curr_angles.numpy(),
+                                 curr_pts_f[0].numpy(),
+                                 start_poses_f[0].numpy(),
+                                 curr_masks_f[0].numpy(),
+                                 #start_rgb.numpy(),
+                                 loss,
+                                 curr_pose_err_indiv.numpy(),
+                                 curr_deg_errors[0].numpy(),
+                                 0)  # Don't save frame
 
             # Save for future frame generation!
-            curr_angles_s.append(curr_angles)
-            curr_pts_s.append(curr_pts_f[0])
-            curr_poses_s.append(start_poses_f[0])
-            curr_masks_s.append(start_masks_f[0])
-            curr_rgb_s.append(start_rgb)
-            loss_s.append(loss)
-            curr_deg_errors_s.append(curr_deg_errors[0])
+            if pargs.save_frames or pargs.save_frame_stats:
+                curr_angles_s.append(curr_angles)
+                curr_pts_s.append(curr_pts_f[0])
+                curr_poses_s.append(start_poses_f[0])
+                curr_masks_s.append(curr_masks_f[0])
+                # curr_rgb_s.append(curr_rgb)
+                loss_s.append(loss)
+                err_indiv_s.append(curr_pose_err_indiv)
+                curr_deg_errors_s.append(curr_deg_errors[0])
 
             # # Plot the errors & loss
             # colors = ['r', 'g', 'b', 'c', 'y', 'k', 'm']
@@ -628,42 +668,50 @@ def main():
                           'predctrls': ctrl_grads,
                           'deg_errors': deg_errors, 'losses': losses, 'status': status})
 
-        # ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
-        # ######## Saving frames to disk now!
-        #
-        # pangolin.update_real_init(start_angles.numpy(),
-        #                           start_pts[0].cpu().numpy(),
-        #                           start_poses_f[0].numpy(),
-        #                           start_masks_f[0].numpy(),
-        #                           start_rgb.numpy(),
-        #                           goal_angles.numpy(),
-        #                           goal_pts[0].cpu().numpy(),
-        #                           goal_poses_f[0].numpy(),
-        #                           goal_masks_f[0].numpy(),
-        #                           goal_rgb.numpy(),
-        #                           init_pose_loss.data[0],
-        #                           init_deg_errors)
-        #
-        # # Start saving frames
-        # save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
-        # util.create_dir(save_dir)  # Create directory
-        # pangolin.start_saving_frames(save_dir)  # Start saving frames
-        #
-        # for j in xrange(len(curr_angles_s)):
-        #     if (j % 10 == 0):
-        #         print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
-        #     pangolin.update_real_curr(curr_angles_s[j].numpy(),
-        #                               curr_pts_s[j].numpy(),
-        #                               curr_poses_s[j].numpy(),
-        #                               curr_masks_s[j].numpy(),
-        #                               curr_rgb_s[j].numpy(),
-        #                               loss_s[j],
-        #                               curr_deg_errors_s[j].numpy(),
-        #                               1)  # Save frame
-        #
-        # # Stop saving frames
-        # time.sleep(1)
-        # pangolin.stop_saving_frames()
+        # Save
+        if pargs.save_frame_stats:
+            datastats.append([initstats, curr_angles_s, curr_pts_s, curr_poses_s,
+                              curr_masks_s, loss_s, err_indiv_s, curr_deg_errors_s])  # curr_rgb_s
+
+        ###################### RE-RUN VIZ TO SAVE FRAMES TO DISK CORRECTLY
+        ######## Saving frames to disk now!
+        if pargs.save_frames:
+            pangolin.update_init(start_angles.numpy(),
+                                 start_pts[0].cpu().numpy(),
+                                 start_poses_f[0].numpy(),
+                                 curr_masks_f[0].numpy(),
+                                 # start_rgb.numpy(),
+                                 goal_angles.numpy(),
+                                 goal_pts[0].cpu().numpy(),
+                                 goal_poses_f[0].numpy(),
+                                 curr_masks_f[-1].numpy(),
+                                 # goal_rgb.numpy(),
+                                 init_pose_loss,
+                                 init_pose_err_indiv.numpy(),
+                                 init_deg_errors)
+
+            # Start saving frames
+            save_dir = pargs.save_dir + "/frames/test" + str(int(k)) + "/"
+            util.create_dir(save_dir)  # Create directory
+            pangolin.start_saving_frames(save_dir)  # Start saving frames
+            print("Rendering frames for example: {} and saving them to: {}".format(k, save_dir))
+
+            for j in xrange(len(curr_angles_s)):
+                if (j % 10 == 0):
+                    print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
+                pangolin.update_curr(curr_angles_s[j].numpy(),
+                                     curr_pts_s[j].numpy(),
+                                     curr_poses_s[j].numpy(),
+                                     curr_masks_s[j].numpy(),
+                                     # curr_rgb_s[j].numpy(),
+                                     loss_s[j],
+                                     err_indiv_s[j].numpy(),
+                                     curr_deg_errors_s[j].numpy(),
+                                     1)  # Save frame
+
+            # Stop saving frames
+            time.sleep(1)
+            pangolin.stop_saving_frames()
 
     # Print all errors
     i_err, f_err = torch.cat(init_errors, 0), torch.cat(final_errors, 0)
@@ -706,9 +754,11 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
         ctrl_1 = util.to_var(ctrl.data, requires_grad=True)
         angles_1 = util.to_var(angles.type_as(pts), requires_grad=False)
         if args.use_se3_nets:
-            pred_flows, _ = model([pts_1, angles_1, ctrl_1], train_iter=num_train_iter)
+            pred_flows, [_, pred_masks_v] = model([pts_1, angles_1, ctrl_1], train_iter=num_train_iter)
+            pred_masks = pred_masks_v.data.cpu()
         else:
             pred_flows = model([pts_1, angles_1, ctrl_1])
+            pred_masks = None
 
         pred_pts = pred_flows + pts_1
         err = ((pred_pts - warpedtarget) * warpedmask).view(-1)
@@ -722,7 +772,7 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
         loss.backward()  # Compute gradients - BWD pass
 
         # Return
-        return ctrl_1.grad.data.cpu().view(-1).clone(), loss.data[0]
+        return ctrl_1.grad.data.cpu().view(-1).clone(), loss.data[0], pred_masks
     else:
         # No backprops here
         model.eval()
@@ -744,13 +794,18 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
 
         # FWD pass
         if args.use_se3_nets:
-            pred_flows_p, [deltaposes_p, masks_p] = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True, train_iter=num_train_iter)
-            _, curr_labels = masks_p.data.max(dim=1)
-            curr_labels_f = curr_labels.cpu().float()
-            curr_poses_f = deltaposes_p.data.cpu().float()
-            pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
+            pred_flows_p, [_, pred_masks_v] = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True,
+                                                    train_iter=num_train_iter)
+            pred_masks = pred_masks_v.data.narrow(0,0,1).cpu()
+            #_, curr_labels = masks_p.data.max(dim=1)
+            #curr_labels_f = curr_labels.cpu().float()
+            #curr_poses_f = deltaposes_p.data.cpu().float()
+            #pangolin.update_masklabels_and_poses(curr_labels_f.numpy(), curr_poses_f[0].numpy())
+
         else:
             pred_flows_p = model([pts_p, angles_p, ctrl_p], reset_hidden_state=True)
+            pred_masks = None
+            #curr_labels_f = None
 
         # Backprop only over the loss!
         pred_flows = util.to_var(pred_flows_p.data.narrow(0,0,1).clone(), requires_grad=True)  # Need grad of loss w.r.t true pred
@@ -818,7 +873,7 @@ def optimize_ctrl(model, pts, ctrl, angles, warpedtarget, warpedmask):
         #     print('Grad diff => Min: {}, Max: {}, Mean: {}'.format(diff_g.min(), diff_g.max(), diff_g.abs().mean()))
 
         # Return the Gauss-Newton gradient
-        return ctrl_grad.cpu().view(-1).clone(), loss.data[0]
+        return ctrl_grad.cpu().view(-1).clone(), loss.data[0], pred_masks
 
 
 ### Compute a point cloud give the arm config

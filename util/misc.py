@@ -15,10 +15,10 @@ def to_np(x):
         return x.cpu().numpy()
 
 ### Convert torch tensor to autograd.variable
-def to_var(x, to_cuda=False, requires_grad=False):
+def to_var(x, to_cuda=False, requires_grad=False, volatile=False):
     if torch.cuda.is_available() and to_cuda:
         x = x.cuda()
-    return torch.autograd.Variable(x, requires_grad=requires_grad)
+    return torch.autograd.Variable(x, requires_grad=requires_grad, volatile=volatile)
 
 ### Create a directory. From: https://stackoverflow.com/questions/273192/how-can-i-create-a-directory-if-it-does-not-exist
 def create_dir(directory):

@@ -9,11 +9,15 @@ cam_intrinsics = {'fx': 589.3664541825391 / 2,
                   'cy': 240.5 / 2}
 
 # Load pangolin visualizer library
-from torchviz import realctrlviz # Had to add this to get the file to work, otherwise gave static TLS error
-from torchviz import compviz
-pangolin = compviz.PyCompViz(img_ht, img_wd, img_scale,
-                             cam_intrinsics['fx'], cam_intrinsics['fy'],
-                             cam_intrinsics['cx'], cam_intrinsics['cy'], 1)
+try:
+    from torchviz import realctrlviz # Had to add this to get the file to work, otherwise gave static TLS error
+    from torchviz import compviz
+    pangolin = compviz.PyCompViz(img_ht, img_wd, img_scale,
+                                 cam_intrinsics['fx'], cam_intrinsics['fy'],
+                                 cam_intrinsics['cx'], cam_intrinsics['cy'], 1)
+except:
+    print('Running without Pangolin')
+    pass
 
 # Global imports
 import sys
@@ -219,6 +223,20 @@ def main():
     if hasattr(args, "add_noise") and args.add_noise:  # BWDs compatibility
         args.add_noise_data = [True for k in xrange(len(args.data))]
 
+    # Get mean/std deviations of dt for the data
+    if args.mean_dt == 0:
+        args.mean_dt = args.step_len * (1.0 / 30.0)
+        args.std_dt = 0.005  # +- 10 ms
+        print("Using default mean & std.deviation based on the step length. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
+    else:
+        exp_mean_dt = (args.step_len * (1.0 / 30.0))
+        assert ((args.mean_dt - exp_mean_dt) < 1.0 / 30.0), \
+            "Passed in mean dt ({}) is very different from the expected value ({})".format(
+                args.mean_dt, exp_mean_dt)  # Make sure that the numbers are reasonable
+        print("Using passed in mean & std.deviation values. Mean DT: {}, Std DT: {}".format(
+            args.mean_dt, args.std_dt))
+
     ########
     ## Multi-step model
     num_train_iter['se3pose'] = checkpoint_pm['train_iter']
@@ -291,10 +309,23 @@ def main():
     ############ Load datasets
     if not cargs.real_data:
         args.data = ['/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions_f']
+    # Get datasets
+    if args.reject_left_motion:
+        print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
+              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
+    if args.reject_right_still:
+        print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
+              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
+    if args.add_noise:
+        print("Adding noise to the depths, actual configs & ctrls")
+    #noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
+    #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
+    noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
+                                                     defprob=0.005, noisestd=0.005)
     valid_filter = lambda p, n, st, se, slab: data.valid_data_filter(p, n, st, se, slab,
                                                                mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                reject_left_motion=args.reject_left_motion,
-                                                               reject_right_still=True)
+                                                               reject_right_still=args.reject_right_still)
     baxter_data     = data.read_recurrent_baxter_dataset(args.data, args.img_suffix,
                                                          step_len = args.step_len, seq_len = cargs.seq_len,
                                                          train_per = args.train_per, val_per = args.val_per,

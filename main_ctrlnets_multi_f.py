@@ -81,6 +81,10 @@ def main():
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
+    # 480 x 640 or 240 x 320
+    if args.full_res:
+        print("Using full-resolution images (480x640)")
+
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
     args.state_labels = []
@@ -90,7 +94,7 @@ def main():
             # Read from file
             intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
             print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-            if args.se2_data:
+            if args.se2_data or args.full_res:
                 args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
             else:
                 args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
@@ -325,7 +329,8 @@ def main():
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net)
+                    use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
+                    full_res=args.full_res)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -704,7 +709,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
             nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
             if args.consis_rt_loss:
-                currconsisloss = consis_wt * ctrlnets.PoseConsistencyLoss(nextpose_trans, poses[k+1])
+                currconsisloss = consis_wt * ctrlnets.PoseC(nextpose_trans, poses[k+1])
             else:
                 currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
 

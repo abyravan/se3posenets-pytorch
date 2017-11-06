@@ -320,7 +320,7 @@ def update_pose_centers(ptcloud, masks, poses, centertype):
 class PoseEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False, pre_conv=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
-                 wide=False, use_jt_angles=False, num_state=7):
+                 wide=False, use_jt_angles=False, num_state=7, full_res=False):
         super(PoseEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -330,8 +330,8 @@ class PoseEncoder(nn.Module):
         DeconvType = PreDeconv2D if pre_conv else BasicDeconv2D
 
         ###### Encoder
-        # Create conv-encoder (large net => 5 conv layers with pooling)
-        chn = [32, 64, 128, 256, 256] if wide else [8, 16, 32, 64, 128] # Num channels
+        # Create conv-encoder (large net => 5/6 conv layers with pooling)
+        chn = [32, 64, 128, 256, 256, 256] if wide else [8, 16, 32, 64, 128, 128] # Num channels
         self.conv1 = ConvType(input_channels, chn[0], kernel_size=9, stride=1, padding=4,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 9x9, 240x320 -> 120x160
         self.conv2 = ConvType(chn[0], chn[1], kernel_size=7, stride=1, padding=3,
@@ -342,7 +342,13 @@ class PoseEncoder(nn.Module):
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 30x40 -> 15x20
         self.conv5 = ConvType(chn[3], chn[4], kernel_size=3, stride=1, padding=1,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
-        self.celem = chn[4]*7*10
+        if full_res:
+            self.conv6 = ConvType(chn[4], chn[5], kernel_size=3, stride=1, padding=1,
+                                  use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
+            self.celem = chn[5]*7*10
+        else:
+            self.conv6 = None
+            self.celem = chn[4]*7*10
 
         ###### Encode jt angles
         self.use_jt_angles = use_jt_angles
@@ -393,6 +399,8 @@ class PoseEncoder(nn.Module):
         x = self.conv3(x)
         x = self.conv4(x)
         x = self.conv5(x)
+        if self.conv6 is not None:
+            x = self.conv6(x)
 
         # Run jt-encoder & concatenate the embeddings
         if self.use_jt_angles:
@@ -415,7 +423,7 @@ class PoseEncoder(nn.Module):
 class MaskEncoder(nn.Module):
     def __init__(self, num_se3, pre_conv=False, input_channels=3, use_bn=True, nonlinearity='prelu',
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, wide=False):
+                 use_sigmoid_mask=False, wide=False, full_res=False):
         super(MaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -426,7 +434,7 @@ class MaskEncoder(nn.Module):
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)
-        chn = [32, 64, 128, 256, 256] if wide else [8, 16, 32, 64, 128]  # Num channels
+        chn = [32, 64, 128, 256, 256, 256] if wide else [8, 16, 32, 64, 128, 128]  # Num channels
         self.conv1 = ConvType(input_channels, chn[0], kernel_size=9, stride=1, padding=4,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 9x9, 240x320 -> 120x160
         self.conv2 = ConvType(chn[0], chn[1], kernel_size=7, stride=1, padding=3,
@@ -437,26 +445,54 @@ class MaskEncoder(nn.Module):
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 30x40 -> 15x20
         self.conv5 = ConvType(chn[3], chn[4], kernel_size=3, stride=1, padding=1,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
-        self.celem = chn[4] * 7 * 10
 
-        ###### Mask Decoder
-        # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
-        self.conv1x1 = ConvType(chn[4], chn[4], kernel_size=1, stride=1, padding=0,
-                                use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
-        self.deconv1 = DeconvType(chn[4], chn[3], kernel_size=(3, 4), stride=2, padding=(0, 1),
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
-        self.deconv2 = DeconvType(chn[3], chn[2], kernel_size=4, stride=2, padding=1,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
-        self.deconv3 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
-        self.deconv4 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
-        if pre_conv:
-            # Can fit an extra BN + Non-linearity
-            self.deconv5 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
-                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 120x160 -> 240x320
+        ###### Switch between full-res vs not
+        self.full_res = full_res
+        if self.full_res:
+            ###### Conv 6
+            self.conv6 = ConvType(chn[4], chn[5], kernel_size=3, stride=1, padding=1,
+                                  use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
+
+            ###### Mask Decoder
+            # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
+            self.conv1x1 = ConvType(chn[5], chn[5], kernel_size=1, stride=1, padding=0,
+                                    use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
+            self.deconv1 = DeconvType(chn[5], chn[4], kernel_size=(3, 4), stride=2, padding=(0, 1),
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
+            self.deconv2 = DeconvType(chn[4], chn[3], kernel_size=4, stride=2, padding=1,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
+            self.deconv3 = DeconvType(chn[3], chn[2], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
+            self.deconv4 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
+            self.deconv5 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 120x160 -> 240x320
+            if pre_conv:
+                # Can fit an extra BN + Non-linearity
+                self.deconv6 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
+                                          use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 240x320 -> 480x640
+            else:
+                self.deconv6 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2,
+                                                  padding=3)  # 8x8, 120x160 -> 240x320
         else:
-            self.deconv5 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2, padding=3)  # 8x8, 120x160 -> 240x320
+            ###### Mask Decoder
+            # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
+            self.conv1x1 = ConvType(chn[4], chn[4], kernel_size=1, stride=1, padding=0,
+                                    use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
+            self.deconv1 = DeconvType(chn[4], chn[3], kernel_size=(3, 4), stride=2, padding=(0, 1),
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
+            self.deconv2 = DeconvType(chn[3], chn[2], kernel_size=4, stride=2, padding=1,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
+            self.deconv3 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
+            self.deconv4 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
+            if pre_conv:
+                # Can fit an extra BN + Non-linearity
+                self.deconv5 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
+                                          use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 120x160 -> 240x320
+            else:
+                self.deconv5 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2, padding=3)  # 8x8, 120x160 -> 240x320
 
         # Normalize to generate mask (wt-sharpening vs soft-mask model)
         self.use_wt_sharpening = use_wt_sharpening
@@ -489,13 +525,27 @@ class MaskEncoder(nn.Module):
         c4 = self.conv4(c3)
         c5 = self.conv5(c4)
 
-        # Run mask-decoder to predict a smooth mask
-        m = self.conv1x1(c5)
-        m = self.deconv1(m, c4)
-        m = self.deconv2(m, c3)
-        m = self.deconv3(m, c2)
-        m = self.deconv4(m, c1)
-        m = self.deconv5(m)
+        ### Full-res vs Not
+        if self.full_res:
+            # Conv-6
+            c6 = self.conv6(c5)
+
+            # Run mask-decoder to predict a smooth mask
+            m = self.conv1x1(c6)
+            m = self.deconv1(m, c5)
+            m = self.deconv2(m, c4)
+            m = self.deconv3(m, c3)
+            m = self.deconv4(m, c2)
+            m = self.deconv5(m, c1)
+            m = self.deconv6(m)
+        else:
+            # Run mask-decoder to predict a smooth mask
+            m = self.conv1x1(c5)
+            m = self.deconv1(m, c4)
+            m = self.deconv2(m, c3)
+            m = self.deconv3(m, c2)
+            m = self.deconv4(m, c1)
+            m = self.deconv5(m)
 
         # Predict a mask (either wt-sharpening or sigmoid-mask or soft-mask approach)
         # Normalize to sum across 1 along the channels (only for weight sharpening or soft-mask)
@@ -516,7 +566,8 @@ class PoseMaskEncoder(nn.Module):
     def __init__(self, num_se3, se3_type='se3aa', use_pivot=False, use_kinchain=False, pre_conv=False,
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7):
+                 use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7,
+                 full_res=False):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -527,7 +578,7 @@ class PoseMaskEncoder(nn.Module):
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)
-        chn = [32, 64, 128, 256, 256] if wide else [8, 16, 32, 64, 128]  # Num channels
+        chn = [32, 64, 128, 256, 256, 256] if wide else [8, 16, 32, 64, 128, 128]  # Num channels
         self.conv1 = ConvType(input_channels, chn[0], kernel_size=9, stride=1, padding=4,
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 9x9, 240x320 -> 120x160
         self.conv2 = ConvType(chn[0], chn[1], kernel_size=7, stride=1, padding=3,
@@ -540,36 +591,55 @@ class PoseMaskEncoder(nn.Module):
                               use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
         self.celem = chn[4] * 7 * 10
 
-        ###### Encode jt angles
-        self.use_jt_angles = use_jt_angles
-        jdim = 0
-        if self.use_jt_angles:
-            jdim = 256
-            self.jtencoder = nn.Sequential(
-                nn.Linear(num_state, 128),
-                get_nonlinearity(nonlinearity),
-                nn.Linear(128, 256),
-                get_nonlinearity(nonlinearity),
-            )
+        ###### Switch between full-res vs not
+        self.full_res = full_res
+        if self.full_res:
+            ###### Conv 6
+            self.conv6 = ConvType(chn[4], chn[5], kernel_size=3, stride=1, padding=1,
+                                  use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity)  # 3x3, 15x20 -> 7x10
+            self.celem = chn[5] * 7 * 10
 
-        ###### Mask Decoder
-        # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
-        self.conv1x1 = ConvType(chn[4], chn[4], kernel_size=1, stride=1, padding=0,
-                                use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
-        self.deconv1 = DeconvType(chn[4], chn[3], kernel_size=(3, 4), stride=2, padding=(0, 1),
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
-        self.deconv2 = DeconvType(chn[3], chn[2], kernel_size=4, stride=2, padding=1,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
-        self.deconv3 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
-        self.deconv4 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
-                                  use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
-        if pre_conv:
-            # Can fit an extra BN + Non-linearity
-            self.deconv5 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
-                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 120x160 -> 240x320
+            ###### Mask Decoder
+            # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
+            self.conv1x1 = ConvType(chn[5], chn[5], kernel_size=1, stride=1, padding=0,
+                                    use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
+            self.deconv1 = DeconvType(chn[5], chn[4], kernel_size=(3, 4), stride=2, padding=(0, 1),
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
+            self.deconv2 = DeconvType(chn[4], chn[3], kernel_size=4, stride=2, padding=1,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
+            self.deconv3 = DeconvType(chn[3], chn[2], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
+            self.deconv4 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
+            self.deconv5 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 120x160 -> 240x320
+            if pre_conv:
+                # Can fit an extra BN + Non-linearity
+                self.deconv6 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
+                                          use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 240x320 -> 480x640
+            else:
+                self.deconv6 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2,
+                                                  padding=3)  # 8x8, 120x160 -> 240x320
         else:
-            self.deconv5 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2, padding=3)  # 8x8, 120x160 -> 240x320
+            ###### Mask Decoder
+            # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
+            self.conv1x1 = ConvType(chn[4], chn[4], kernel_size=1, stride=1, padding=0,
+                                    use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity)  # 1x1, 7x10 -> 7x10
+            self.deconv1 = DeconvType(chn[4], chn[3], kernel_size=(3, 4), stride=2, padding=(0, 1),
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 3x4, 7x10 -> 15x20
+            self.deconv2 = DeconvType(chn[3], chn[2], kernel_size=4, stride=2, padding=1,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 4x4, 15x20 -> 30x40
+            self.deconv3 = DeconvType(chn[2], chn[1], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 30x40 -> 60x80
+            self.deconv4 = DeconvType(chn[1], chn[0], kernel_size=6, stride=2, padding=2,
+                                      use_bn=use_bn, nonlinearity=nonlinearity)  # 6x6, 60x80 -> 120x160
+            if pre_conv:
+                # Can fit an extra BN + Non-linearity
+                self.deconv5 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
+                                          use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 120x160 -> 240x320
+            else:
+                self.deconv5 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2,
+                                                  padding=3)  # 8x8, 120x160 -> 240x320
 
         # Normalize to generate mask (wt-sharpening vs sigmoid-mask vs soft-mask model)
         self.use_wt_sharpening = use_wt_sharpening
@@ -583,6 +653,18 @@ class PoseMaskEncoder(nn.Module):
             self.maskdecoder = nn.Sigmoid() # No normalization, each pixel can belong to multiple masks but values between (0-1)
         else:
             self.maskdecoder = nn.Softmax2d() # SoftMax normalization
+
+        ###### Encode jt angles
+        self.use_jt_angles = use_jt_angles
+        jdim = 0
+        if self.use_jt_angles:
+            jdim = 256
+            self.jtencoder = nn.Sequential(
+                nn.Linear(num_state, 128),
+                get_nonlinearity(nonlinearity),
+                nn.Linear(128, 256),
+                get_nonlinearity(nonlinearity),
+            )
 
         ###### Pose Decoder
         # Create SE3 decoder (take conv output, reshape, run FC layers to generate "num_se3" poses)
@@ -629,13 +711,18 @@ class PoseMaskEncoder(nn.Module):
         c3 = self.conv3(c2)
         c4 = self.conv4(c3)
         c5 = self.conv5(c4)
+        if self.full_res:
+            c6 = self.conv6(c5)
+            cout = c6
+        else:
+            cout = c5
 
         # Run jt-encoder & concatenate the embeddings
         if self.use_jt_angles:
             j = self.jtencoder(j)
-            p = torch.cat([c5.view(-1, self.celem), j], 1)
+            p = torch.cat([cout.view(-1, self.celem), j], 1)
         else:
-            p = c5.view(-1, self.celem)
+            p = cout.view(-1, self.celem)
 
         # Run pose-decoder to predict poses
         p = self.se3decoder(p)
@@ -645,12 +732,24 @@ class PoseMaskEncoder(nn.Module):
         # Run mask-decoder to predict a smooth mask
         # NOTE: Conditional based on input flag
         if predict_masks:
-            m = self.conv1x1(c5)
-            m = self.deconv1(m, c4)
-            m = self.deconv2(m, c3)
-            m = self.deconv3(m, c2)
-            m = self.deconv4(m, c1)
-            m = self.deconv5(m)
+            ### Full-res vs Not
+            if self.full_res:
+                # Run mask-decoder to predict a smooth mask
+                m = self.conv1x1(c6)
+                m = self.deconv1(m, c5)
+                m = self.deconv2(m, c4)
+                m = self.deconv3(m, c3)
+                m = self.deconv4(m, c2)
+                m = self.deconv5(m, c1)
+                m = self.deconv6(m)
+            else:
+                # Run mask-decoder to predict a smooth mask
+                m = self.conv1x1(c5)
+                m = self.deconv1(m, c4)
+                m = self.deconv2(m, c3)
+                m = self.deconv3(m, c2)
+                m = self.deconv4(m, c1)
+                m = self.deconv5(m)
 
             # Predict a mask (either wt-sharpening or sigmoid-mask or soft-mask approach)
             # Normalize to sum across 1 along the channels (only for weight sharpening or soft-mask)
@@ -793,7 +892,8 @@ class SE3PoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -803,7 +903,8 @@ class SE3PoseModel(nn.Module):
                                              nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                              sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                              use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                             use_jt_angles=use_jt_angles, num_state=num_state)
+                                             use_jt_angles=use_jt_angles, num_state=num_state,
+                                             full_res=full_res)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
@@ -845,7 +946,8 @@ class SE3OnlyPoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(SE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -853,7 +955,8 @@ class SE3OnlyPoseModel(nn.Module):
                                      use_kinchain=use_kinchain, input_channels=input_channels,
                                      init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, wide=wide,
-                                     use_jt_angles=use_jt_angles, num_state=num_state)
+                                     use_jt_angles=use_jt_angles, num_state=num_state,
+                                     full_res=full_res)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
@@ -896,7 +999,8 @@ class SE3OnlyMaskModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(SE3OnlyMaskModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -904,7 +1008,8 @@ class SE3OnlyMaskModel(nn.Module):
                                      use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                     full_res=full_res)
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -927,7 +1032,8 @@ class SE3DecompModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden=False, init_transse3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(SE3DecompModel, self).__init__()
 
         # Initialize the pose model
@@ -935,14 +1041,16 @@ class SE3DecompModel(nn.Module):
                                      use_kinchain=use_kinchain, input_channels=input_channels,
                                      init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, wide=wide,
-                                     use_jt_angles=use_jt_angles, num_state=num_state)
+                                     use_jt_angles=use_jt_angles, num_state=num_state,
+                                     full_res=full_res)
 
         # Initialize the mask model
         self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
                                      use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                     full_res=full_res)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
@@ -990,7 +1098,8 @@ class MultiStepSE3PoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1001,12 +1110,14 @@ class MultiStepSE3PoseModel(nn.Module):
                                          use_kinchain=use_kinchain, input_channels=input_channels,
                                          init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                          nonlinearity=nonlinearity, wide=wide,
-                                         use_jt_angles=use_jt_angles, num_state=num_state)
+                                         use_jt_angles=use_jt_angles, num_state=num_state,
+                                         full_res=full_res)
             self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
                                          use_bn=use_bn, pre_conv=pre_conv,
                                          nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                          sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                         full_res=full_res)
         else:
             print('Using single network for pose & mask prediction')
             self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
@@ -1015,7 +1126,8 @@ class MultiStepSE3PoseModel(nn.Module):
                                                  nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                                  sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                                  use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                                 use_jt_angles=use_jt_angles, num_state=num_state)
+                                                 use_jt_angles=use_jt_angles, num_state=num_state,
+                                                 full_res=full_res)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
@@ -1070,7 +1182,8 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(MultiStepSE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1078,7 +1191,8 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                                      use_kinchain=use_kinchain, input_channels=input_channels,
                                      init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, wide=wide,
-                                     use_jt_angles=use_jt_angles, num_state=num_state)
+                                     use_jt_angles=use_jt_angles, num_state=num_state,
+                                     full_res=full_res)
 
 
         # Initialize the transition model
@@ -1122,7 +1236,8 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                  nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
-                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7):
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
         super(MultiStepSE3OnlyMaskModel, self).__init__()
 
         # Initialize the mask model
@@ -1130,7 +1245,8 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                                      use_bn=use_bn, pre_conv=pre_conv,
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide)
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                     full_res=full_res)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,

@@ -51,6 +51,8 @@ def setup_comon_options():
                         help='Enable adding noise to the depths and the configs/ctrls. (default: False)')
     parser.add_argument('--add-noise-data', default=[], required=False,
                         action='append', metavar='DIRS', help='noise setting per dataset. has to correspond to number in --data [a,b,c...]')
+    parser.add_argument('--full-res', action='store_true', default=False,
+                        help='Full-resolution input images -> 480x640 (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

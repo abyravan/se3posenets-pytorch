@@ -576,8 +576,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Setup vars for color image
     if load_color:
         rgbs = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)
-        actctrlvels = torch.FloatTensor(seq_len + 1, num_ctrl)     # Actual data is same as state dimension
-        comvels = torch.FloatTensor(seq_len + 1, num_ctrl)         # Commanded data is same as control dimension
+        #actctrlvels = torch.FloatTensor(seq_len + 1, num_ctrl)     # Actual data is same as state dimension
+        #comvels = torch.FloatTensor(seq_len + 1, num_ctrl)         # Commanded data is same as control dimension
 
     # Setup vars for tracker data
     if num_tracker > 0:
@@ -614,8 +614,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Load RGB
         if load_color:
             rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
-            actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
-            comvels[k] = state['comjtvel']
+            #actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
+            #comvels[k] = state['comjtvel']
 
         # Load tracker data
         if num_tracker > 0:
@@ -699,9 +699,9 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['bwdvisibilities'] = bwdvisibilities
     if load_color:
         data['rgbs']   = rgbs
-        data['labels'] = labels
-        data['actctrlvels'] = actctrlvels
-        data['comvels'] = comvels
+        #data['labels'] = labels
+        #data['actctrlvels'] = actctrlvels
+        #data['comvels'] = comvels
     if num_tracker > 0:
         data['trackerconfigs'] = trackerconfigs
 

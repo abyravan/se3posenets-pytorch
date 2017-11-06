@@ -84,6 +84,9 @@ def main():
     # 480 x 640 or 240 x 320
     if args.full_res:
         print("Using full-resolution images (480x640)")
+    # XYZ-RGB
+    if args.use_xyzrgb:
+        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
 
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
@@ -268,7 +271,8 @@ def main():
                                                                        #num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                                        use_only_da=args.use_only_da_for_flows,
-                                                                       noise_func=noise_func) # Need BWD flows / masks if using GT masks
+                                                                       noise_func=noise_func,
+                                                                       load_color=args.use_xyzrgb) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -311,6 +315,7 @@ def main():
 
     ### Load the model
     num_train_iter = 0
+    num_input_channels = 6 if args.use_xyzrgb else 3 # Num input channels
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
         assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
@@ -323,7 +328,7 @@ def main():
         modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
-                    input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                    input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
@@ -570,6 +575,13 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
+        # Get XYZRGB input
+        if args.use_xyzrgb:
+            rgb = util.to_var(sample['rgbs'].type(deftype)/255.0, requires_grad=train) # Normalize RGB to 0-1
+            netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
+        else:
+            netinput = pts # XYZ
+
         # Get jt angles
         #if args.use_full_jt_angles:
         #    jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
@@ -594,29 +606,29 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # For all subsequent timesteps, predict only the poses
                 if(k == 0):
                     if args.use_gt_masks:
-                        p = model.forward_only_pose([pts[:,k], jtangles[:,k]]) # We can only predict poses
+                        p = model.forward_only_pose([netinput[:,k], jtangles[:,k]]) # We can only predict poses
                         initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
                     elif args.use_gt_poses:
                         p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
-                        initmask = model.forward_only_mask(pts[:,k], train_iter=num_train_iter)  # Predict masks
+                        initmask = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter)  # Predict masks
                     else:
-                        p, initmask = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter)
+                        p, initmask = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter)
                 else:
                     if args.use_gt_poses:
                         p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
                     else:
-                        p = model.forward_only_pose([pts[:,k], jtangles[:,k]])
+                        p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])
                 poses.append(p)
             else:
                 # Predict the poses and masks for all timesteps
                 if args.use_gt_masks:
-                    p = model.forward_only_pose([pts[:,k], jtangles[:,k]])  # We can only predict poses
+                    p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])  # We can only predict poses
                     m = util.to_var(sample['masks'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT masks
                 elif args.use_gt_poses:
                     p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
-                    m = model.forward_only_mask(pts[:,k], train_iter=num_train_iter) # Predict masks
+                    m = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter) # Predict masks
                 else:
-                    p, m = model.forward_pose_mask([pts[:,k], jtangles[:,k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
+                    p, m = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
                 masks.append(m)
                 # Update poses if there is a center option provided
                 p, pc, mc = ctrlnets.update_pose_centers(pts[:,k], m, p, args.pose_center)
@@ -890,11 +902,19 @@ def iterate(data_loader, model, tblogger, num_iters,
                 #depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))
+
+                # Display RGB
+                if args.use_xyzrgb:
+                    rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
+                                                            nrow=args.seq_len, normalize=True, range=(0.0,255.0))
+
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                          mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                 }
+                if args.use_xyzrgb:
+                    info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 

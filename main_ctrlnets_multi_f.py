@@ -568,7 +568,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts      = util.to_var(sample['points'].type(deftype), requires_grad=train)
+        pts      = util.to_var(sample['points'].type(deftype), requires_grad=train, volatile=not train)
         ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=train)
         fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         fwdvis   = util.to_var(sample['fwdvisibilities'].type(deftype), requires_grad=False)

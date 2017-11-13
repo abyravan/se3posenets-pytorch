@@ -82,6 +82,7 @@ class SE3ControlPositionMode(object):
 
         # create our limb instance
         self._limb = baxter_interface.Limb(limb)
+        self._limb_gripper = baxter_interface.Gripper(limb, CHECK_VERSION)
 
         self._start_angles = dict()
 
@@ -95,6 +96,8 @@ class SE3ControlPositionMode(object):
         self._init_state = self._rs.state().enabled
         print("Enabling robot... ")
         self._rs.enable()
+        print("Closing gripper... ")
+        self._limb_gripper.close()
         print("Running. Ctrl-c to quit")
 
     def move_to_neutral(self):
@@ -203,8 +206,10 @@ class DepthImageSubscriber:
     def callback(self,data):
         try:
             # By default, we assume input image is 640x480, we subsample to 320x240
-            #self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1")[::2,::2].astype(np.int16) * self.scale
-            self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1").astype(np.int16) * self.scale
+            if (self.ht == 240):
+                self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1")[::2,::2].astype(np.int16) * self.scale
+            else:
+                self.imgf = self.bridge.imgmsg_to_cv2(data, "16UC1").astype(np.int16) * self.scale
             self.flag = True
         except CvBridgeError as e:
             print(e)
@@ -246,8 +251,10 @@ class RGBImageSubscriber:
     def callback(self, data):
         try:
             # By default, we assume input image is 640x480, we subsample to 320x240
-            #self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3")[::2, ::2].astype(np.uint8)
-            self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3").astype(np.uint8)
+            if (self.ht == 240):
+                self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3")[::2, ::2].astype(np.uint8)
+            else:
+                self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3").astype(np.uint8)
             self.flag = True
         except CvBridgeError as e:
             print(e)
@@ -313,10 +320,11 @@ def setup_model(checkpoint, args, use_cuda=False):
     #                                       num_state=args.num_state_net)  # TODO: pre-conv
     #         posemaskpredfn = model.posemaskmodel.forward
     # else:
+    num_input_channels = 6 if args.use_xyzrgb else 3 # Num input channels
     model = ctrlnets.MultiStepSE3PoseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                                            se3_type=args.se3_type, use_pivot=args.pred_pivot,
-                                           use_kinchain=False,
-                                           input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                           use_kinchain=False, input_channels=num_input_channels,
+                                           use_bn=args.batch_norm, nonlinearity=args.nonlin,
                                            init_posese3_iden=args.init_posese3_iden,
                                            init_transse3_iden=args.init_transse3_iden,
                                            use_wt_sharpening=args.use_wt_sharpening,
@@ -325,7 +333,7 @@ def setup_model(checkpoint, args, use_cuda=False):
                                            decomp_model=args.decomp_model, wide=args.wide_model,
                                            use_jt_angles=args.use_jt_angles,
                                            use_jt_angles_trans=args.use_jt_angles_trans,
-                                           num_state=args.num_state_net)
+                                           num_state=args.num_state_net, full_res=args.full_res)
     posemaskpredfn = model.forward_pose_mask
     if use_cuda:
         model.cuda()  # Convert to CUDA if enabled
@@ -503,6 +511,10 @@ class SE3PoseSpaceOptimizer(object):
             self.args.delta_pivot = ''
         if not hasattr(self.args, "pose_center"):
             self.args.pose_center = 'pred'
+        if not hasattr(self.args, "full_res"):
+            self.args.full_res = False
+        if not hasattr(self.args, "use_xyzrgb"):
+            self.args.use_xyzrgb = False
 
         # Setup model
         self.model, self.posemaskfn = setup_model(self.checkpoint, self.args, self.pargs.cuda)
@@ -559,15 +571,17 @@ class SE3PoseSpaceOptimizer(object):
         return start_angles, goal_angles, start_id, goal_id, start_full_angles, goal_full_angles
 
     ## Compute pose & masks
-    def predict_pose_masks(self, config, pts, tbtopic='Mask'):
+    def predict_pose_masks(self, config, rgb, pts, tbtopic='Mask'):
         ## Predict pose / mask
         config_v = util.to_var(config.view(1,-1).type(self.deftype), requires_grad=False)
+        inp = torch.cat([pts, rgb.unsqueeze(0).permute(0,3,1,2).type(self.deftype)/255.0], 1) if self.args.use_xyzrgb else pts
         if self.args.use_gt_masks:  # GT masks are provided!
             _, rlabels = generate_ptcloud(config, self.args)
             masks = util.to_var(compute_masks_from_labels(rlabels, self.args.mesh_ids, self.args))
-            poses = self.posemaskfn([util.to_var(pts.type(self.deftype)), config_v])
+            poses = self.posemaskfn([util.to_var(inp.type(self.deftype), volatile=True), config_v])
         else:
-            poses, masks = self.posemaskfn([util.to_var(pts.type(self.deftype)), config_v], train_iter=self.num_train_iter)
+            poses, masks = self.posemaskfn([util.to_var(inp.type(self.deftype), volatile=True),
+                                            config_v], train_iter=self.num_train_iter)
 
         # ## Display the masks as an image summary
         # maskdisp = torchvision.utils.make_grid(masks.data.cpu().view(-1, 1, self.args.img_ht, self.args.img_wd),
@@ -620,7 +634,7 @@ class SE3PoseSpaceOptimizer(object):
             I = torch.eye(nperturb).type_as(ctrl.data)
 
             # Do perturbation
-            poses_p = util.to_var(poses.data.repeat(nperturb + 1, 1, 1, 1))  # Replicate poses
+            poses_p = util.to_var(poses.data.repeat(nperturb + 1, 1, 1, 1), volatile=True)  # Replicate poses
             ctrl_p = util.to_var(ctrl.data.repeat(nperturb + 1, 1))  # Replicate controls
             ctrl_p.data[1:, :] += I * eps  # Perturb the controls
             inp = [poses_p, ctrl_p]
@@ -1013,7 +1027,7 @@ def main():
             goal_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
 
         # Compute goal poses
-        goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_pts, 'Goal Mask')
+        goal_poses, goal_masks = se3optim.predict_pose_masks(goal_angles, goal_rgb, goal_pts, 'Goal Mask')
         time.sleep(1)
 
         ###### Start stuff
@@ -1028,7 +1042,7 @@ def main():
             start_rgb = torch.zeros(3, se3optim.args.img_ht, se3optim.args.img_wd).byte()
 
         # Compute goal poses
-        start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_pts, 'Start Mask')
+        start_poses, start_masks = se3optim.predict_pose_masks(start_angles, start_rgb, start_pts, 'Start Mask')
 
         # Update poses if there is a center option
         start_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(start_pts), start_masks, start_poses, se3optim.args.pose_center)
@@ -1042,20 +1056,21 @@ def main():
         # Render the poses
         # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
         print("Initializing the visualizer...")
+        stp = 2 if se3optim.args.full_res else 1
         start_masks_f, goal_masks_f = start_masks.data.cpu().float(), goal_masks.data.cpu().float()
         #_, start_labels = start_masks_f.max(dim=1); start_labels_f = start_labels.float()
         #_, goal_labels  = goal_masks_f.max(dim=1);  goal_labels_f  = goal_labels.float()
         start_poses_f, goal_poses_f = start_poses.data.cpu().float(), goal_poses.data.cpu().float()
         pangolin.update_real_init(start_angles.numpy(),
-                                  start_pts[0].cpu().numpy(),
+                                  start_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                                   start_poses_f[0].numpy(),
-                                  start_masks_f[0].numpy(),
-                                  start_rgb.numpy(),
+                                  start_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                                  start_rgb.numpy()[::stp,::stp].copy(),
                                   goal_angles.numpy(),
-                                  goal_pts[0].cpu().numpy(),
+                                  goal_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                                   goal_poses_f[0].numpy(),
-                                  goal_masks_f[0].numpy(),
-                                  goal_rgb.numpy(),
+                                  goal_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                                  goal_rgb.numpy()[::stp,::stp].copy(),
                                   init_pose_loss.data[0],
                                   init_pose_err_indiv.data.cpu().numpy(),
                                   init_deg_errors)
@@ -1063,15 +1078,15 @@ def main():
         # For saving:
         if pargs.save_frame_stats:
             initstats = [start_angles.numpy(),
-                         start_pts[0].cpu().numpy(),
+                         start_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                          start_poses_f[0].numpy(),
-                         start_masks_f[0].numpy(),
-                         start_rgb.numpy(),
+                         start_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                         start_rgb.numpy()[::stp,::stp].copy(),
                          goal_angles.numpy(),
-                         goal_pts[0].cpu().numpy(),
+                         goal_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                          goal_poses_f[0].numpy(),
-                         goal_masks_f[0].numpy(),
-                         goal_rgb.numpy(),
+                         goal_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                         goal_rgb.numpy()[::stp,::stp].copy(),
                          init_pose_loss.data[0],
                          init_pose_err_indiv.data.cpu().numpy(),
                          init_deg_errors]
@@ -1127,7 +1142,7 @@ def main():
 
             # Predict poses and masks
             start = time.time()
-            curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_pts, 'Curr Mask')
+            curr_poses, curr_masks = se3optim.predict_pose_masks(curr_angles, curr_rgb, curr_pts, 'Curr Mask')
 
             # Update poses (based on pivots)
             curr_poses, _, _ = ctrlnets.update_pose_centers(util.to_var(curr_pts), curr_masks, curr_poses,
@@ -1208,10 +1223,10 @@ def main():
             curr_deg_errors = (next_angles - goal_angles).view(1, 7) * (180.0 / np.pi)
             curr_pose_err_indiv = se3optim.args.loss_scale * (curr_poses - goal_poses).pow(2).view(se3optim.args.num_se3, 12).mean(1)
             pangolin.update_real_curr(curr_angles.numpy(),
-                                      curr_pts_f[0].numpy(),
+                                      curr_pts_f[0].numpy()[:,::stp,::stp].copy(),
                                       curr_poses_f[0].numpy(),
-                                      curr_masks_f[0].numpy(),
-                                      curr_rgb.numpy(),
+                                      curr_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                                      curr_rgb.numpy()[::stp,::stp].copy(),
                                       loss,
                                       curr_pose_err_indiv.data.cpu().numpy(),
                                       curr_deg_errors[0].numpy(),
@@ -1342,15 +1357,15 @@ def main():
         ######## Saving frames to disk now!
         if pargs.save_frames:
             pangolin.update_real_init(start_angles.numpy(),
-                                      start_pts[0].cpu().numpy(),
+                                      start_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                                       start_poses_f[0].numpy(),
-                                      start_masks_f[0].numpy(),
-                                      start_rgb.numpy(),
+                                      start_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                                      start_rgb.numpy()[::stp,::stp].copy(),
                                       goal_angles.numpy(),
-                                      goal_pts[0].cpu().numpy(),
+                                      goal_pts[0].cpu().numpy()[:,::stp,::stp].copy(),
                                       goal_poses_f[0].numpy(),
-                                      goal_masks_f[0].numpy(),
-                                      goal_rgb.numpy(),
+                                      goal_masks_f[0].numpy()[:,::stp,::stp].copy(),
+                                      goal_rgb.numpy()[::stp,::stp].copy(),
                                       init_pose_loss.data[0],
                                       init_pose_err_indiv.data.cpu().numpy(),
                                       init_deg_errors)
@@ -1365,10 +1380,10 @@ def main():
                 if (j%10  == 0):
                     print("Saving frame: {}/{}".format(j, len(curr_angles_s)))
                 pangolin.update_real_curr(curr_angles_s[j].numpy(),
-                                          curr_pts_s[j].numpy(),
+                                          curr_pts_s[j].numpy()[:,::stp,::stp].copy(),
                                           curr_poses_s[j].numpy(),
-                                          curr_masks_s[j].numpy(),
-                                          curr_rgb_s[j].numpy(),
+                                          curr_masks_s[j].numpy()[:,::stp,::stp].copy(),
+                                          curr_rgb_s[j].numpy()[::stp,::stp].copy(),
                                           loss_s[j],
                                           err_indiv_s[j].numpy(),
                                           curr_deg_errors_s[j].numpy(),

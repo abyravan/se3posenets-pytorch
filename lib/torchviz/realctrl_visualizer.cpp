@@ -633,20 +633,35 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
     pangolin::CreatePanel("se3gui").SetBounds(0.0,0.5,0,pangolin::Attach::Pix(panelWidth));
 
     // Add labels
-    std::vector<std::string> jterr_labels;
-    jterr_labels.push_back(std::string("Joint 1"));
-    jterr_labels.push_back(std::string("Joint 2"));
-    jterr_labels.push_back(std::string("Joint 3"));
-    jterr_labels.push_back(std::string("Joint 4"));
-//    jterr_labels.push_back(std::string("Joint 5"));
-//    jterr_labels.push_back(std::string("Joint 6"));
-//    jterr_labels.push_back(std::string("Joint 7"));
-    log_1.SetLabels(jterr_labels);
+//    std::vector<std::string> jterr_labels;
+//    jterr_labels.push_back(std::string("Joint 1"));
+//    jterr_labels.push_back(std::string("Joint 2"));
+//    jterr_labels.push_back(std::string("Joint 3"));
+//    jterr_labels.push_back(std::string("Joint 4"));
+////    jterr_labels.push_back(std::string("Joint 5"));
+////    jterr_labels.push_back(std::string("Joint 6"));
+////    jterr_labels.push_back(std::string("Joint 7"));
+//    log_1.SetLabels(jterr_labels);
 
     // OpenGL 'view' of data. We might have many views of the same data.
     plotter1 = new pangolin::Plotter(&log_1,0.0f,500.0f,-75.0f,75.0f,50.0f,25.0f);
     plotter1->SetBounds(0.0f, 1.0f, 0.0f, 0.5f);
 //    plotter1.Track("$i");
+    plotter1->ClearSeries();
+    plotter1->AddSeries("$i", "$0", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[0].x, colors[0].y, colors[0].z), "Joint 1");
+    plotter1->AddSeries("$i", "$1", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[1].x, colors[1].y, colors[1].z), "Joint 2");
+    plotter1->AddSeries("$i", "$2", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[2].x, colors[2].y, colors[2].z), "Joint 3");
+    plotter1->AddSeries("$i", "$3", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[3].x, colors[3].y, colors[3].z), "Joint 4");
+    plotter1->AddSeries("$i", "$4", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[4].x, colors[4].y, colors[4].z), "Joint 5");
+    plotter1->AddSeries("$i", "$5", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[5].x, colors[5].y, colors[5].z), "Joint 6");
+    plotter1->AddSeries("$i", "$6", pangolin::DrawingMode::DrawingModeLine,
+                        pangolin::Colour(colors[6].x, colors[6].y, colors[6].z), "Joint 7");
 
 //    // Add some sample annotations to the plot
 //    plotter1.AddMarker(pangolin::Marker::Horizontal, -1000, pangolin::Marker::LessThan, pangolin::Colour::Blue().WithAlpha(1.0f) );
@@ -1411,8 +1426,8 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
             {
                 // Joint angle error (show all latest values since last time)
                 std::vector<float> d = data->deg_errors[i];
-//                log_1.Log(d[0], d[1], d[2], d[3], d[4], d[5], d[6]);
-                log_1.Log(d[0], d[1], d[2], d[3]); //, d[4], d[5], d[6]);
+                log_1.Log(d[0], d[1], d[2], d[3], d[4], d[5], d[6]);
+                //log_1.Log(d[0], d[1], d[2], d[3]); //, d[4], d[5], d[6]);
 
                 // Pose error (show all latest values since last time)
                 //log_2.Log(log10(datac->pose_errors[i]));

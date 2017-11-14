@@ -6,6 +6,7 @@ import os
 from torch.utils.data import Dataset
 import se3layers as se3nn
 from torch.autograd import Variable
+import util.util3d as u3d
 
 # NOTE: This is slightly ugly, use this only for the NTfm3D implementation (for use in dataloader)
 from layers._ext import se3layers
@@ -115,6 +116,104 @@ def read_statectrllabels_file(filename):
         except:
             trackernames = []
     return statenames, ctrlnames, trackernames
+
+############
+### Helper functions for reading box data
+
+# Read events in each box/ball dataset
+def read_events_file(filename):
+    ret = {}
+    with open(filename, 'rt') as csvfile:
+        spamreader = csv.reader(csvfile, delimiter=' ')
+        for row in spamreader:
+            ret[str(row[0])] = int(row[2])
+    return ret
+
+# Read force data
+def read_forcedata_file(filename):
+    ret = {}
+    with open(filename, 'rt') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        ret['axis']         = torch.FloatTensor([float(x) for x in next(reader)]) # Force axis
+        ret['point']        = torch.FloatTensor([float(x) for x in next(reader)]) # Force application point
+        ret['pointFrame']   = next(reader)[0] # Reference frame in which the force point is expressed in
+        ret['magnitude']    = float(next(reader)[0])
+        ret['timeStep']     = float(next(reader)[0])
+        ret['targetObject'] = next(reader)[0]
+    return ret
+
+# Count num of objects in objectdata file. Each object is succeeded by a single empty line
+def find_num_objs(filename):
+    nobjs, nlines = 0, 0
+    with open(filename, 'rt') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        for row in reader:
+            nlines += 1
+            if len(row) == 0:
+                nobjs += 1 # Empty line separates objects
+    return nobjs, nlines
+
+# Read object data file
+def read_objectdata_file(filename):
+    nobjs, nlines = find_num_objs(filename)
+    nlinesperobj = nlines/nobjs
+    objs = {}
+    with open(filename, 'rt') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        while True:
+            # Get line till exit
+            try:
+                line = next(reader)
+            except:
+                break # Exit
+            # Parse object data
+            if len(line) != 0:  # Find lines which are not empty (starts an object)
+                obj, name = {}, line[0]
+                obj['mass']  = float(next(reader)[0])
+                obj['shape'] = next(reader)[0]
+                if (obj['shape'] == 'BOX') or (obj['shape'] == 'MESH'):
+                    obj['box_size'] = torch.FloatTensor([float(x) for x in next(reader)])
+                elif (obj['shape'] == 'SPHERE'):
+                    obj['radius'] = float(next(reader)[0])
+                else:
+                    assert False, 'Unknown object shape: {}'.format(obj['shape'])
+                obj['initpose'] = torch.ByteTensor([float(x)*255 for x in next(reader)])
+                # Handle color (special)
+                if (nlinesperobj == 7):
+                    obj['color'] = torch.ByteTensor([float(x)*255 for x in next(reader)])
+                else:
+                    # No colors, choose default color (for box set red, bullet is white, rest is black...)
+                    if name.find('bullet') != -1:
+                        obj['color'] = torch.ByteTensor([255,255,255]) # White
+                    elif name.find('box') != -1:
+                        obj['color'] = torch.ByteTensor([255,0,0]) # Red
+                    else:
+                        obj['color'] = torch.zeros(3) # Black
+                # Add to list of objs
+                objs[name] = obj # Set object
+    return objs # Return
+
+# Read the object state file and return a table per object with the following details:
+# Name, Pose, Vel, Accel and Wrench for each object
+def read_box_state_file(filename):
+    states = {}
+    with open(filename, 'rt') as csvfile:
+        reader = csv.reader(csvfile, delimiter=' ')
+        while True:
+            # Get line till exit
+            try:
+                line = next(reader)
+            except:
+                break # Exit
+            # Parse object data
+            if len(line) != 0:  # Find lines which are not empty (starts an object)
+                state, name = {}, line[0]
+                state['pose']   = torch.FloatTensor([float(x) for x in next(reader)])
+                state['vel']    = torch.FloatTensor([float(x) for x in next(reader)])
+                state['accel']  = torch.FloatTensor([float(x) for x in next(reader)])
+                state['wrench'] = torch.FloatTensor([float(x) for x in next(reader)])
+                states[name] = state
+    return states
 
 ############
 ### Helper functions for reading image data
@@ -379,7 +478,7 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
     # Iterate over each load directory to find the datasets
     datasets = []
     for load_dir in load_dirs:
-        if os.path.exists(load_dir + '/postprocessstats.txt'): # This dataset is made up of multiple sub motions
+        if os.path.exists(load_dir + '/postprocessstats.txt'): # This dataset is made up of multiple sub motions (box data is by default like that)
             # Load stats file, get num images & sub-dirs
             statsfilename = load_dir + '/postprocessstats.txt'
             max_flow_step = (step_len * seq_len) # This is the maximum future step (k) for which we need flows (flow_k/)
@@ -388,11 +487,11 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                 dirnames, numdata, numinvalid = [], [], 0
                 for row in reader:
                     invalid = int(row[0]) # If this = 1, the data for this row is not valid!
-                    if invalid:
+                    nexamples = int(row[3]) - int(max_flow_step) # Num examples
+                    if invalid or (nexamples < 1):
                         numinvalid += 1
                     else:
-                        nexamples = int(row[3])
-                        numdata.append(int(nexamples - max_flow_step)) # We only have flows for these many images!
+                        numdata.append(nexamples) # We only have flows for these many images!
                         dirnames.append(row[5])
                 print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), numinvalid + len(numdata),
                                                                                       sum(numdata), load_dir))
@@ -425,11 +524,15 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                                    'train'   : [0, ndirtrain - 1],
                                    'val'     : [ndirtrain, ndirtrain + ndirval - 1],
                                    'test'    : [ndirtrain + ndirval, ndirs - 1]},
-                       'camintrinsics': cam_intrinsics[len(datasets)],
-                       'camextrinsics': cam_extrinsics[len(datasets)],
-                       'ctrlids': ctrl_ids[len(datasets)],
-                       'addnoise': add_noise[len(datasets)],
-                       }  # start & end inclusive
+                       }
+            if len(cam_intrinsics) > 0:
+                dataset['camintrinsics'] = cam_intrinsics[len(datasets)]
+            if len(cam_extrinsics) > 0:
+                dataset['camextrinsics'] = cam_extrinsics[len(datasets)]
+            if len(ctrl_ids) > 0:
+                dataset['ctrlids']  = ctrl_ids[len(datasets)]
+            if len(add_noise) > 0:
+                dataset['addnoise'] = add_noise[len(datasets)]
             datasets.append(dataset)
         else:
             # Get folder names & data statistics for a single load-directory
@@ -472,11 +575,15 @@ def read_recurrent_baxter_dataset(load_dirs, img_suffix, step_len, seq_len, trai
                                'train'  : [0, ntrain - 1],
                                'val'    : [ntrain, ntrain + nval - 1],
                                'test'   : [ntrain + nval, nvalid - 1],  # start & end inclusive
-                               'camintrinsics': cam_intrinsics[len(datasets)],
-                               'camextrinsics': cam_extrinsics[len(datasets)],
-                               'ctrlids': ctrl_ids[len(datasets)],
-                               'addnoise': add_noise[len(datasets)],
                                }
+                    if len(cam_intrinsics) > 0:
+                        dataset['camintrinsics'] = cam_intrinsics[len(datasets)]
+                    if len(cam_extrinsics) > 0:
+                        dataset['camextrinsics'] = cam_extrinsics[len(datasets)]
+                    if len(ctrl_ids) > 0:
+                        dataset['ctrlids']  = ctrl_ids[len(datasets)]
+                    if len(add_noise) > 0:
+                        dataset['addnoise'] = add_noise[len(datasets)]
                     datasets.append(dataset)
 
     return datasets
@@ -509,6 +616,30 @@ def generate_baxter_sequence(dataset, idx):
                         'se3state2' : path + 'se3state' + str(k + 1) + '.txt',
                         'flow'   : path + 'flow_' + str(stepid) + '/flow' + suffix + str(start) + '.png',
                         'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png'}
+        stepid += step  # Get flow from start image to the next step
+        ct += 1  # Increment counter
+    return sequence, path
+
+### Generate the data files (with all the depth, flow etc.) for each sequence
+def generate_box_sequence(dataset, idx):
+    # Get stuff from the dataset
+    step, seq, suffix = dataset['step'], dataset['seq'], dataset['suffix']
+    # Find the sub-directory the data falls into
+    assert (idx < dataset['numdata']);  # Check if we are within limits
+    did = np.searchsorted(dataset['subdirs']['datahist'], idx, 'right') - 1  # ID of sub-directory. If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
+    # Update the ID and path so that we get the correct images
+    id   = idx - dataset['subdirs']['datahist'][did] # ID of image within the sub-directory
+    path = dataset['path'] + '/' + dataset['subdirs']['dirnames'][did] + '/' # Get the path of the sub-directory
+    # Setup start/end IDs of the sequence
+    start, end = id, id + (step * seq)
+    sequence, ct, stepid = {}, 0, step
+    for k in xrange(start, end + 1, step):
+        sequence[ct] = {'depth'   : path + 'depth' + suffix + str(k) + '.png',
+                        'color'   : path + 'rgb'   + suffix + str(k) + '.png',
+                        'state'   : path + 'state' + str(k) + '.txt',
+                        'flow'    : path + 'flow_' + str(stepid) + '/flow' + suffix + str(start) + '.png',
+                        'force'   : path + 'forcedata.txt',
+                        'objects' : path + 'objectdata.txt'}
         stepid += step  # Get flow from start image to the next step
         ct += 1  # Increment counter
     return sequence, path
@@ -721,6 +852,129 @@ def filter_func(batch, mean_dt, std_dt):
     # Return
     return filtered_batch
 
+###### BOX DATA LOADER
+### Load box sequence from disk
+def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
+                                compute_bwdflows=True, ctrl_type='ballposforce',
+                                dathreshold=0.01, dawinsize=5, use_only_da=False,
+                                noise_func=None):
+    # Setup vars
+    seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
+    camera_intrinsics = dataset['camintrinsics']
+
+    # Get ctrl dimension
+    if ctrl_type == 'ballposforce':
+        num_ctrl = 6
+    elif ctrl_type == 'ballposvelforce':
+        num_ctrl = 9
+    else:
+        assert False, "Ctrl type unknown: {}".format(ctrl_type)
+
+    # Setup memory
+    sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
+    points   = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
+    controls = torch.FloatTensor(seq_len, num_ctrl).zero_()  # Commanded data is same as control dimension
+    poses    = torch.FloatTensor(seq_len + 1, 3, 3, 4).zero_()
+
+    # For computing FWD/BWD visibilities and FWD/BWD flows
+    rgbs   = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)  # rgbs
+    labels = torch.ByteTensor(seq_len + 1, 1, img_ht, img_wd).zero_() # labels (BG = 0)
+
+    # Setup temp var for depth
+    depths = points.narrow(1, 2, 1)  # Last channel in points is the depth
+
+    # Setup vars for BWD flow computation
+    if compute_bwdflows:
+        masks = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd) # BG | Ball | Box
+
+    #####
+    # Load sequence
+    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
+    for k in xrange(len(sequence)):
+        # Get data table
+        s = sequence[k]
+
+        # Load depth
+        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale)  # Third channel is depth (x,y,z)
+
+        # Load force file
+        forcedata = read_forcedata_file(s['force'])
+        tarobj = forcedata['targetObject']
+        force = forcedata['axis'] * forcedata['magnitude'] # Axis * magnitude
+
+        # Load objectdata file
+        objects = read_objectdata_file(s['objects'])
+        ballcolor, boxcolor = objects['bullet']['color'], objects[forcedata['targetObject'].split("::")[0]]['color']
+
+        # Load state file
+        state = read_box_state_file(s['state'])
+        if ctrl_type == 'ballposforce':
+            controls[k] = torch.cat([state['bullet::link']['pose'][0:3], force]) # 6D
+        else:
+            controls[k] = torch.cat([state['bullet::link']['pose'][0:3], state['bullet::link']['vel'][0:3], force]) # 9D
+
+        # Compute poses (BG | Ball | Box)
+        poses[k,0,:,0:3]  = torch.eye(3).float()  # Identity transform for BG
+        campose_w, ballpose_w, boxpose_w = u3d.se3quat_to_rt(state['kinect::kinect_camera_depth_optical_frame']['pose']),\
+                                           u3d.se3quat_to_rt(state['bullet::link']['pose']),\
+                                           u3d.se3quat_to_rt(state[tarobj]['pose'])
+        ballpose_c = ComposeRtPair(RtInverse(campose_w[0:3,:]), ballpose_w[0:3,:]) # Ball in cam = World in cam * Ball in world
+        boxpose_c  = ComposeRtPair(RtInverse(campose_w[0:3,:]), boxpose_w[0:3,:])  # Box in cam  = World in cam * Box in world
+        poses[k,1] = ballpose_c; poses[k,1,0:3,0:3] = torch.eye(3) # Ball has identity pose (no rotation for the ball itself)
+        poses[k,2] = boxpose_c # Box orientation does change
+
+        # Load rgbs & compute labels (0 = BG, 1 = Ball, 2 = Box)
+        rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
+        ballpix = (((rgbs[k][0] == ballcolor[0]) + (rgbs[k][1] == ballcolor[1]) + (rgbs[k][2] == ballcolor[2])) == 3) # Ball pixels
+        boxpix  = (((rgbs[k][0] == boxcolor[0]) + (rgbs[k][1] == boxcolor[1]) + (rgbs[k][2] == boxcolor[2])) == 3) # Box pixels
+        labels[k][ballpix], labels[k][boxpix] = 1, 2 # Label all pixels of ball as 1, box as 2
+
+    # Add noise to the depths before we compute the point cloud
+    if (noise_func is not None) and dataset['addnoise']:
+        depths_n = noise_func(depths)
+        depths.copy_(depths_n)  # Replace by noisy depths
+
+    # Different control types
+    dt = t[1:] - t[:-1]  # Get proper dt which can vary between consecutive frames
+
+    # Compute x & y values for the 3D points (= xygrid * depths)
+    xy = points[:, 0:2]
+    xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
+    xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
+
+    # Compute masks
+    if compute_bwdflows:
+        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
+        # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
+        for j in xrange(3):
+            masks[:,j] = labels.eq(j)  # Mask out that mesh ID
+
+    # Compute the flows and visibility
+    tarpts = points[1:]  # t+1, t+2, t+3, ....
+    initpt = points[0:1].expand_as(tarpts)
+    tarlabels = labels[1:]  # t+1, t+2, t+3, ....
+    initlabel = labels[0:1].expand_as(tarlabels)
+    tarposes = poses[1:]  # t+1, t+2, t+3, ....
+    initpose = poses[0:1].expand_as(tarposes)
+
+    # Compute flow and visibility
+    fwdflows, bwdflows, \
+    fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
+                                                                initpose, tarposes, camera_intrinsics,
+                                                                dathreshold, dawinsize, use_only_da)
+
+    # Return loaded data
+    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
+            'controls': controls, 'poses': poses, 'dt': dt}
+    if compute_bwdflows:
+        data['masks'] = masks
+        data['bwdflows'] = bwdflows
+        data['bwdvisibilities'] = bwdvisibilities
+        data['rgbs'] = rgbs
+
+    return data
+
+###################### DATASET
 ### Dataset for Baxter Sequences
 class BaxterSeqDataset(Dataset):
     ''' Datasets for training SE3-Nets based on Baxter Sequential data '''

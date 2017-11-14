@@ -51,3 +51,51 @@ def draw_3d_frame(img, pose, color=[], camera_intrinsics={}, pixlength=10.0, thi
     cv2.line(img.numpy(), tuple(Op.numpy()), tuple(Xp.numpy()), color, thickness)
     cv2.line(img.numpy(), tuple(Op.numpy()), tuple(Yp.numpy()), color, thickness)
     cv2.line(img.numpy(), tuple(Op.numpy()), tuple(Zp.numpy()), color, thickness)
+
+# Compute the rotation matrix R from a set of unit-quaternions (N x 4):
+# From: http://www.tech.plymouth.ac.uk/sme/springerusv/2011/publications_files/Terzakis%20et%20al%202012,%20A%20Recipe%20on%20the%20Parameterization%20of%20Rotation%20Matrices...MIDAS.SME.2012.TR.004.pdf (Eqn 9)
+def create_rot_from_unitquat(unitquat):
+    # Init memory
+    N = unitquat.size(0)
+    rot = unitquat.new().resize_(N, 3, 3)
+
+    # Get quaternion elements. Quat = [qx,qy,qz,qw] with the scalar at the rear
+    x, y, z, w = unitquat[:, 0], unitquat[:, 1], unitquat[:, 2], unitquat[:, 3]
+    x2, y2, z2, w2 = x * x, y * y, z * z, w * w
+
+    # Row 1
+    rot[:, 0, 0] = w2 + x2 - y2 - z2  # rot(0,0) = w^2 + x^2 - y^2 - z^2
+    rot[:, 0, 1] = 2 * (x * y - w * z)  # rot(0,1) = 2*x*y - 2*w*z
+    rot[:, 0, 2] = 2 * (x * z + w * y)  # rot(0,2) = 2*x*z + 2*w*y
+
+    # Row 2
+    rot[:, 1, 0] = 2 * (x * y + w * z)  # rot(1,0) = 2*x*y + 2*w*z
+    rot[:, 1, 1] = w2 - x2 + y2 - z2  # rot(1,1) = w^2 - x^2 + y^2 - z^2
+    rot[:, 1, 2] = 2 * (y * z - w * x)  # rot(1,2) = 2*y*z - 2*w*x
+
+    # Row 3
+    rot[:, 2, 0] = 2 * (x * z - w * y)  # rot(2,0) = 2*x*z - 2*w*y
+    rot[:, 2, 1] = 2 * (y * z + w * x)  # rot(2,1) = 2*y*z + 2*w*x
+    rot[:, 2, 2] = w2 - x2 - y2 + z2  # rot(2,2) = w^2 - x^2 - y^2 + z^2
+
+    # Return
+    return rot
+
+## Quaternion to rotation matrix
+def quat_to_rot(_quat):
+    # Compute the unit quaternion
+    quat = _quat.view(-1, 4).clone() # Get the quaternions
+    unitquat = torch.nn.functional.normalize(quat, p=2, dim=1, eps=1e-12)  # self.create_unitquat_from_quat(rot_params)
+
+    # Compute rotation matrix from unit quaternion
+    return create_rot_from_unitquat(unitquat)
+
+## SE3-Quat to Rt
+def se3quat_to_rt(_pose):
+    pose = _pose.view(-1, 7).clone() # Get poses
+    pos, quat = pose[:,0:3], pose[:,3:] # Position, Quaternion
+    rt = torch.zeros(pose.size(0), 4, 4)
+    rt[:,0:3,0:3] = quat_to_rot(quat)
+    rt[:,0:3,3]   = pos
+    rt[:,3,3] = 1.0 # Last row is 0,0,0,1
+    return rt

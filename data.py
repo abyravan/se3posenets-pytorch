@@ -855,20 +855,13 @@ def filter_func(batch, mean_dt, std_dt):
 ###### BOX DATA LOADER
 ### Load box sequence from disk
 def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                compute_bwdflows=True, ctrl_type='ballposforce',
-                                dathreshold=0.01, dawinsize=5, use_only_da=False,
-                                noise_func=None):
+                                ctrl_type='ballposforce', num_ctrl=6,
+                                compute_bwdflows=True, dathreshold=0.01, dawinsize=5,
+                                use_only_da=False, noise_func=None,
+                                load_color=False, mesh_ids=torch.Tensor()): # mesh_ids unused
     # Setup vars
     seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
     camera_intrinsics = dataset['camintrinsics']
-
-    # Get ctrl dimension
-    if ctrl_type == 'ballposforce':
-        num_ctrl = 6
-    elif ctrl_type == 'ballposvelforce':
-        num_ctrl = 9
-    else:
-        assert False, "Ctrl type unknown: {}".format(ctrl_type)
 
     # Setup memory
     sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
@@ -970,6 +963,7 @@ def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1
         data['masks'] = masks
         data['bwdflows'] = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+    if load_color:
         data['rgbs'] = rgbs
 
     return data

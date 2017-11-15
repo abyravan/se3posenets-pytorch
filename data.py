@@ -177,10 +177,10 @@ def read_objectdata_file(filename):
                     obj['radius'] = float(next(reader)[0])
                 else:
                     assert False, 'Unknown object shape: {}'.format(obj['shape'])
-                obj['initpose'] = torch.ByteTensor([float(x)*255 for x in next(reader)])
+                obj['initpose'] = torch.FloatTensor([float(x)*255 for x in next(reader)])
                 # Handle color (special)
                 if (nlinesperobj == 7):
-                    obj['color'] = torch.ByteTensor([float(x)*255 for x in next(reader)])
+                    obj['color'] = torch.ByteTensor([int(float(x)*255) for x in next(reader)])
                 else:
                     # No colors, choose default color (for box set red, bullet is white, rest is black...)
                     if name.find('bullet') != -1:
@@ -864,8 +864,9 @@ def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1
     camera_intrinsics = dataset['camintrinsics']
 
     # Setup memory
-    sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
+    sequence, path = generate_box_sequence(dataset, id)  # Get the file paths
     points   = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
+    states   = torch.FloatTensor(seq_len + 1, num_ctrl).zero_()  # All zeros currently
     controls = torch.FloatTensor(seq_len, num_ctrl).zero_()  # Commanded data is same as control dimension
     poses    = torch.FloatTensor(seq_len + 1, 3, 3, 4).zero_()
 
@@ -901,25 +902,33 @@ def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1
 
         # Load state file
         state = read_box_state_file(s['state'])
-        if ctrl_type == 'ballposforce':
-            controls[k] = torch.cat([state['bullet::link']['pose'][0:3], force]) # 6D
-        else:
-            controls[k] = torch.cat([state['bullet::link']['pose'][0:3], state['bullet::link']['vel'][0:3], force]) # 9D
+        if k < controls.size(0): # 1 less control than states
+            if ctrl_type == 'ballposforce':
+                controls[k] = torch.cat([state['bullet::link']['pose'][0:3], force]) # 6D
+            elif ctrl_type == 'ballposeforce':
+                controls[k] = torch.cat([state['bullet::link']['pose'], force])  # 10D
+            elif ctrl_type == 'ballposvelforce':
+                controls[k] = torch.cat([state['bullet::link']['pose'][0:3], state['bullet::link']['vel'][0:3], force]) # 9D
+            elif ctrl_type == 'ballposevelforce':
+                controls[k] = torch.cat([state['bullet::link']['pose'], state['bullet::link']['vel'][0:3], force]) # 13D
+            else:
+                assert False, "Unknown control type: {}".format(ctrl_type)
 
         # Compute poses (BG | Ball | Box)
         poses[k,0,:,0:3]  = torch.eye(3).float()  # Identity transform for BG
         campose_w, ballpose_w, boxpose_w = u3d.se3quat_to_rt(state['kinect::kinect_camera_depth_optical_frame']['pose']),\
                                            u3d.se3quat_to_rt(state['bullet::link']['pose']),\
                                            u3d.se3quat_to_rt(state[tarobj]['pose'])
-        ballpose_c = ComposeRtPair(RtInverse(campose_w[0:3,:]), ballpose_w[0:3,:]) # Ball in cam = World in cam * Ball in world
-        boxpose_c  = ComposeRtPair(RtInverse(campose_w[0:3,:]), boxpose_w[0:3,:])  # Box in cam  = World in cam * Box in world
+        ballpose_c = ComposeRtPair(RtInverse(campose_w[:,0:3,:].unsqueeze(0)), ballpose_w[:,0:3,:].unsqueeze(0)) # Ball in cam = World in cam * Ball in world
+        boxpose_c  = ComposeRtPair(RtInverse(campose_w[:,0:3,:].unsqueeze(0)), boxpose_w[:,0:3,:].unsqueeze(0))  # Box in cam  = World in cam * Box in world
         poses[k,1] = ballpose_c; poses[k,1,0:3,0:3] = torch.eye(3) # Ball has identity pose (no rotation for the ball itself)
         poses[k,2] = boxpose_c # Box orientation does change
 
         # Load rgbs & compute labels (0 = BG, 1 = Ball, 2 = Box)
+        # NOTE: RGB is loaded BGR so when comparing colors we need to handle it properly
         rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
-        ballpix = (((rgbs[k][0] == ballcolor[0]) + (rgbs[k][1] == ballcolor[1]) + (rgbs[k][2] == ballcolor[2])) == 3) # Ball pixels
-        boxpix  = (((rgbs[k][0] == boxcolor[0]) + (rgbs[k][1] == boxcolor[1]) + (rgbs[k][2] == boxcolor[2])) == 3) # Box pixels
+        ballpix = (((rgbs[k][0] == ballcolor[2]) + (rgbs[k][1] == ballcolor[1]) + (rgbs[k][2] == ballcolor[0])) == 3) # Ball pixels
+        boxpix  = (((rgbs[k][0] == boxcolor[2]) + (rgbs[k][1] == boxcolor[1]) + (rgbs[k][2] == boxcolor[0])) == 3) # Box pixels
         labels[k][ballpix], labels[k][boxpix] = 1, 2 # Label all pixels of ball as 1, box as 2
 
     # Add noise to the depths before we compute the point cloud
@@ -958,7 +967,7 @@ def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
-            'controls': controls, 'poses': poses, 'dt': dt}
+            'states': states, 'controls': controls, 'poses': poses, 'dt': dt}
     if compute_bwdflows:
         data['masks'] = masks
         data['bwdflows'] = bwdflows

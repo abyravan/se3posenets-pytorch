@@ -27,7 +27,7 @@ def setup_comon_options():
                         metavar='N', help='length of the training sequence (default: 1)')
     parser.add_argument('--ctrl-type', default='actdiffvel', type=str,
                         metavar='STR', help='Control type: actvel | actacc | comvel | comacc | [actdiffvel] | comdiffvel. '
-                                            'For box dataset: ballposforce | ballposvelforce')
+                                            'For box dataset: ballposforce | ballposeforce | ballposvelforce | ballposevelforce')
     parser.add_argument('--num-ctrl', default=7, type=int, metavar='N',
                         help='dimensionality of the control space (default: 7)')
     parser.add_argument('--se2-data', action='store_true', default=False,

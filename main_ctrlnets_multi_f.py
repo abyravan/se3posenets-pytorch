@@ -136,8 +136,12 @@ def main():
             # Get ctrl dimension
             if args.ctrl_type == 'ballposforce':
                 args.num_ctrl = 6
+            elif args.ctrl_type == 'ballposeforce':
+                args.num_ctrl = 10
             elif args.ctrl_type == 'ballposvelforce':
                 args.num_ctrl = 9
+            elif args.ctrl_type == 'ballposevelforce':
+                args.num_ctrl = 13
             else:
                 assert False, "Ctrl type unknown: {}".format(args.ctrl_type)
             print('Num ctrl: {}'.format(args.num_ctrl))
@@ -267,7 +271,7 @@ def main():
     ### Box dataset (vs) Other options
     if args.box_data:
         print("Box dataset")
-        valid_filter = None # No valid filter
+        valid_filter, args.mesh_ids = None, None # No valid filter
         read_seq_func = data.read_box_sequence_from_disk
     else:
         print("Baxter dataset")
@@ -618,10 +622,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         #if args.use_full_jt_angles:
         #    jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
         #else:
-        if 'actctrlconfigs' in sample:
-            jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
+        if args.box_data:
+            jtangles = util.to_var(sample['states'].type(deftype), requires_grad=train)
         else:
-            jtangles = ctrls.clone().zero_() # Set to all zeros for now
+            jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -923,8 +927,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                     for n in xrange(args.num_se3):
                         # Pose_1 (GT/Pred)
                         if n < gtpose.size(0):
-                            util.draw_3d_frame(gtdepth, gtpose[n],     [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
-                        util.draw_3d_frame(gtdepth, predpose[n],   [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
+                            util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
+                        util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
                         if predposet is not None:
                             util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
                     depths.append(gtdepth)

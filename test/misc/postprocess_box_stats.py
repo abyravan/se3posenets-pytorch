@@ -1,8 +1,9 @@
 # Get folder names & data statistics for all sub-directories
 import os
 import data
-load_dir = '/media/barun/Seagate Backup Plus Drive/se3-nets-data/learn_physics_models/data/singlebox_fixsz_visbullet_2016_04_20_20_55_18/'
+#load_dir = '/media/barun/Seagate Backup Plus Drive/se3-nets-data/learn_physics_models/data/singlebox_fixsz_visbullet_2016_04_20_20_55_18/'
 #load_dir = '/media/barun/Seagate Backup Plus Drive/se3-nets-data/learn_physics_models/data/rand1to3boxes_randszbig_visbullet_fixforce_2016_05_15_22_22_50/'
+load_dir = '/media/barun/dot-matrix-ext1/catkin_ws/src/learn_physics_models/data/singlebox_fixsz_visbullet_2016_04_20_20_55_18/'
 with open(load_dir + '/postprocessstats.txt', 'w') as pfile:
     dirs = os.listdir(load_dir)
     dirnames, numdata = [], []

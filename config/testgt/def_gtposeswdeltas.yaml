@@ -67,5 +67,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/testgt/def_gtposes
+save-dir:  trained_nets/testgt/def_gtposeswdeltas
 disp-err-per-mask: False

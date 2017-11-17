@@ -26,8 +26,8 @@ local-delta-se3:    False
 use-ntfm-delta:     False
 wide-model:         True
 use-gt-poses:		  False
-use-gt-masks:		  True
-use-gt-masks-poses: False
+use-gt-masks:		  False
+use-gt-masks-poses: True
 use-gt-poses-wdeltas: False
 use-jt-angles:		  False
 use-jt-angles-trans: False

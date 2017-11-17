@@ -51,6 +51,13 @@ parser.add_argument('--consis-rt-loss', action='store_true', default=False,
 # Box data
 parser.add_argument('--box-data', action='store_true', default=False,
                     help='Dataset has box/ball data (default: False)')
+
+# GT options
+parser.add_argument('--use-gt-poses-wdeltas', action='store_true', default=False,
+                    help='Use GT poses along with deltas (default: False)')
+parser.add_argument('--use-gt-masks-poses', action='store_true', default=False,
+                    help='Use GT masks and poses (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -303,7 +310,7 @@ def main():
                                                  #ctrl_ids=ctrlids_in_state,
                                                  #camera_extrinsics = args.cam_extrinsics,
                                                  #camera_intrinsics = args.cam_intrinsics,
-                                                 compute_bwdflows=args.use_gt_masks,
+                                                 compute_bwdflows=args.use_gt_masks or args.use_gt_masks_poses,
                                                  #num_tracker=args.num_tracker,
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
@@ -352,16 +359,22 @@ def main():
     ### Load the model
     num_train_iter = 0
     num_input_channels = 6 if args.use_xyzrgb else 3 # Num input channels
+    optsum = args.use_gt_masks + args.use_gt_poses + args.use_gt_poses_wdeltas + args.use_gt_masks_poses
+    assert optsum <= 1, "Cannot set more than one of the GT mask/pose/delta-pose options"
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
-        assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
-        modelfn = se2nets.MultiStepSE2OnlyPoseModel if args.se2_data else ctrlnets.MultiStepSE3OnlyPoseModel
+        modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
     elif args.use_gt_poses:
+        print('Using GT poses. Model predicts only masks & delta-poses')
+        modelfn = ctrlnets.MultiStepSE3OnlyMaskModel
+    elif args.use_gt_poses_wdeltas:
         print('Using GT poses & delta poses. Model predicts only masks')
-        assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
-        modelfn = se2nets.MultiStepSE2OnlyMaskModel if args.se2_data else ctrlnets.MultiStepSE3OnlyMaskModel
+        modelfn = ctrlnets.MultiStepSE3OnlyMaskNoTransModel
+    elif args.use_gt_masks_poses:
+        print('Using GT masks & poses. Model predicts only delta-poses')
+        modelfn = ctrlnets.MultiStepSE3OnlyTransModel
     else:
-        modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
+        modelfn = ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
@@ -577,7 +590,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         def hook(self, input, result):
             predictions[name] = result
         return hook
-    model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
+    if hasattr(model, 'transitionmodel'):
+        model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
@@ -640,18 +654,27 @@ def iterate(data_loader, model, tblogger, num_iters,
             pose1 = model.forward_only_pose([netinput[:,1], jtangles[:,1]])  # We can only predict poses
             mask0 = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT masks
             mask1 = util.to_var(sample['masks'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT masks
-        elif args.use_gt_poses:
+        elif args.use_gt_poses or args.use_gt_poses_wdeltas:
             pose0 = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
             pose1 = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
             mask0 = model.forward_only_mask(netinput[:,0], train_iter=num_train_iter)  # Predict masks
             mask1 = model.forward_only_mask(netinput[:,1], train_iter=num_train_iter)  # Predict masks
+        elif args.use_gt_masks_poses: # Need to learn only deltas
+            pose0 = util.to_var(sample['poses'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            pose1 = util.to_var(sample['poses'][:, 1].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            mask0 = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT masks
+            mask1 = util.to_var(sample['masks'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT masks
         else:
             pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
             pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
         poses, masks, initmask = [pose0, pose1], [mask0, mask1], mask0
 
         ### 2) Predict the change in poses using the transition model
-        delta, trans = model.forward_next_pose(pose0, ctrls[:,0], jtangles[:,0])
+        if args.use_gt_poses_wdeltas: # Deltas are given
+            delta = se3nn.ComposeRtPair()(pose1, se3nn.RtInverse()(pose0)) # pose1 * pose0^-1
+            trans = pose1 # GT next pose
+        else:
+            delta, trans = model.forward_next_pose(pose0, ctrls[:,0], jtangles[:,0])
         deltaposes, transposes = [delta], [trans]
 
         ### 3) Compute losses
@@ -910,7 +933,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         stats=stats, bsz=bsz)
 
             ### Print stuff if we have weight sharpening enabled
-            if args.use_wt_sharpening and not args.use_gt_masks:
+            if args.use_wt_sharpening and (not args.use_gt_masks) and (not args.use_gt_masks_poses):
                 try:
                     noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                 except:
@@ -992,10 +1015,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.image_summary(tag, images, iterct)
 
                 ## Print the predicted delta-SE3s
-                deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                #if len(pivots) > 0:
-                #    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
-                print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+                if 'deltase3' in predictions:
+                    deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
+                    #if len(pivots) > 0:
+                    #    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
+                    print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
                 ## Details on the centers
                 #if len(posecenters) > 0:

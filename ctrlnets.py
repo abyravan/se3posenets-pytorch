@@ -1282,3 +1282,94 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
     def forward(self, x):
         print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
         raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-OnlyMask-Model (Only predicts mask)
+class MultiStepSE3OnlyMaskNoTransModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
+        super(MultiStepSE3OnlyMaskNoTransModel, self).__init__()
+
+        # Initialize the mask model
+        self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                     use_bn=use_bn, pre_conv=pre_conv,
+                                     nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                     sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                     use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                     full_res=full_res)
+
+        # Options
+        self.use_jt_angles_trans = use_jt_angles_trans
+
+    # Predict mask only
+    def forward_only_mask(self, x, train_iter=0):
+        mask = self.maskmodel(x, train_iter=train_iter)
+        return mask
+
+    # Predict pose only
+    def forward_only_pose(self, x):
+        raise NotImplementedError
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        raise NotImplementedError
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        raise NotImplementedError
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
+        raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-OnlyMask-Model (Only predicts mask)
+class MultiStepSE3OnlyTransModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
+        super(MultiStepSE3OnlyTransModel, self).__init__()
+
+        # Initialize the transition model
+        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
+                                               se3_type=se3_type, use_kinchain=use_kinchain,
+                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
+                                               local_delta_se3=local_delta_se3,
+                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+
+        # Options
+        self.use_jt_angles_trans = use_jt_angles_trans
+
+    # Predict mask only
+    def forward_only_mask(self, x, train_iter=0):
+        raise NotImplementedError
+
+    # Predict pose only
+    def forward_only_pose(self, x):
+        raise NotImplementedError
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        raise NotImplementedError
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        inp = [pose, jtangles, ctrl] if self.use_jt_angles_trans else [pose, ctrl]
+        if self.transitionmodel.inp_pivot:
+            inp.append(pivots)
+        return self.transitionmodel(inp)
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
+        raise NotImplementedError

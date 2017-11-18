@@ -82,7 +82,7 @@ class ComposeRtFunction(Function):
 
 		# Compute output
 		output = input.clone()
-		for n in xrange(1,num_se3): # 1,2,3,...nSE3-1
+		for n in range(1,num_se3): # 1,2,3,...nSE3-1
 			if self.rightToLeft: # Append to left
 				output.select(1,n).copy_(self.forwardPair(input.select(1,n), output.select(1,n-1))) # T'_n = T_n * T'_n-1
 			else: # Append to right
@@ -101,7 +101,7 @@ class ComposeRtFunction(Function):
 
 		# Compute gradient w.r.t input
 		grad_input = input.clone().zero_()
-		for n in xrange(num_se3-1,0,-1): # nSE3-1,...2,1
+		for n in range(num_se3-1,0,-1): # nSE3-1,...2,1
 			if self.rightToLeft:
 				A_g, B_g = self.backwardPair(temp.select(1,n), input.select(1,n), output.select(1,n-1)) # T'_n = T_n * T'_n-1
 				grad_input.select(1,n).copy_(A_g) # Finished for this transform

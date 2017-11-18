@@ -1373,3 +1373,76 @@ class MultiStepSE3OnlyTransModel(nn.Module):
     def forward(self, x):
         print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
         raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-Pose-Model - No transition model
+### Currently, this has a separate pose & mask predictor as well as a transition model
+### NOTE: The forward pass is not currently implemented, this needs to be done outside
+class MultiStepSE3NoTransModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False):
+        super(MultiStepSE3NoTransModel, self).__init__()
+
+        # Initialize the pose & mask model
+        self.decomp_model = decomp_model
+        if self.decomp_model:
+            print('Using separate networks for pose and mask prediction')
+            self.posemodel = PoseEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                         use_kinchain=use_kinchain, input_channels=input_channels,
+                                         init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                         nonlinearity=nonlinearity, wide=wide,
+                                         use_jt_angles=use_jt_angles, num_state=num_state,
+                                         full_res=full_res)
+            self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                         use_bn=use_bn, pre_conv=pre_conv,
+                                         nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                         full_res=full_res)
+        else:
+            print('Using single network for pose & mask prediction')
+            self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                                 use_kinchain=use_kinchain, input_channels=input_channels,
+                                                 init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                                 nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                                 sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                                 use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                                 use_jt_angles=use_jt_angles, num_state=num_state,
+                                                 full_res=full_res)
+
+        # Options
+        self.use_jt_angles = use_jt_angles
+
+    # Predict pose only
+    def forward_only_pose(self, x):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
+        if self.decomp_model:
+            return self.posemodel(inp)
+        else:
+            return self.posemaskmodel(inp, predict_masks=False) # returns only pose
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
+        if self.decomp_model:
+            pose = self.posemodel(inp)
+            mask = self.maskmodel(ptcloud, train_iter=train_iter)
+            return pose, mask
+        else:
+            return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        raise NotImplementedError
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
+        raise NotImplementedError

@@ -55,6 +55,8 @@ parser.add_argument('--box-data', action='store_true', default=False,
 # GT options
 parser.add_argument('--use-gt-poses-wdeltas', action='store_true', default=False,
                     help='Use GT poses along with deltas (default: False)')
+parser.add_argument('--use-gt-deltas', action='store_true', default=False,
+                    help='Use GT deltas only (default: False)')
 parser.add_argument('--use-gt-masks-poses', action='store_true', default=False,
                     help='Use GT masks and poses (default: False)')
 
@@ -365,7 +367,7 @@ def main():
     ### Load the model
     num_train_iter = 0
     num_input_channels = 6 if args.use_xyzrgb else 3 # Num input channels
-    optsum = args.use_gt_masks + args.use_gt_poses + args.use_gt_poses_wdeltas + args.use_gt_masks_poses
+    optsum = args.use_gt_masks + args.use_gt_poses + args.use_gt_poses_wdeltas + args.use_gt_masks_poses + args.use_gt_deltas
     assert optsum <= 1, "Cannot set more than one of the GT mask/pose/delta-pose options"
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
@@ -379,6 +381,9 @@ def main():
     elif args.use_gt_masks_poses:
         print('Using GT masks & poses. Model predicts only delta-poses')
         modelfn = ctrlnets.MultiStepSE3OnlyTransModel
+    elif args.use_gt_deltas:
+        print('Using GT deltas only. Model predicts poses and masks')
+        modelfn = ctrlnets.MultiStepSE3NoTransModel
     else:
         modelfn = ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
@@ -673,7 +678,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             pose1 = util.to_var(sample['poses'][:, 1].type(deftype).clone(), requires_grad=False)  # Use GT poses
             mask0 = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT masks
             mask1 = util.to_var(sample['masks'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT masks
-        else:
+        else: # use_gt_deltas comes here
             pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
             pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
             if args.use_pose_kinchain: # If predicting poses
@@ -682,7 +687,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         poses, masks, initmask = [pose0, pose1], [mask0, mask1], mask0
 
         ### 2) Predict the change in poses using the transition model
-        if args.use_gt_poses_wdeltas: # Deltas are given
+        if args.use_gt_poses_wdeltas or args.use_gt_deltas: # Deltas are given
             delta = se3nn.ComposeRtPair()(pose1, se3nn.RtInverse()(pose0)) # pose1 * pose0^-1
             trans = pose1 # GT next pose
         else:

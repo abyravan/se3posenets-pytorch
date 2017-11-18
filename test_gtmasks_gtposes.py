@@ -58,6 +58,12 @@ parser.add_argument('--use-gt-poses-wdeltas', action='store_true', default=False
 parser.add_argument('--use-gt-masks-poses', action='store_true', default=False,
                     help='Use GT masks and poses (default: False)')
 
+# Kinchain options
+parser.add_argument('--use-pose-kinchain', action='store_true', default=False,
+                    help='Use Kinematic chain structure for the poses only (default: False)')
+parser.add_argument('--kinchain-right-to-left', action='store_true', default=False,
+                    help='Go from right to left for kinchain computation (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -654,6 +660,9 @@ def iterate(data_loader, model, tblogger, num_iters,
             pose1 = model.forward_only_pose([netinput[:,1], jtangles[:,1]])  # We can only predict poses
             mask0 = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT masks
             mask1 = util.to_var(sample['masks'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT masks
+            if args.use_pose_kinchain: # If predicting poses
+                pose0 = se3nn.ComposeRt(args.kinchain_right_to_left)(pose0)
+                pose1 = se3nn.ComposeRt(args.kinchain_right_to_left)(pose1)
         elif args.use_gt_poses or args.use_gt_poses_wdeltas:
             pose0 = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
             pose1 = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
@@ -667,6 +676,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         else:
             pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
             pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
+            if args.use_pose_kinchain: # If predicting poses
+                pose0 = se3nn.ComposeRt(args.kinchain_right_to_left)(pose0)
+                pose1 = se3nn.ComposeRt(args.kinchain_right_to_left)(pose1)
         poses, masks, initmask = [pose0, pose1], [mask0, mask1], mask0
 
         ### 2) Predict the change in poses using the transition model

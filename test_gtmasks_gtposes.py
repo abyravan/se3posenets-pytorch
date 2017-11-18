@@ -674,8 +674,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             mask0 = model.forward_only_mask(netinput[:,0], train_iter=num_train_iter)  # Predict masks
             mask1 = model.forward_only_mask(netinput[:,1], train_iter=num_train_iter)  # Predict masks
         elif args.use_gt_masks_poses: # Need to learn only deltas
-            pose0 = util.to_var(sample['poses'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT poses
-            pose1 = util.to_var(sample['poses'][:, 1].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            pose0 = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            pose1 = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
             mask0 = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT masks
             mask1 = util.to_var(sample['masks'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT masks
         else: # use_gt_deltas comes here
@@ -687,7 +687,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         poses, masks, initmask = [pose0, pose1], [mask0, mask1], mask0
 
         ### 2) Predict the change in poses using the transition model
-        if args.use_gt_poses_wdeltas or args.use_gt_deltas: # Deltas are given
+        if args.use_gt_deltas:
+            pose0_g = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            pose1_g = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            delta = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
+            trans = se3nn.ComposeRtPair()(delta, pose0) # Use predicted pose0 + GT delta
+        elif args.use_gt_poses_wdeltas: # pose0 & pose1 are already GT, so just compute delta using those
             delta = se3nn.ComposeRtPair()(pose1, se3nn.RtInverse()(pose0)) # pose1 * pose0^-1
             trans = pose1 # GT next pose
         else:

@@ -66,6 +66,10 @@ parser.add_argument('--use-pose-kinchain', action='store_true', default=False,
 parser.add_argument('--kinchain-right-to-left', action='store_true', default=False,
                     help='Go from right to left for kinchain computation (default: False)')
 
+# Supervised delta loss
+parser.add_argument('--delta-wt', default=0, type=float,
+                    metavar='WT', help='Weight for the supervised loss on delta-poses (default: 0)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -575,7 +579,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
-    stats.consiserr                             = AverageMeter()
+    stats.consiserr, stats.deltaloss            = AverageMeter(), AverageMeter()
     stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
@@ -616,7 +620,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
+    pt_wt, consis_wt, delta_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.delta_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -721,8 +725,17 @@ def iterate(data_loader, model, tblogger, num_iters,
         else:
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
 
+        # Use a loss directly on the delta transforms (supervised)
+        currdeltaloss, deltaloss = 0, torch.Tensor([0])
+        if delta_wt > 0:
+            pose0_g = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            pose1_g = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
+            delta_g = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
+            currdeltaloss = delta_wt * ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
+            deltaloss = torch.Tensor([currdeltaloss.data[0]])
+
         # Append to total loss
-        loss = currptloss + currconsisloss
+        loss = currptloss + currconsisloss + currdeltaloss
         ptloss = torch.Tensor([currptloss.data[0]])
         consisloss = torch.Tensor([currconsisloss.data[0]])
 
@@ -866,6 +879,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
+        stats.deltaloss.update(deltaloss)
         stats.loss.update(loss.data[0])
 
         # Measure FWD time
@@ -976,6 +990,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             info = {
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
+                mode+'-deltaloss': deltaloss.sum(),
                 mode+'-consisloss': consisloss.sum(),
                 mode+'-consiserr': consiserror.sum(),
                 mode+'-consiserrmax': consiserrormax.sum(),

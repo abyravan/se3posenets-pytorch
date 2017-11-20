@@ -69,6 +69,10 @@ parser.add_argument('--kinchain-right-to-left', action='store_true', default=Fal
 # Supervised delta loss
 parser.add_argument('--delta-wt', default=0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses (default: 0)')
+parser.add_argument('--rot-wt', default=1.0, type=float,
+                    metavar='WT', help='Weight for the supervised loss on delta-poses - rotation (default: 1.0)')
+parser.add_argument('--trans-wt', default=1.0, type=float,
+                    metavar='WT', help='Weight for the supervised loss on delta-poses - translation (default: 1.0)')
 
 # Define xrange
 try:
@@ -580,6 +584,8 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr, stats.deltaloss            = AverageMeter(), AverageMeter()
+    stats.rotloss, stats.transloss              = AverageMeter(), AverageMeter()
+
     stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
@@ -731,8 +737,17 @@ def iterate(data_loader, model, tblogger, num_iters,
             pose0_g = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
             pose1_g = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
             delta_g = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
-            currdeltaloss = delta_wt * ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
+            #currdeltaloss = delta_wt * ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
+            delta_diff = se3nn.ComposeRtPair()(delta, se3nn.RtInverse()(delta_g))
+            costheta   = (0.5*((delta_diff[:,:,0,0] + delta_diff[:,:,1,1] + delta_diff[:,:,2,2]) - 1.0))
+            rot_err   = (costheta - 1.0).abs().mean() # cos(\theta) = 1 -> \theta = 0
+            trans_err = (delta[:,:,:,3] - delta_g[:,:,:,3]).pow(2).sum(2).sqrt().mean()
+            currdeltaloss = delta_wt * (args.rot_wt * rot_err + args.trans_wt * trans_err)
+            roterr   = args.rot_wt * torch.Tensor([rot_err.data[0]])
+            transerr = args.trans_wt * torch.Tensor([trans_err.data[0]])
             deltaloss = torch.Tensor([currdeltaloss.data[0]])
+            stats.rotloss.update(roterr)
+            stats.transloss.update(transerr)
 
         # Append to total loss
         loss = currptloss + currconsisloss + currdeltaloss
@@ -967,6 +982,10 @@ def iterate(data_loader, model, tblogger, num_iters,
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         stats=stats, bsz=bsz)
+            print("\tRot err: {:.4f}/{:.4f}, Trans err: {:.4f}/{:.4f}".format(stats.rotloss.val[0],
+                                                                              stats.rotloss.avg[0],
+                                                                              stats.transloss.val[0],
+                                                                              stats.transloss.avg[0]))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and (not args.use_gt_masks) and (not args.use_gt_masks_poses):
@@ -991,6 +1010,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-deltaloss': deltaloss.sum(),
+                mode+'-rotloss': roterr.sum(),
+                mode+'-transloss': transerr.sum(),
                 mode+'-consisloss': consisloss.sum(),
                 mode+'-consiserr': consiserror.sum(),
                 mode+'-consiserrmax': consiserrormax.sum(),

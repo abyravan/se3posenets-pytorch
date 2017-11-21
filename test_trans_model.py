@@ -583,9 +583,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Use a loss directly on the delta transforms (supervised)
         if args.use_rt_loss:
-            loss = args.rot_wt * rot_err + args.trans_wt * trans_err
+            loss = args.loss_scale * (args.rot_wt * rot_err + args.trans_wt * trans_err)
         else:
-            loss = ctrlnets.BiAbsLoss(delta, delta_g) # GT supervised loss
+            loss = args.loss_scale * ctrlnets.BiAbsLoss(delta, delta_g) # GT supervised loss
         stats.loss.update(loss.data[0])
 
         # Measure FWD time

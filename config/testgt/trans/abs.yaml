@@ -71,5 +71,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/testgt/trans/mse
+save-dir:  trained_nets/testgt/trans/abs
 disp-err-per-mask: False

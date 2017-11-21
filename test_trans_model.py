@@ -585,7 +585,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_rt_loss:
             loss = args.rot_wt * rot_err + args.trans_wt * trans_err
         else:
-            loss = ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
+            loss = ctrlnets.BiAbsLoss(delta, delta_g) # GT supervised loss
         stats.loss.update(loss.data[0])
 
         # Measure FWD time
@@ -685,12 +685,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                     predposet = transposes[k-1].data[id].cpu().float() if (k > 0) else None
                     gtdepth   = normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
                     for n in xrange(args.num_se3):
-                        # Pose_1 (GT/Pred)
-                        if n < gtpose.size(0):
-                            util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
-                        util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
-                        if predposet is not None:
-                            util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
+                        try:
+                            # Pose_1 (GT/Pred)
+                            if n < gtpose.size(0):
+                                util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
+                            util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
+                            if predposet is not None:
+                                util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
+                        except:
+                            pass
                     depths.append(gtdepth)
                 depthdisp = torch.cat(depths, 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 320*seq_len+1 image)
 

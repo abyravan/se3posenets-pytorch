@@ -68,7 +68,7 @@ parser.add_argument('--kinchain-right-to-left', action='store_true', default=Fal
 
 # Supervised delta loss
 parser.add_argument('--use-rt-loss', action='store_true', default=False,
-                    metavar='WT', help='Use R/t loss instead of MSE loss (default: False)')
+                    help='Use R/t loss instead of MSE loss (default: False)')
 parser.add_argument('--rot-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses - rotation (default: 1.0)')
 parser.add_argument('--trans-wt', default=1.0, type=float,
@@ -364,7 +364,7 @@ def main():
                                      se3_type=args.se3_type, use_kinchain=False,
                                      nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
                                      local_delta_se3=args.local_delta_se3,
-                                     use_jt_angles=args.use_jt_angles_trans, num_state=args.num_state)
+                                     use_jt_angles=args.use_jt_angles_trans)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -523,7 +523,6 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    delta_wt = args.delta_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -577,16 +576,16 @@ def iterate(data_loader, model, tblogger, num_iters,
         costheta   = (0.5 * ((delta_diff[:,:,0,0] + delta_diff[:,:,1,1] + delta_diff[:,:,2, 2]) - 1.0))
         rot_err    = (costheta - 1.0).abs().mean()  # cos(\theta) = 1 -> \theta = 0
         trans_err  = (delta[:,:,:,3] - delta_g[:,:,:,3]).pow(2).sum(2).sqrt().mean()
-        roterr     = args.rot_wt * torch.Tensor([rot_err.data[0]])
-        transerr   = args.trans_wt * torch.Tensor([trans_err.data[0]])
+        roterr     = args.rot_wt * args.loss_scale * torch.Tensor([rot_err.data[0]])
+        transerr   = args.trans_wt * args.loss_scale * torch.Tensor([trans_err.data[0]])
         stats.rotloss.update(roterr)
         stats.transloss.update(transerr)
 
         # Use a loss directly on the delta transforms (supervised)
         if args.use_rt_loss:
-            loss = delta_wt * (args.rot_wt * rot_err + args.trans_wt * trans_err)
+            loss = args.rot_wt * rot_err + args.trans_wt * trans_err
         else:
-            loss = delta_wt * ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
+            loss = ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
         stats.loss.update(loss.data[0])
 
         # Measure FWD time

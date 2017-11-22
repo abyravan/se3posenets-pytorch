@@ -69,6 +69,8 @@ parser.add_argument('--kinchain-right-to-left', action='store_true', default=Fal
 # Supervised delta loss
 parser.add_argument('--delta-wt', default=0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses (default: 0)')
+parser.add_argument('--delta-rt-loss', action='store_true', default=False,
+                    help='Use R/t loss instead of MSE loss (default: False)')
 parser.add_argument('--rot-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses - rotation (default: 1.0)')
 parser.add_argument('--trans-wt', default=1.0, type=float,
@@ -584,7 +586,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr, stats.deltaloss            = AverageMeter(), AverageMeter()
-    stats.rotloss, stats.transloss              = AverageMeter(), AverageMeter()
+    stats.roterr, stats.transerr              = AverageMeter(), AverageMeter()
 
     stats.data_ids = []
     if mode == 'test':
@@ -713,7 +715,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         nextpts = ptpredlayer()(pts[:,0], initmask, delta)
         predpts, inputs, targets = [nextpts], (nextpts - pts[:,0]), fwdflows[:,0]
 
-        # 3D loss (If motion-normalized loss, pass in GT flows)
+        # a) 3D loss (If motion-normalized loss, pass in GT flows)
         if args.motion_norm_loss:
             motion = targets  # Use either delta-flows or full-flows
             currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
@@ -721,7 +723,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         else:
             currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:,0])
 
-        # Consistency loss (between t & t+1)
+        # b) Consistency loss (between t & t+1)
         # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
         # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
         deltac = util.to_var(delta.data.clone(), requires_grad=False)  # Break the graph here
@@ -731,28 +733,34 @@ def iterate(data_loader, model, tblogger, num_iters,
         else:
             currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
 
+        # c) Use a loss directly on the delta transforms (supervised)
+        # Get rotation and translation error
+        pose0_g = util.to_var(sample['poses'][:, 0].type(deftype).clone(), requires_grad=False)  # Use GT poses
+        pose1_g = util.to_var(sample['poses'][:, 1].type(deftype).clone(), requires_grad=False)  # Use GT poses
+        delta_g = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
+        delta_diff = se3nn.ComposeRtPair()(delta, se3nn.RtInverse()(delta_g))
+        costheta = (0.5 * ((delta_diff[:,:,0,0] + delta_diff[:,:,1,1] + delta_diff[:,:,2,2]) - 1.0))
+        rot_loss   = (costheta - 1.0).abs().mean()  # cos(\theta) = 1 -> \theta = 0
+        trans_loss = (delta[:,:,:,3] - delta_g[:,:,:,3]).pow(2).sum(2).sqrt().mean()
+
         # Use a loss directly on the delta transforms (supervised)
-        currdeltaloss, deltaloss = 0, torch.Tensor([0])
-        if delta_wt > 0:
-            pose0_g = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
-            pose1_g = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
-            delta_g = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
-            #currdeltaloss = delta_wt * ctrlnets.BiMSELoss(delta, delta_g) # GT supervised loss
-            delta_diff = se3nn.ComposeRtPair()(delta, se3nn.RtInverse()(delta_g))
-            costheta   = (0.5*((delta_diff[:,:,0,0] + delta_diff[:,:,1,1] + delta_diff[:,:,2,2]) - 1.0))
-            rot_err   = (costheta - 1.0).abs().mean() # cos(\theta) = 1 -> \theta = 0
-            trans_err = (delta[:,:,:,3] - delta_g[:,:,:,3]).pow(2).sum(2).sqrt().mean()
-            currdeltaloss = delta_wt * (args.rot_wt * rot_err + args.trans_wt * trans_err)
-            roterr   = args.rot_wt * torch.Tensor([rot_err.data[0]])
-            transerr = args.trans_wt * torch.Tensor([trans_err.data[0]])
-            deltaloss = torch.Tensor([currdeltaloss.data[0]])
-            stats.rotloss.update(roterr)
-            stats.transloss.update(transerr)
+        if args.delta_rt_loss:
+            currdeltaloss = delta_wt * (args.rot_wt * rot_loss + args.trans_wt * trans_loss)
+        else:
+            currdeltaloss = delta_wt * ctrlnets.BiAbsLoss(delta, delta_g)  # GT supervised loss
+
+        # Store physically meaningful errors - rot error in degrees, trans error in cm
+        theta = torch.acos(costheta.clamp(max=1.0)) * (180.0/3.14159265359)
+        rot_err = theta.abs().sum(1).mean() # Sum across the num SE3s
+        trans_err = ((delta[:,:,:,3] - delta_g[:,:,:,3]) * 100.0).norm(dim=2,p=2).sum(1).mean() # Sum across nSE3s
+        stats.roterr.update(torch.Tensor([rot_err.data[0]]))
+        stats.transerr.update(torch.Tensor([trans_err.data[0]]))
 
         # Append to total loss
         loss = currptloss + currconsisloss + currdeltaloss
         ptloss = torch.Tensor([currptloss.data[0]])
         consisloss = torch.Tensor([currconsisloss.data[0]])
+        deltaloss = torch.Tensor([currdeltaloss.data[0]])
 
         '''
         ### Run a FWD pass through the network (multi-step)
@@ -982,10 +990,10 @@ def iterate(data_loader, model, tblogger, num_iters,
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         stats=stats, bsz=bsz)
-            print("\tRot err: {:.4f}/{:.4f}, Trans err: {:.4f}/{:.4f}".format(stats.rotloss.val[0],
-                                                                              stats.rotloss.avg[0],
-                                                                              stats.transloss.val[0],
-                                                                              stats.transloss.avg[0]))
+            print("\tRot err (deg): {:.4f} ({:.4f}), Trans err (cm): {:.4f} ({:.4f})".format(stats.roterr.val[0],
+                                                                                         stats.roterr.avg[0],
+                                                                                         stats.transerr.val[0],
+                                                                                         stats.transerr.avg[0]))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and (not args.use_gt_masks) and (not args.use_gt_masks_poses):
@@ -1010,8 +1018,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-deltaloss': deltaloss.sum(),
-                mode+'-rotloss': roterr.sum(),
-                mode+'-transloss': transerr.sum(),
+                mode+'-roterr': stats.roterr.val.sum(),
+                mode+'-transerr': stats.transerr.val.sum(),
                 mode+'-consisloss': consisloss.sum(),
                 mode+'-consiserr': consiserror.sum(),
                 mode+'-consiserrmax': consiserrormax.sum(),
@@ -1118,12 +1126,13 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
+        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Delta: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
+            stats.deltaloss.val[k], stats.deltaloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,

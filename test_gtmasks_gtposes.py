@@ -328,7 +328,7 @@ def main():
                                                  #ctrl_ids=ctrlids_in_state,
                                                  #camera_extrinsics = args.cam_extrinsics,
                                                  #camera_intrinsics = args.cam_intrinsics,
-                                                 compute_bwdflows=args.use_gt_masks or args.use_gt_masks_poses,
+                                                 compute_bwdflows=True, #args.use_gt_masks or args.use_gt_masks_poses,
                                                  #num_tracker=args.num_tracker,
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
@@ -586,7 +586,11 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr, stats.deltaloss            = AverageMeter(), AverageMeter()
-    stats.roterr, stats.transerr              = AverageMeter(), AverageMeter()
+    stats.roterr, stats.transerr                = AverageMeter(), AverageMeter()
+
+    # Per mask stats
+    stats.roterr_mask, stats.transerr_mask        = AverageMeter(), AverageMeter()
+    stats.flowerr_sum_mask, stats.flowerr_avg_mask = AverageMeter(), AverageMeter()
 
     stats.data_ids = []
     if mode == 'test':
@@ -755,6 +759,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         trans_err = ((delta[:,:,:,3] - delta_g[:,:,:,3]) * 100.0).norm(dim=2,p=2).sum(1).mean() # Sum across nSE3s
         stats.roterr.update(torch.Tensor([rot_err.data[0]]))
         stats.transerr.update(torch.Tensor([trans_err.data[0]]))
+
+        # Errors per mask
+        rot_err_mask   = theta.abs().mean(0) # Mean across batch size (get per mask)
+        trans_err_mask = ((delta[:,:,:,3] - delta_g[:,:,:,3]) * 100.0).norm(dim=2,p=2).mean(0) # Mean across batch size (get per mask)
+        stats.roterr_mask.update(rot_err_mask.data.clone()) # nSE3
+        stats.transerr_mask.update(trans_err_mask.data.clone()) # nSE3
 
         # Append to total loss
         loss = currptloss + currconsisloss + currdeltaloss
@@ -956,7 +966,13 @@ def iterate(data_loader, model, tblogger, num_iters,
             stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
             stats.still_err.append(still_err); stats.still_npt.append(still_npt)
 
-        # Save poses if in test mode
+        # Get flow errors per mask
+        gtmasks = sample['masks'][:,0:args.seq_len].type_as(fwdflows)
+        flowerr_sum_mask1, flowerr_avg_mask1 = compute_masked_flow_errors_per_mask(predflows, flows, gtmasks)
+        flowerr_sum_mask, flowerr_avg_mask   = flowerr_sum_mask1.sum(0), flowerr_avg_mask1.sum(0) # nSE3
+        stats.flowerr_sum_mask.update(flowerr_sum_mask); stats.flowerr_avg_mask.update(flowerr_avg_mask)
+
+            # Save poses if in test mode
         if mode == 'test':
             stats.predposes.append([x.data.cpu().float() for x in poses])
             stats.predtransposes.append([x.data.cpu().float() for x in transposes])
@@ -994,6 +1010,14 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                                          stats.roterr.avg[0],
                                                                                          stats.transerr.val[0],
                                                                                          stats.transerr.avg[0]))
+            for j in xrange(args.num_se3):
+                print("\t\t Mask: {}, Rot err: {:.4f} ({:.4f}), Trans err: {:.4f} ({:.4f}), "
+                      "Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), ".format(
+                    j, stats.roterr_mask.val[j], stats.roterr_mask.avg[j],
+                    stats.transerr_mask.val[j], stats.transerr_mask.avg[j],
+                    stats.flowerr_sum_mask.val[j], stats.flowerr_sum_mask.avg[j],
+                    stats.flowerr_avg_mask.val[j], stats.flowerr_avg_mask.avg[j],
+                ))
 
             ### Print stuff if we have weight sharpening enabled
             if args.use_wt_sharpening and (not args.use_gt_masks) and (not args.use_gt_masks_poses):
@@ -1030,6 +1054,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-stillerrsum': stillerr_sum.sum() / bsz,
                 mode+'-stillerravg': stillerr_avg.sum() / bsz,
             }
+            for j in xrange(args.num_se3):
+                info[mode+'-maskroterr'+str(j)]     = rot_err_mask[j]
+                info[mode+'-masktranserr'+str(j)]   = trans_err_mask[j]
+                info[mode+'-maskflowerrsum'+str(j)] = flowerr_sum_mask[j]/bsz
+                info[mode+'-maskflowerravg'+str(j)] = flowerr_avg_mask[j]/bsz
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
 
@@ -1200,6 +1229,23 @@ def compute_masked_flow_errors(predflows, gtflows):
            still_err_sum.cpu().float(), still_err_avg.cpu().float(), \
            motion_err.cpu().float(), motion_npt.cpu().float(), \
            still_err.cpu().float(), still_npt.cpu().float()
+
+### Compute flow errors per mask (flows are size: B x S x 3 x H x W)
+def compute_masked_flow_errors_per_mask(predflows, gtflows, gtmasks):
+    batch, seq, nse3 = predflows.size(0), predflows.size(1), gtmasks.size(2)  # B x S x 3 x H x W
+    # Compute num pts not moving per mask
+    num_pts_d = gtmasks.type_as(gtflows).view(batch, seq, nse3, -1).sum(3)
+    num_pts, nz = num_pts_d.sum(0), (num_pts_d > 0).type_as(gtflows).sum(0)
+    # Compute loss across batch
+    err = (predflows - gtflows).mul_(1e2).pow(2).sum(2).unsqueeze(2).expand_as(gtmasks) # Flow error for current step (B x S x K x H x W)
+    loss_sum_d = (err * gtmasks).view(batch, seq, nse3, -1).sum(3) # Flow error sum for all masks in entire sequence per dataset
+    # Compute avg loss per example in the batch
+    loss_avg_d = loss_sum_d / num_pts_d
+    loss_avg_d[loss_avg_d != loss_avg_d] = 0 # Clear out any Nans
+    loss_avg_d[loss_avg_d == np.inf]     = 0 # Clear out any Infs
+    loss_sum, loss_avg = loss_sum_d.sum(0), loss_avg_d.sum(0) # S x K
+    # Return
+    return loss_sum.cpu().float(), loss_avg.cpu().float(), num_pts.cpu().float(), nz.cpu().float()
 
 ### Normalize image
 def normalize_img(img, min=-0.01, max=0.01):

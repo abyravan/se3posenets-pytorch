@@ -967,8 +967,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             stats.still_err.append(still_err); stats.still_npt.append(still_npt)
 
         # Get flow errors per mask
-        gtmasks = sample['masks'][:,0:args.seq_len].type_as(fwdflows)
-        flowerr_sum_mask1, flowerr_avg_mask1 = compute_masked_flow_errors_per_mask(predflows, flows, gtmasks)
+        gtmasks = sample['masks'][:,0:args.seq_len].type(deftype)
+        flowerr_sum_mask1, flowerr_avg_mask1, _, _ = compute_masked_flow_errors_per_mask(predflows, flows, gtmasks)
         flowerr_sum_mask, flowerr_avg_mask   = flowerr_sum_mask1.sum(0), flowerr_avg_mask1.sum(0) # nSE3
         stats.flowerr_sum_mask.update(flowerr_sum_mask); stats.flowerr_avg_mask.update(flowerr_avg_mask)
 
@@ -1055,8 +1055,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-stillerravg': stillerr_avg.sum() / bsz,
             }
             for j in xrange(args.num_se3):
-                info[mode+'-maskroterr'+str(j)]     = rot_err_mask[j]
-                info[mode+'-masktranserr'+str(j)]   = trans_err_mask[j]
+                info[mode+'-maskroterr'+str(j)]     = rot_err_mask.data[j]
+                info[mode+'-masktranserr'+str(j)]   = trans_err_mask.data[j]
                 info[mode+'-maskflowerrsum'+str(j)] = flowerr_sum_mask[j]/bsz
                 info[mode+'-maskflowerravg'+str(j)] = flowerr_avg_mask[j]/bsz
             for tag, value in info.items():

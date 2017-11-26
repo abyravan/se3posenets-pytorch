@@ -44,8 +44,7 @@ class TransitionModel(nn.Module):
         # Initialize the SE3 decoder to predict identity SE3
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
-            layer = self.deltase3decoder[4]  # Get final SE3 prediction module
-            ctrlnets.init_se3layer_identity(layer, num_se3, se3_type) # Init to identity
+            ctrlnets.init_se3layer_identity(self.deltase3decoder[-1], num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.delta_pivot = delta_pivot
@@ -133,7 +132,7 @@ class SimpleTransitionModel(nn.Module):
         # Initialize the SE3 decoder to predict identity SE3
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
-            ctrlnets.init_se3layer_identity(self.l3, num_se3, se3_type) # Init to identity
+            ctrlnets.init_se3layer_identity(self.deltase3decoder[-1], num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt

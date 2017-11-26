@@ -77,8 +77,8 @@ parser.add_argument('--trans-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses - translation (default: 1.0)')
 
 # Transition model types
-parser.add_argument('--trans-type', default='def', type=str,
-                    metavar='STR', help='Different transition model types: [def] | deep | simple | simplewide')
+parser.add_argument('--trans-type', default='default', type=str,
+                    metavar='STR', help='Different transition model types: [default] | deep | simple | simplewide')
 parser.add_argument('--trans-bn', action='store_true', default=False,
                     help='Batch Normalize the transition model (default: False)')
 

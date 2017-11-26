@@ -273,12 +273,12 @@ class MultiStepSE3OnlyTransModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False, trans_type='def', trans_bn=False):
+                 full_res=False, trans_type='default', trans_bn=False):
         super(MultiStepSE3OnlyTransModel, self).__init__()
 
         # Initialize the transition model
         bn_str = ' with batch normalization enabled' if trans_bn else ''
-        if trans_type == 'def':
+        if trans_type == 'default':
             print('==> Using [DEFAULT] transition model'+bn_str)
             transmodelfn = TransitionModel
         elif trans_type == 'simple':

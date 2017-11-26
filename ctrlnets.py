@@ -251,6 +251,21 @@ class PreDeconv2D(nn.Module):
             x = self.deconv(x)
         return x
 
+### Basic Conv + Pool + BN + Non-linearity structure
+class BasicLinear(nn.Module):
+    def __init__(self, in_dim, out_dim, use_bn=True, nonlinearity='prelu'):
+        super(BasicLinear, self).__init__()
+        self.lin    = nn.Linear(in_dim, out_dim)
+        self.bn     = nn.BatchNorm1d(out_dim, eps=0.001) if use_bn else None
+        self.nonlin = get_nonlinearity(nonlinearity)
+
+    # Linear -> BN -> Non-linearity
+    def forward(self, x):
+        x = self.lin(x)
+        if self.bn:
+            x = self.bn(x)
+        return self.nonlin(x)
+
 ### Apply weight-sharpening to the masks across the channels of the input
 ### output = Normalize( (sigmoid(input) + noise)^p + eps )
 ### where the noise is sampled from a 0-mean, sig-std dev distribution (sig is increased over time),

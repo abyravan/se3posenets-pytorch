@@ -76,6 +76,12 @@ parser.add_argument('--rot-wt', default=1.0, type=float,
 parser.add_argument('--trans-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the supervised loss on delta-poses - translation (default: 1.0)')
 
+# Transition model types
+parser.add_argument('--trans-type', default='def', type=str,
+                    metavar='STR', help='Different transition model types: [def] | deep | simple | simplewide')
+parser.add_argument('--trans-bn', action='store_true', default=False,
+                    help='Batch Normalize the transition model (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -390,7 +396,9 @@ def main():
         modelfn = ctrlnets.MultiStepSE3OnlyMaskNoTransModel
     elif args.use_gt_masks_poses:
         print('Using GT masks & poses. Model predicts only delta-poses')
-        modelfn = ctrlnets.MultiStepSE3OnlyTransModel
+        import transnets
+        modelfn = lambda **v: transnets.MultiStepSE3OnlyTransModel(trans_type=args.trans_type, trans_bn=args.trans_bn, **v)
+        #modelfn = ctrlnets.MultiStepSE3OnlyTransModel
     elif args.use_gt_deltas:
         print('Using GT deltas only. Model predicts poses and masks')
         modelfn = ctrlnets.MultiStepSE3NoTransModel

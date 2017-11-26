@@ -417,6 +417,12 @@ def main():
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
+    ### Print number of parameters in graph?
+    numparam = 0
+    for param in model.parameters():
+        numparam += param.nelement()
+    print("=========> Total number of parameters in model: {} <===========".format(numparam))
+
     ### Load optimizer
     optimizer = load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                momentum=args.momentum, weight_decay=args.weight_decay)

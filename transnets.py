@@ -31,7 +31,7 @@ class TransitionModel(nn.Module):
             ctrlnets.BasicLinear(cdim[0], cdim[1],
                                  use_bn=use_bn, nonlinearity=nonlinearity),
                             )
-
+        self.use_jt_angles=False
         # SE3 decoder
         self.deltase3decoder = nn.Sequential(
             ctrlnets.BasicLinear(pdim[1]+cdim[1], 256,
@@ -147,6 +147,7 @@ class SimpleTransitionModel(nn.Module):
         p, c = x # Pose, Control
         x = torch.cat([p.view(-1, self.num_se3*12), c], 1) # Concatenate inputs
         x = self.deltase3decoder(x)  # Predict delta-SE3
+        x = x.view(-1, self.num_se3, self.se3_dim)
         x = self.deltaposedecoder(x) # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
 
         # Predicted delta is already in the global frame of reference, use it directly (from global to global)
@@ -231,6 +232,7 @@ class DeepTransitionModel(nn.Module):
 
     def forward(self, x):
         # Run the forward pass
+        self.use_jt_angles=False
         if self.use_jt_angles:
             if self.inp_pivot:
                 p, j, c, pivot = x # Pose, Jtangles, Control, Pivot

@@ -160,6 +160,67 @@ class SimpleTransitionModel(nn.Module):
 ####################################
 ### Transition model (predicts change in poses based on the applied control)
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
+class SimpleDenseNetTransitionModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
+                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
+                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False):
+        super(SimpleDenseNetTransitionModel, self).__init__()
+        self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred'))  # Only if we are predicting directly
+        self.num_se3 = num_se3
+
+        # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
+        idim = (self.num_se3 * 12) + num_ctrl
+        odim = (self.num_se3 * self.se3_dim)
+        pdim = [128, 128, 128]
+        self.l0 = ctrlnets.BasicLinear(idim,                  pdim[0],
+                                 use_bn=use_bn, nonlinearity=nonlinearity)
+        self.l1 = ctrlnets.BasicLinear(idim+pdim[0],          pdim[1],
+                                 use_bn=use_bn, nonlinearity=nonlinearity)
+        self.l2 = ctrlnets.BasicLinear(idim+pdim[0]+pdim[1],  pdim[2],
+                                 use_bn=use_bn, nonlinearity=nonlinearity)
+        self.l3 = nn.Linear(idim+sum(pdim), odim)
+
+        # Initialize the SE3 decoder to predict identity SE3
+        if init_se3_iden:
+            print("Initializing SE3 prediction layer of the transition model to predict identity transform")
+            ctrlnets.init_se3layer_identity(self.l3, num_se3, se3_type)  # Init to identity
+
+        # Create pose decoder (convert to r/t)
+        self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
+
+        # Compose deltas with prev pose to get next pose
+        # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
+        # So, the full transform is: p_t2 = p_t1 * p_t2_to_t1 (or: p_t2 (t2 to cam) = p_t1 (t1 to cam) * p_t2_to_t1 (t2 to t1))
+        self.posedecoder = se3nn.ComposeRtPair()
+
+    def forward(self, x):
+        # Get inputs
+        p, c = x  # Pose, Control
+
+        # Run through the dense-FC net
+        i = torch.cat([p.view(-1, self.num_se3 * 12), c], 1)  # Concatenate inputs
+        y0 = self.l0(i)
+        z0 = torch.cat([x, y0], 1) # x (+) y0
+        y1 = self.l1(z0)
+        z1 = torch.cat([z0,y1], 1) # x (+) y0 (+) y1
+        y2 = self.l2(z1)
+        z2 = torch.cat([z1,y2], 1) # x (+) y0 (+) y1 (+) y2
+        o  = self.l3(z2)           # Predict delta-SE3
+
+        # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
+        o  = o.view(-1, self.num_se3, self.se3_dim)
+        o  = self.deltaposedecoder(o)
+
+        # Predicted delta is already in the global frame of reference, use it directly (from global to global)
+        z = self.posedecoder(o,p)  # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
+        y = o  # D = SE3_2 * SE3_1^-1 (global to global)
+
+        # Return
+        return [y, z]  # Return both the deltas (in global frame) and the composed next pose
+
+####################################
+### Transition model (predicts change in poses based on the applied control)
+# Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
 class DeepTransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
@@ -264,7 +325,6 @@ class DeepTransitionModel(nn.Module):
         # Return
         return [y, z] # Return both the deltas (in global frame) and the composed next pose
 
-
 ####################################
 ### Multi-step version of the SE3-OnlyMask-Model (Only predicts mask)
 class MultiStepSE3OnlyTransModel(nn.Module):
@@ -288,6 +348,9 @@ class MultiStepSE3OnlyTransModel(nn.Module):
         elif trans_type == 'simplewide':
             print('==> Using [SIMPLE-WIDE] transition model'+bn_str)
             transmodelfn = lambda **v: SimpleTransitionModel(wide=True, **v)
+        elif trans_type == 'simpledense':
+            print('==> Using [SIMPLE-DENSE] transition model'+bn_str)
+            transmodelfn = SimpleDenseNetTransitionModel
         elif trans_type == 'deep':
             print('==> Using [DEEP] transition model'+bn_str)
             transmodelfn = DeepTransitionModel

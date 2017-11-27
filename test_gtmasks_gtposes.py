@@ -78,7 +78,8 @@ parser.add_argument('--trans-wt', default=1.0, type=float,
 
 # Transition model types
 parser.add_argument('--trans-type', default='default', type=str,
-                    metavar='STR', help='Different transition model types: [default] | deep | simple | simplewide')
+                    metavar='STR', help='Different transition model types: [default] | deep | simple | '
+                                        'simplewide | simpledense')
 parser.add_argument('--trans-bn', action='store_true', default=False,
                     help='Batch Normalize the transition model (default: False)')
 

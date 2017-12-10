@@ -178,12 +178,12 @@ class SimpleDenseNetTransitionModel(nn.Module):
                                  use_bn=use_bn, nonlinearity=nonlinearity)
         self.l2 = ctrlnets.BasicLinear(idim+pdim[0]+pdim[1],  pdim[2],
                                  use_bn=use_bn, nonlinearity=nonlinearity)
-        self.l3 = nn.Linear(idim+sum(pdim), odim)
+        self.deltase3decoder = nn.Linear(idim+sum(pdim), odim)
 
         # Initialize the SE3 decoder to predict identity SE3
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
-            ctrlnets.init_se3layer_identity(self.l3, num_se3, se3_type)  # Init to identity
+            ctrlnets.init_se3layer_identity(self.deltase3decoder, num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
@@ -200,12 +200,12 @@ class SimpleDenseNetTransitionModel(nn.Module):
         # Run through the dense-FC net
         i = torch.cat([p.view(-1, self.num_se3 * 12), c], 1)  # Concatenate inputs
         y0 = self.l0(i)
-        z0 = torch.cat([x, y0], 1) # x (+) y0
+        z0 = torch.cat([i, y0], 1) # x (+) y0
         y1 = self.l1(z0)
         z1 = torch.cat([z0,y1], 1) # x (+) y0 (+) y1
         y2 = self.l2(z1)
         z2 = torch.cat([z1,y2], 1) # x (+) y0 (+) y1 (+) y2
-        o  = self.l3(z2)           # Predict delta-SE3
+        o  = self.deltase3decoder(z2)           # Predict delta-SE3
 
         # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         o  = o.view(-1, self.num_se3, self.se3_dim)

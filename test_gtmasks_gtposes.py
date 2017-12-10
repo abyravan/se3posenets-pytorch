@@ -10,6 +10,7 @@ import random
 # Torch imports
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim
 import torch.utils.data
 from torch.autograd import Variable
@@ -82,6 +83,12 @@ parser.add_argument('--trans-type', default='default', type=str,
                                         'simplewide | simpledense')
 parser.add_argument('--trans-bn', action='store_true', default=False,
                     help='Batch Normalize the transition model (default: False)')
+
+# Use normal data
+parser.add_argument('--normal-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the cosine distance of normal loss (default: 1)')
+parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
+                    metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
 
 # Define xrange
 try:
@@ -259,6 +266,10 @@ def main():
         print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
             args.sharpen_start_iter, args.sharpen_rate))
 
+    # Normal loss
+    if (args.normal_wt > 0):
+        print('Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.normal_wt))
+
     # Loss type
     delta_loss = ', Penalizing the delta-flow loss per unroll'
     norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
@@ -340,7 +351,9 @@ def main():
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
                                                  noise_func=noise_func,
-                                                 load_color=args.use_xyzrgb) # Need BWD flows / masks if using GT masks
+                                                 load_color=args.use_xyzrgb,
+                                                 compute_normals=(args.normal_wt > 0),
+                                                 maxdepthdiff=args.normal_max_depth_diff) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -597,6 +610,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats = argparse.Namespace()
     stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
     stats.dissimposeloss, stats.dissimdeltaloss = AverageMeter(), AverageMeter()
+    stats.normalloss                            = AverageMeter()
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
@@ -647,6 +661,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    normal_wt = args.normal_wt * args.loss_scale
     pt_wt, consis_wt, delta_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.delta_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
@@ -681,6 +696,12 @@ def iterate(data_loader, model, tblogger, num_iters,
             jtangles = util.to_var(sample['states'].type(deftype), requires_grad=train)
         else:
             jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
+
+        # Get normals (if computed)
+        if (args.normal_wt > 0):
+            initnormals = util.to_var(sample['initnormals'].type(deftype), requires_grad=train)
+            tarnormals = util.to_var(sample['tarnormals'].type(deftype), requires_grad=train)
+            validinitnormals = util.to_var(sample['validinitnormals'].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -734,6 +755,10 @@ def iterate(data_loader, model, tblogger, num_iters,
         nextpts = ptpredlayer()(pts[:,0], initmask, delta)
         predpts, inputs, targets = [nextpts], (nextpts - pts[:,0]), fwdflows[:,0]
 
+        # Compute normals
+        nextnormals = ptpredlayer()(initnormals[:,0], initmask, delta)
+        prednormals = F.normalize(nextnormals, p=2, dim=1)
+
         # a) 3D loss (If motion-normalized loss, pass in GT flows)
         if args.motion_norm_loss:
             motion = targets  # Use either delta-flows or full-flows
@@ -781,8 +806,16 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.roterr_mask.update(rot_err_mask.data.clone()) # nSE3
         stats.transerr_mask.update(trans_err_mask.data.clone()) # nSE3
 
+        # d) Normal loss
+        normalloss, currnormalloss = torch.zeros(1), 0
+        if (args.normal_wt > 0):
+            # Compute loss only for those points which have valid normals & only those which are visible
+            currnormalloss = normal_wt * ctrlnets.NormalLoss(prednormals, tarnormals[:,0],
+                                                             wts=fwdvis[:,0] * validinitnormals[:,0])
+            normalloss = torch.Tensor([currnormalloss.data[0]])
+
         # Append to total loss
-        loss = currptloss + currconsisloss + currdeltaloss
+        loss = currptloss + currconsisloss + currdeltaloss + currnormalloss
         ptloss = torch.Tensor([currptloss.data[0]])
         consisloss = torch.Tensor([currconsisloss.data[0]])
         deltaloss = torch.Tensor([currdeltaloss.data[0]])
@@ -928,6 +961,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
         stats.deltaloss.update(deltaloss)
+        stats.normalloss.update(normalloss)
         stats.loss.update(loss.data[0])
 
         # Measure FWD time
@@ -1056,6 +1090,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             info = {
                 mode+'-loss': loss.data[0],
                 mode+'-pt3dloss': ptloss.sum(),
+                mode+'-normalloss': normalloss.sum(),
                 mode+'-deltaloss': deltaloss.sum(),
                 mode+'-roterr': stats.roterr.val.sum(),
                 mode+'-transerr': stats.transerr.val.sum(),
@@ -1117,10 +1152,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
-                         mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
+                         mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1)),
                 }
                 if args.use_xyzrgb:
                     info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
+                if (args.normal_wt > 0):
+                    normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.data.narrow(0,id,1),
+                                                                      prednormals.data.narrow(0,id,1)], 0).cpu().view(-1,3,args.img_ht,args.img_wd),
+                                                           nrow=args.seq_len, normalize=True, range=(-1, 1))
+                    info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0)) # Optional normals
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 
@@ -1170,12 +1210,14 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Delta: {:.3f} ({:.3f}), Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
+        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Normal: {:.3f} ({:.3f}), Delta: {:.3f} ({:.3f}), '
+              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
+            stats.normalloss.val[k], stats.normalloss.avg[k],
             stats.deltaloss.val[k], stats.deltaloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],

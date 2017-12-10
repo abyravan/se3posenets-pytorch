@@ -409,6 +409,35 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
     # Return
     return fwdflows, bwdflows, fwdvisibility, bwdvisibility
 
+### Compute fwd/bwd visibility (for points in time t, which are visible in time t+1 & vice-versa)
+# Expects 4D inputs: seq x ndim x ht x wd (or seq x ndim x 3 x 4)
+def ComputeNormals(cloud_1, cloud_2, label_1, delta_12,
+                   maxdepthdiff=0.05):
+    # Create memory
+    seq, dim, ht, wd = cloud_1.size()
+    normal_1 = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_1)
+    normal_2 = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_2)
+
+    # Call cpp/CUDA functions
+    if cloud_1.is_cuda:
+        assert NotImplementedError, "Only Float version implemented!"
+    else:
+        assert (cloud_1.type() == 'torch.FloatTensor')
+        # This computes normals for the initial cloud and transforms
+        # these based on the R/t to get transformed normal clouds
+        se3layers.ComputeNormals_float(cloud_1,
+                                       cloud_2,
+                                       label_1,
+                                       delta_12,
+                                       normal_1,
+                                       normal_2,
+                                       maxdepthdiff)
+        valid_normal_1 = normal_1.abs().sum(1).gt(0)
+        valid_normal_2 = normal_2.abs().sum(1).gt(0)
+
+    # Return
+    return normal_1, normal_2, valid_normal_1, valid_normal_2
+
 ############
 ###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
 
@@ -678,7 +707,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    #camera_extrinsics={}, camera_intrinsics=[],
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
                                    dathreshold=0.01, dawinsize=5, use_only_da=False,
-                                   noise_func=None):
+                                   noise_func=None, compute_normals=False, maxdepthdiff=0.05):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -820,6 +849,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                                                 initpose, tarposes, camera_intrinsics,
                                                                 dathreshold, dawinsize, use_only_da)
 
+    # Compute normal maps & target normal maps (rot/trans of init ones)
+    if compute_normals:
+        tardeltas = ComposeRtPair(tarposes, RtInverse(initpose.clone()))  # Pose_t+1 * Pose_t^-1
+        initnormals, tarnormals,\
+        validinitnormals, validtarnormals = ComputeNormals(initpt, tarpts, initlabel, tardeltas,
+                                                           maxdepthdiff=maxdepthdiff)
+
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
             'controls': controls, 'comconfigs': comconfigs, 'poses': poses,
@@ -828,6 +864,11 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['masks']           = masks
         data['bwdflows']        = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+    if compute_normals:
+        data['initnormals'] = initnormals
+        data['tarnormals']  = tarnormals
+        data['validinitnormals'] = validinitnormals
+        data['validtarnormals']  = validtarnormals
     if load_color:
         data['rgbs']   = rgbs
         #data['labels'] = labels

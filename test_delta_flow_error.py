@@ -89,6 +89,10 @@ parser.add_argument('--num-samples', default=100, type=int,
                     metavar='N', help='Number of examples to test (default: 100)')
 parser.add_argument('--num-inter',   default=9, type=int,
                     metavar='N', help='Number of interpolation steps (excluding end points) (default: 9)')
+parser.add_argument('--only-trans', action='store_true', default=False,
+                    help='Do only translation, no rotation (default: False)')
+parser.add_argument('--only-rot', action='store_true', default=False,
+                    help='Do only rotation, no translation (default: False)')
 
 # Define xrange
 try:
@@ -391,27 +395,31 @@ def main():
         sample = test_dataset[id]
 
         # Interpolate between pose0 & pose1
-        try:
-            pose0, pose1 =  sample['poses'][0],  sample['poses'][1] # nSE3 x 3 x 4
-            posestart = pose0.unsqueeze(0).expand(ninter+2, pose0.size(0), 3, 4).clone() # Init poses (same for all = pose0)
-            poseinter = torch.zeros(ninter+2, pose0.size(0), 3, 4) # Interpolated target poses (Between pose0->pose1)
-            for k in xrange(pose0.size(0)):
-                rot0, rot1 = pose0[k,:,:-1].clone(), pose1[k,:,:-1].clone()
-                if ((rot0 - rot1).abs().max() >= 1e-4):
-                    poseinter[:,k,:,:-1] = uq.interpolate_rot_matrices(rot0, rot1, ninter, include_endpoints=True) # Rotation
-                else:
-                    poseinter[:,k,:,:-1] = rot0.unsqueeze(0).expand_as(poseinter[:,k,:,:-1]) # Both are same!
-                trans0, trans1 = pose0[k,:,-1].clone(), pose1[k,:,-1].clone()
-                poseinter[:,k,:,-1] = trans0 + ((trans1 - trans0).view(1,3) * torch.linspace(0,1,ninter+2).view(-1,1))
-        except:
-            discard_ids.append(id)
-            ids.remove(id) # Discarded now!
-            print("Discarded example due to interpolation issues. Num discarded: {}".format(len(discard_ids)))
-            continue
+        #try:
+        pose0, pose1 =  sample['poses'][0],  sample['poses'][1] # nSE3 x 3 x 4
+        posestart = pose0.unsqueeze(0).expand(ninter+2, pose0.size(0), 3, 4).clone() # Init poses (same for all = pose0)
+        poseinter = torch.zeros(ninter+2, pose0.size(0), 3, 4) # Interpolated target poses (Between pose0->pose1)
+        for k in xrange(pose0.size(0)):
+            rot0, rot1 = pose0[k,:,:-1].clone(), pose1[k,:,:-1].clone()
+            if ((rot0 - rot1).abs().max() >= 1e-4): # NO rotation
+                poseinter[:,k,:,:-1] = uq.interpolate_rot_matrices(rot0, rot1, ninter, include_endpoints=True) # Rotation
+            else:
+                poseinter[:,k,:,:-1] = rot0.unsqueeze(0).expand_as(poseinter[:,k,:,:-1]) # Both are same!
+            trans0, trans1 = pose0[k,:,-1].clone(), pose1[k,:,-1].clone()
+            poseinter[:,k,:,-1] = trans0 + ((trans1 - trans0).view(1,3) * torch.linspace(0,1,ninter+2).view(-1,1))
+        # except:
+        #     discard_ids.append(id)
+        #     ids.remove(id) # Discarded now!
+        #     print("Discarded example due to interpolation issues. Num discarded: {}".format(len(discard_ids)))
+        #     continue
 
         # Compute the deltas now (from zero delta to GT delta)
         deltainter = data.ComposeRtPair(poseinter, data.RtInverse(posestart)) # pose1 * pose0^-1  (ninter+2 x nSE3 x 3 x 4)
         deltas     = util.to_var(deltainter.type(deftype), volatile=True)
+        if args.only_rot:
+            deltas[:,:,:,3] = 0 # No translation
+        elif args.only_trans:
+            deltas[:,:,:,:3] = torch.eye(3).view(1,1,3,3).expand_as(deltas[:,:,:,:3]).type(deftype)
 
         # Get the ptcloud, masks
         pts   = util.to_var(sample['points'][0:1].expand(ninter+2,3,args.img_ht,args.img_wd).type(deftype), volatile=True)

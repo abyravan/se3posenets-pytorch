@@ -756,7 +756,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         predpts, inputs, targets = [nextpts], (nextpts - pts[:,0]), fwdflows[:,0]
 
         # Compute normals
-        nextnormals = ptpredlayer()(initnormals[:,0], initmask, delta)
+        deltarot = delta.clone(); deltarot[:,:,:,3] = 0; # No translation
+        nextnormals = ptpredlayer()(initnormals[:,0], initmask, deltarot)
         prednormals = F.normalize(nextnormals, p=2, dim=1)
 
         # a) 3D loss (If motion-normalized loss, pass in GT flows)
@@ -1158,7 +1159,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                 if (args.normal_wt > 0):
                     normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.data.narrow(0,id,1),
-                                                                      prednormals.data.narrow(0,id,1)], 0).cpu().view(-1,3,args.img_ht,args.img_wd),
+                                                                      prednormals.data.unsqueeze(1).narrow(0,id,1)], 0).cpu().view(-1,3,args.img_ht,args.img_wd),
                                                            nrow=args.seq_len, normalize=True, range=(-1, 1))
                     info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0)) # Optional normals
                 for tag, images in info.items():

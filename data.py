@@ -432,8 +432,8 @@ def ComputeNormals(cloud_1, cloud_2, label_1, delta_12,
                                        normal_1,
                                        normal_2,
                                        maxdepthdiff)
-        valid_normal_1 = normal_1.abs().sum(1).gt(0)
-        valid_normal_2 = normal_2.abs().sum(1).gt(0)
+        valid_normal_1 = normal_1.abs().sum(1).gt(0).unsqueeze(1)
+        valid_normal_2 = normal_2.abs().sum(1).gt(0).unsqueeze(1)
 
     # Return
     return normal_1, normal_2, valid_normal_1, valid_normal_2

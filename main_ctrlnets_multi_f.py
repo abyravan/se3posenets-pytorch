@@ -747,7 +747,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Predict transformed normals and normalize them to get "unit" vectors
                 if (args.normal_wt > 0):
-                    nextnormals     = ptpredlayer()(initnormals[:,0], initmask, compdelta)
+                    compdeltarot    = compdelta.clone(); compdeltarot[:,:,:,3] = 0 # No translation
+                    nextnormals     = ptpredlayer()(initnormals[:,0], initmask, compdeltarot)
                     nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
                     prednormals.append(nextunitnormals.unsqueeze(1))
 
@@ -765,7 +766,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Predict transformed normals and normalize them to get "unit" vectors
                 if (args.normal_wt > 0):
-                    nextnormals     = ptpredlayer()(initnormals[:, 0], initmask, deltaposes[k])
+                    deltarot        = deltaposes[k].clone(); deltarot[:,:,:,3] = 0 # No translation
+                    nextnormals     = ptpredlayer()(initnormals[:, 0], initmask, deltarot)
                     nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
                     prednormals.append(nextunitnormals.unsqueeze(1)) # B x 1 x 3 x H x W
 

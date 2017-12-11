@@ -1023,7 +1023,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.flowerr_sum_mask.update(flowerr_sum_mask); stats.flowerr_avg_mask.update(flowerr_avg_mask)
 
             # Save poses if in test mode
-        if mode == 'test':
+        if (mode == 'test') and (args.detailed_test_stats):
             stats.predposes.append([x.data.cpu().float() for x in poses])
             stats.predtransposes.append([x.data.cpu().float() for x in transposes])
             stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])

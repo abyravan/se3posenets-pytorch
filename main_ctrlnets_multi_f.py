@@ -885,7 +885,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             stats.still_err.append(still_err); stats.still_npt.append(still_npt)
 
         # Save poses if in test mode
-        if mode == 'test':
+        if (mode == 'test') and (args.detailed_test_stats):
             stats.predposes.append([x.data.cpu().float() for x in poses])
             stats.predtransposes.append([x.data.cpu().float() for x in transposes])
             stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])

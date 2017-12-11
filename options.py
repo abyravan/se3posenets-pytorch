@@ -164,6 +164,8 @@ def setup_comon_options():
                         help='Display flow error per mask channel. (default: False)')
     parser.add_argument('--reset-train-iter', action='store_true', default=False,
                         help='Reset num_train_iter to 0 -> for weight sharpening (default: False)')
+    parser.add_argument('--detailed-test-stats', action='store_true', default=False,
+                        help='Save detailed test statistics if this option is set (default: False)')
 
     ###############
     ## Deprecated

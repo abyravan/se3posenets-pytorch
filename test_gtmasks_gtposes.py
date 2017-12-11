@@ -90,6 +90,10 @@ parser.add_argument('--normal-wt', default=0.0, type=float,
 parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
                     metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
 
+# Simple pivot test
+parser.add_argument('--pivot-type', default='none', type=str,
+                    metavar='STR', help='Pivot types: posecenter | maskmean | [none]')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -742,23 +746,43 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_gt_deltas:
             pose0_g = util.to_var(sample['poses'][:,0].type(deftype).clone(), requires_grad=False)  # Use GT poses
             pose1_g = util.to_var(sample['poses'][:,1].type(deftype).clone(), requires_grad=False)  # Use GT poses
-            delta = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
-            trans = se3nn.ComposeRtPair()(delta, pose0) # Use predicted pose0 + GT delta
+            deltapred = se3nn.ComposeRtPair()(pose1_g, se3nn.RtInverse()(pose0_g))  # pose1_g * pose0_g^-1 (GT delta pose)
+            trans = se3nn.ComposeRtPair()(deltapred, pose0) # Use predicted pose0 + GT delta
         elif args.use_gt_poses_wdeltas: # pose0 & pose1 are already GT, so just compute delta using those
-            delta = se3nn.ComposeRtPair()(pose1, se3nn.RtInverse()(pose0)) # pose1 * pose0^-1
+            deltapred = se3nn.ComposeRtPair()(pose1, se3nn.RtInverse()(pose0)) # pose1 * pose0^-1
             trans = pose1 # GT next pose
         else:
-            delta, trans = model.forward_next_pose(pose0, ctrls[:,0], jtangles[:,0])
+            deltapred, trans = model.forward_next_pose(pose0, ctrls[:,0], jtangles[:,0])
+
+        ### 3) Compute pivots and update the delta transforms
+        if args.pivot_type != 'none':
+            bsz, nse3 = deltapred.size(0), deltapred.size(1)
+            if args.pivot_type == 'posecenter':
+                pivot = pose0.narrow(3,3,1).clone().view(bsz*nse3,3,1)
+            elif args.pivot_type == 'maskmean':
+                pivot = se3nn.WeightedAveragePoints()(pts[:,0], initmask).view(bsz*nse3,3,1)
+            else:
+                assert False, "Unknown pivot type input: {}".format(args.pivot_type)
+            rotpred, transpred = deltapred.view(bsz*nse3,3,4).narrow(2,0,3), \
+                                 deltapred.view(bsz*nse3,3,4).narrow(2,3,1)
+            pivtrans = transpred + pivot - torch.bmm(rotpred, pivot) # t + p - Rp
+            delta = torch.cat([rotpred.clone().view(bsz,nse3,3,3),
+                               pivtrans.view(bsz,nse3,3,1)], 3) # R | t (B x N x 3 x 4)
+            pivots = [pivot.view(bsz,nse3,3)]
+        else:
+            delta = deltapred
+            pivots = []
         deltaposes, transposes = [delta], [trans]
 
-        ### 3) Compute losses
+        ### 4) Compute losses
         nextpts = ptpredlayer()(pts[:,0], initmask, delta)
         predpts, inputs, targets = [nextpts], (nextpts - pts[:,0]), fwdflows[:,0]
 
         # Compute normals
-        deltarot = delta.clone(); deltarot[:,:,:,3] = 0; # No translation
-        nextnormals = ptpredlayer()(initnormals[:,0], initmask, deltarot)
-        prednormals = F.normalize(nextnormals, p=2, dim=1)
+        if args.normal_wt > 0:
+            deltarot = delta.clone(); deltarot[:,:,:,3] = 0 # No translation
+            nextnormals = ptpredlayer()(initnormals[:,0], initmask, deltarot)
+            prednormals = F.normalize(nextnormals, p=2, dim=1)
 
         # a) 3D loss (If motion-normalized loss, pass in GT flows)
         if args.motion_norm_loss:
@@ -1168,8 +1192,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 ## Print the predicted delta-SE3s
                 if 'deltase3' in predictions:
                     deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                    #if len(pivots) > 0:
-                    #    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
+                    if len(pivots) > 0:
+                        deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
                     print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
                 ## Details on the centers

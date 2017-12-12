@@ -49,6 +49,12 @@ parser.add_argument('--delta-pivot', default='', type=str,
 parser.add_argument('--consis-rt-loss', action='store_true', default=False,
                     help='Use RT loss for the consistency measure (default: False)')
 
+# Loss between pose center and mask mean
+parser.add_argument('--pose-anchor-wt', default=0.0, type=float,
+                    metavar='STR', help='Weight for the loss anchoring pose center to be close to the mean mask value')
+parser.add_argument('--pose-anchor-maskbprop', action='store_true', default=False,
+                    help='Backprop gradient from pose anchor loss to mask mean if set to true (default: False)')
+
 # Box data
 parser.add_argument('--box-data', action='store_true', default=False,
                     help='Dataset has box/ball data (default: False)')
@@ -238,6 +244,12 @@ def main():
     # Normal loss
     if (args.normal_wt > 0):
         print('Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.normal_wt))
+
+    # Pose center anchor loss
+    if (args.pose_anchor_wt > 0):
+        print('Adding loss encouraging pose centers to be close to mask mean. Loss wt: {}'.format(args.pose_anchor_wt))
+        if args.pose_anchor_maskbprop:
+            print("Will backprop pose anchor error gradient to mask mean")
 
     # Loss type
     delta_loss = ', Penalizing the delta-flow loss per unroll'
@@ -562,7 +574,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats = argparse.Namespace()
     stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
     stats.dissimposeloss, stats.dissimdeltaloss = AverageMeter(), AverageMeter()
-    stats.normalloss                            = AverageMeter()
+    stats.normalloss, stats.anchorloss          = AverageMeter(), AverageMeter()
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
@@ -607,6 +619,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     pt_wt, consis_wt, normal_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.normal_wt * args.loss_scale
+    anchor_wt = args.pose_anchor_wt * args.loss_scale
     identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
     for i in xrange(num_iters):
         # ============ Load data ============#
@@ -735,7 +748,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # We use point loss in the FWD dirn and Consistency loss between poses
         predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
         dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-        prednormals, normalloss = [], torch.zeros(args.seq_len)
+        prednormals, normalloss, anchorloss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         for k in xrange(args.seq_len):
             ### Make the 3D point predictions and set up loss
             # Separate between using the full gradient & gradient only for the first delta pose
@@ -799,6 +812,22 @@ def iterate(data_loader, model, tblogger, num_iters,
                 normalloss[k] = currnormalloss.data[0]
                 prednormals = torch.cat(prednormals, 1) # B x S x 3 x H x W
 
+            ### Pose anchor loss
+            if (args.pose_anchor_wt > 0):
+                # Get pose centers and mask mean
+                # We do not want to backpropagate across the chain of predicted points so we break the graph here
+                currpts = pts[:,0] if (k == 0) else util.to_var(predpts[k-1].data.clone(), requires_grad=False)
+                maskmeanp  = se3nn.WeightedAveragePoints()(currpts, initmask) # (B x K x 3)
+                if (not args.pose_anchor_maskbprop):
+                    maskmean = util.to_var(maskmeanp.data.clone(), requires_grad=False) # Break graph to backprop to mask
+                else:
+                    maskmean = maskmeanp # Backprop to mask mean
+                posecenter = poses[k][:,:,:,3] # Translation points (B x K x 3)
+                # Compute loss
+                curranchorloss = anchor_wt * ctrlnets.BiMSELoss(maskmean, posecenter)
+                loss += curranchorloss
+                anchorloss[k] = curranchorloss.data[0]
+
             ### Consistency loss (between t & t+1)
             # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
             # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
@@ -832,6 +861,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.dissimposeloss.update(dissimposeloss)
         stats.dissimdeltaloss.update(dissimdeltaloss)
         stats.normalloss.update(normalloss)
+        stats.anchorloss.update(anchorloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -943,6 +973,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-pt3dloss': ptloss.sum(),
                 mode+'-consisloss': consisloss.sum(),
                 mode+'-normalloss': normalloss.sum(),
+                mode+'-anchorloss': anchorloss.sum(),
                 mode+'-dissimposeloss': dissimposeloss.sum(),
                 mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
                 mode+'-consiserr': consiserror.sum(),
@@ -1055,7 +1086,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), Norm:  {:.3f} ({:.3f}),'
-              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
+              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), Anchor: {:.3f}/{:.4f}, '
               'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
@@ -1064,6 +1095,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.ptloss.val[k], stats.ptloss.avg[k],
             stats.normalloss.val[k], stats.normalloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
+            stats.anchorloss.val[k], stats.anchorloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
             stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
             stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],

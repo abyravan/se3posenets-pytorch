@@ -51,9 +51,11 @@ parser.add_argument('--consis-rt-loss', action='store_true', default=False,
 
 # Loss between pose center and mask mean
 parser.add_argument('--pose-anchor-wt', default=0.0, type=float,
-                    metavar='STR', help='Weight for the loss anchoring pose center to be close to the mean mask value')
+                    metavar='WT', help='Weight for the loss anchoring pose center to be close to the mean mask value')
 parser.add_argument('--pose-anchor-maskbprop', action='store_true', default=False,
                     help='Backprop gradient from pose anchor loss to mask mean if set to true (default: False)')
+parser.add_argument('--pose-anchor-grad-clip', default=0.0, type=float,
+                    metavar='WT', help='Gradient clipping for the pose anchor gradient (to account for outliers) (default: 0.0)')
 
 # Box data
 parser.add_argument('--box-data', action='store_true', default=False,
@@ -825,6 +827,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 posecenter = poses[k][:,:,:,3] # Translation points (B x K x 3)
                 # Compute loss
                 curranchorloss = anchor_wt * ctrlnets.BiMSELoss(maskmean, posecenter)
+                if args.pose_anchor_grad_clip:
+                    curranchorloss = clip_grad(curranchorloss, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid explosive gradient
                 loss += curranchorloss
                 anchorloss[k] = curranchorloss.data[0]
 
@@ -1175,6 +1179,11 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+### Gradient clipping hook
+def clip_grad(v, min, max):
+    v.register_hook(lambda g: g.clamp(min, max))
+    return v
 
 ################ RUN MAIN
 if __name__ == '__main__':

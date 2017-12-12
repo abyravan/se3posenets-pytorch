@@ -1062,7 +1062,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
-            stats.normloss.val[k], stats.normloss.avg[k],
+            stats.normalloss.val[k], stats.normalloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
             stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],

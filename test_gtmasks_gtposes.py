@@ -793,6 +793,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             deltarot = delta.clone()
             if args.pivot_type != 'none':
                 # No translation, only pivot and rotation
+                bsz, nse3 = deltapred.size(0), deltapred.size(1)
                 transpred = deltapred.view(bsz,nse3,3,4).narrow(3,3,1)
                 deltarot[:,:,:,3] = deltarot[:,:,:,3] - transpred # Remove translation
             else:

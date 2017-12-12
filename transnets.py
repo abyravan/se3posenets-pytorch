@@ -9,35 +9,35 @@ import ctrlnets
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False,
+                 use_snn=False):
         super(TransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
 
+        # Type of linear layer
+        linlayer = ctrlnets.SelfNormalizingLinear if use_snn else \
+                   lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
+                                                                use_bn=use_bn, nonlinearity=nonlinearity)
+
         # Pose encoder
         pdim = [128, 256]
         self.poseencoder = nn.Sequential(
-            ctrlnets.BasicLinear(self.num_se3 * 12, pdim[0],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(pdim[0], pdim[1],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-                            )
+            linlayer(self.num_se3 * 12, pdim[0]),
+            linlayer(pdim[0], pdim[1]),
+        )
 
         # Control encoder
         cdim = [128, 256] #[64, 128]
         self.ctrlencoder = nn.Sequential(
-            ctrlnets.BasicLinear(num_ctrl, cdim[0],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(cdim[0], cdim[1],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-                            )
+            linlayer(num_ctrl, cdim[0]),
+            linlayer(cdim[0], cdim[1]),
+        )
         self.use_jt_angles=False
         # SE3 decoder
         self.deltase3decoder = nn.Sequential(
-            ctrlnets.BasicLinear(pdim[1]+cdim[1], 256,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(256, 128,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
+            linlayer(pdim[1]+cdim[1], 256),
+            linlayer(256, 128),
             nn.Linear(128, self.num_se3 * self.se3_dim)
         )
 
@@ -114,18 +114,22 @@ class TransitionModel(nn.Module):
 class SimpleTransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False, wide=False):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False, wide=False,
+                 use_snn=False):
         super(SimpleTransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
 
+        # Type of linear layer
+        linlayer = ctrlnets.SelfNormalizingLinear if use_snn else \
+                   lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
+                                                                use_bn=use_bn, nonlinearity=nonlinearity)
+
         # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
         pdim = [1024, 512] if wide else [256, 256]
         self.deltase3decoder = nn.Sequential(
-            ctrlnets.BasicLinear(self.num_se3*12 + num_ctrl, pdim[0],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(pdim[0], pdim[1],
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
+            linlayer(self.num_se3*12 + num_ctrl, pdim[0]),
+            linlayer(pdim[0], pdim[1]),
             nn.Linear(pdim[1], self.num_se3*self.se3_dim)
         )
 
@@ -163,21 +167,24 @@ class SimpleTransitionModel(nn.Module):
 class SimpleDenseNetTransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False,
+                 use_snn=False):
         super(SimpleDenseNetTransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred'))  # Only if we are predicting directly
         self.num_se3 = num_se3
+
+        # Type of linear layer
+        linlayer = ctrlnets.SelfNormalizingLinear if use_snn else \
+                lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
+                                                             use_bn=use_bn, nonlinearity=nonlinearity)
 
         # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
         idim = (self.num_se3 * 12) + num_ctrl
         odim = (self.num_se3 * self.se3_dim)
         pdim = [128, 128, 128]
-        self.l0 = ctrlnets.BasicLinear(idim,                  pdim[0],
-                                 use_bn=use_bn, nonlinearity=nonlinearity)
-        self.l1 = ctrlnets.BasicLinear(idim+pdim[0],          pdim[1],
-                                 use_bn=use_bn, nonlinearity=nonlinearity)
-        self.l2 = ctrlnets.BasicLinear(idim+pdim[0]+pdim[1],  pdim[2],
-                                 use_bn=use_bn, nonlinearity=nonlinearity)
+        self.l0 = linlayer(idim,                  pdim[0])
+        self.l1 = linlayer(idim+pdim[0],          pdim[1])
+        self.l2 = linlayer(idim+pdim[0]+pdim[1],  pdim[2])
         self.deltase3decoder = nn.Linear(idim+sum(pdim), odim)
 
         # Initialize the SE3 decoder to predict identity SE3
@@ -224,39 +231,36 @@ class SimpleDenseNetTransitionModel(nn.Module):
 class DeepTransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False,
+                 use_snn=False):
         super(DeepTransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
 
+        # Type of linear layer
+        linlayer = ctrlnets.SelfNormalizingLinear if use_snn else \
+                   lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
+                                                                use_bn=use_bn, nonlinearity=nonlinearity)
+
         # Pose encoder
         self.poseencoder = nn.Sequential(
-            ctrlnets.BasicLinear(self.num_se3 * 12, 256,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(256, 512,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(512, 1024,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-                            )
+            linlayer(self.num_se3 * 12, 256),
+            linlayer(256, 512),
+            linlayer(512, 1024),
+        )
 
         # Control encoder
         self.ctrlencoder = nn.Sequential(
-            ctrlnets.BasicLinear(num_ctrl, 256,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(256, 512,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(512, 1024,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
+            linlayer(num_ctrl, 256),
+            linlayer( 256, 512),
+            linlayer(512, 1024),
         )
 
         # SE3 decoder
         self.deltase3decoder = nn.Sequential(
-            ctrlnets.BasicLinear(1024+1024, 1024,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(1024, 512,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
-            ctrlnets.BasicLinear(512, 512,
-                                 use_bn=use_bn, nonlinearity=nonlinearity),
+            linlayer(1024+1024, 1024),
+            linlayer(1024, 512),
+            linlayer( 512, 512),
             nn.Linear(512, self.num_se3 * self.se3_dim)
         )
 
@@ -334,7 +338,7 @@ class MultiStepSE3OnlyTransModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False, trans_type='default', trans_bn=False):
+                 full_res=False, trans_type='default', trans_bn=False, use_snn=False):
         super(MultiStepSE3OnlyTransModel, self).__init__()
 
         # Initialize the transition model
@@ -361,7 +365,7 @@ class MultiStepSE3OnlyTransModel(nn.Module):
                                             nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
                                             local_delta_se3=local_delta_se3,
                                             use_jt_angles=use_jt_angles_trans, num_state=num_state,
-                                            use_bn=trans_bn)
+                                            use_bn=trans_bn, use_snn=use_snn)
 
     # Predict mask only
     def forward_only_mask(self, x, train_iter=0):

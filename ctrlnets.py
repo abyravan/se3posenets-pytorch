@@ -21,6 +21,8 @@ def get_nonlinearity(nonlinearity):
         return nn.Sigmoid()
     elif nonlinearity == 'elu':
         return nn.ELU(inplace=True)
+    elif nonlinearity == 'selu':
+        return nn.SELU()
     else:
         assert False, "Unknown non-linearity: {}".format(nonlinearity)
 
@@ -275,6 +277,21 @@ class BasicLinear(nn.Module):
         if self.bn:
             x = self.bn(x)
         return self.nonlin(x)
+
+### Self-Normalizing layer (no need to use BN with this layer)
+### From: https://github.com/bioinf-jku/SNNs && https://arxiv.org/pdf/1706.02515.pdf
+class SelfNormalizingLinear(nn.Module):
+    def __init__(self, in_dim, out_dim):
+        super(SelfNormalizingLinear, self).__init__()
+        lin = nn.Linear(in_dim, out_dim)
+        torch.nn.init.kaiming_uniform(lin.weight, a=1) # Initialize
+        self.layer = nn.Sequential(lin,
+                                   torch.nn.SELU(),
+                                   torch.nn.AlphaDropout(p=0.2))
+
+    # Forward pass
+    def forward(self, x):
+        return self.layer(x)
 
 ### Apply weight-sharpening to the masks across the channels of the input
 ### output = Normalize( (sigmoid(input) + noise)^p + eps )

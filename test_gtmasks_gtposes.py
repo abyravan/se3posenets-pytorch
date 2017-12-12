@@ -94,6 +94,10 @@ parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
 parser.add_argument('--pivot-type', default='none', type=str,
                     metavar='STR', help='Pivot types: posecenter | maskmean | [none]')
 
+# Self-normalizing nets
+parser.add_argument('--use-snn', action='store_true', default=False,
+                    help='Use self-normalizing network style linear layers (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -304,6 +308,9 @@ def main():
     else:
         print("Computing flows using tracker poses. Can get flows for all input points")
 
+    if args.use_snn:
+        print("Using self-normalizing linear layers")
+
     ########################
     ############ Load datasets
     # Get datasets
@@ -415,7 +422,10 @@ def main():
     elif args.use_gt_masks_poses:
         print('Using GT masks & poses. Model predicts only delta-poses')
         import transnets
-        modelfn = lambda **v: transnets.MultiStepSE3OnlyTransModel(trans_type=args.trans_type, trans_bn=args.trans_bn, **v)
+        modelfn = lambda **v: transnets.MultiStepSE3OnlyTransModel(trans_type=args.trans_type,
+                                                                   trans_bn=args.trans_bn,
+                                                                   use_snn=args.use_snn,
+                                                                   **v)
         #modelfn = ctrlnets.MultiStepSE3OnlyTransModel
     elif args.use_gt_deltas:
         print('Using GT deltas only. Model predicts poses and masks')
@@ -770,7 +780,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                                pivtrans.view(bsz,nse3,3,1)], 3) # R | t (B x N x 3 x 4)
             pivots = [pivot.view(bsz,nse3,3)]
         else:
-            delta = deltapred
+            delta = deltapred.clone()
             pivots = []
         deltaposes, transposes = [delta], [trans]
 
@@ -779,8 +789,14 @@ def iterate(data_loader, model, tblogger, num_iters,
         predpts, inputs, targets = [nextpts], (nextpts - pts[:,0]), fwdflows[:,0]
 
         # Compute normals
-        if args.normal_wt > 0:
-            deltarot = delta.clone(); deltarot[:,:,:,3] = 0 # No translation
+        if (args.normal_wt > 0):
+            deltarot = delta.clone()
+            if args.pivot_type != 'none':
+                # No translation, only pivot and rotation
+                transpred = deltapred.view(bsz,nse3,3,4).narrow(3,3,1)
+                deltarot[:,:,:,3] = deltarot[:,:,:,3] - transpred # Remove translation
+            else:
+                deltarot[:,:,:,3] = 0.0 # No translation
             nextnormals = ptpredlayer()(initnormals[:,0], initmask, deltarot)
             prednormals = F.normalize(nextnormals, p=2, dim=1)
 

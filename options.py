@@ -65,7 +65,7 @@ def setup_comon_options():
     parser.add_argument('--pre-conv', action='store_true', default=False,
                         help='puts batch normalization and non-linearity before the convolution / de-convolution (default: False)')
     parser.add_argument('--nonlin', default='prelu', type=str,
-                        metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu')
+                        metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu | selu')
     parser.add_argument('--se3-type', default='se3aa', type=str,
                         metavar='SE3', help='SE3 parameterization: [se3aa] | se3quat | se3spquat | se3euler | affine')
     parser.add_argument('-n', '--num-se3', type=int, default=8,

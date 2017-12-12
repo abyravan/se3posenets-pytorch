@@ -50,8 +50,9 @@ backprop-only-first-delta: False
 
 # Pivot options
 delta-pivot:        posecenter
-pose-anchor-wt:     1.0
-pose-anchor-maskbprop: False
+pose-anchor-wt:     0.01
+pose-anchor-maskbprop: True
+pose-anchor-grad-clip: 0.2
 
 # Training options
 no-cuda:        False
@@ -72,5 +73,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/pivotnormal/def_normal1_posecenter_anchor1
+save-dir:  trained_nets/alldata/pivotnormal/def_normal1_posecenter_anchor_maskbprop
 disp-err-per-mask: False

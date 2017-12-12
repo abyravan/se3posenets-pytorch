@@ -81,5 +81,5 @@ decay-epochs: 50
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/testgt/modeltest/pivot/def_gtmasksposes_flow_maskmean_normal1_nomotionnorm
+save-dir:  trained_nets/testgt/modeltest/pivotnormal/def_gtmasksposes_flow_maskmean_normal1_nomotionnorm
 disp-err-per-mask: False

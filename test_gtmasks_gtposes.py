@@ -794,7 +794,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             if args.pivot_type != 'none':
                 # No translation, only pivot and rotation
                 transpred = deltapred.view(bsz,nse3,3,4).narrow(3,3,1)
-                deltarot[:,:,:,3] = deltarot[:,:,:,3] - transpred # Remove translation
+                deltarot[:,:,:,3:] = deltarot[:,:,:,3:] - transpred # Remove translation
             else:
                 deltarot[:,:,:,3] = 0.0 # No translation
             nextnormals = ptpredlayer()(initnormals[:,0], initmask, deltarot)

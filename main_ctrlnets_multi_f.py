@@ -431,14 +431,18 @@ def main():
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
                   .format(args.resume, checkpoint['epoch'], num_train_iter))
-            best_val_loss = checkpoint['best_loss']
-            best_epoch = checkpoint['best_epoch'] if hasattr(checkpoint, 'best_epoch') else 0
-            print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
-                                                                                 best_epoch))
+            best_loss    = checkpoint['best_loss'] if 'best_loss' in checkpoint else float("inf")
+            best_floss   = checkpoint['best_flow_loss'] if 'best_flow_loss' in checkpoint else float("inf")
+            best_fcloss  = checkpoint['best_flowconsis_loss'] if 'best_flowconsis_loss' in checkpoint else float("inf")
+            best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
+            best_fepoch  = checkpoint['best_flow_epoch'] if 'best_flow_epoch' in checkpoint else 0
+            best_fcepoch = checkpoint['best_flowconsis_epoch'] if 'best_flowconsis_epoch' in checkpoint else 0
+            print('==== Best validation loss: {} was from epoch: {} ===='.format(best_loss, best_epoch))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
     else:
-        best_val_loss, best_epoch = float("inf"), 0
+        best_loss, best_floss, best_fcloss    = float("inf"), float("inf"), float("inf")
+        best_epoch, best_fepoch, best_fcepoch = 0, 0, 0
 
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
@@ -464,6 +468,12 @@ def main():
         logfile.close()
         return
 
+    ## Create a file to log different validation errors over training epochs
+    statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
+    statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
+    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr")
+    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr")
+
     ########################
     ############ Train / Validate
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
@@ -482,26 +492,55 @@ def main():
                             mode='val', epoch=epoch+1)
         val_ids += val_stats.data_ids
 
-        # Find best loss
-        val_loss = val_stats.loss
-        is_best       = (val_loss.avg < best_val_loss)
-        prev_best_loss  = best_val_loss
-        prev_best_epoch = best_epoch
+        # Find best losses
+        val_loss, val_floss, val_fcloss = val_stats.loss.avg, \
+                                          val_stats.ptloss.avg.sum(), \
+                                          val_stats.ptloss.avg.sum() + val_stats.consisloss.avg.sum()
+        is_best, is_fbest, is_fcbest    = (val_loss < best_loss), (val_floss < best_floss), (val_fcloss < best_fcloss)
+        prev_best_loss, prev_best_floss, prev_best_fcloss    = best_loss, best_floss, best_fcloss
+        prev_best_epoch, prev_best_fepoch, prev_best_fcepoch = best_epoch, best_fepoch, best_fcepoch
+        s, sf, sfc = 'SAME', 'SAME', 'SAME'
         if is_best:
-            best_val_loss = val_loss.avg
-            best_epoch    = epoch+1
-            print('==== Epoch: {}, Improved on previous best loss ({}) from epoch {}. Current: {} ===='.format(
-                                    epoch+1, prev_best_loss, prev_best_epoch, val_loss.avg))
-        else:
-            print('==== Epoch: {}, Did not improve on best loss ({}) from epoch {}. Current: {} ===='.format(
-                epoch + 1, prev_best_loss, prev_best_epoch, val_loss.avg))
+            best_loss, best_epoch, s       = val_loss, epoch+1, 'IMPROVED'
+        if is_fbest:
+            best_floss, best_fepoch, sf    = val_floss, epoch+1, 'IMPROVED'
+        if is_fcbest:
+            best_fcloss, best_fcepoch, sfc = val_fcloss, epoch+1, 'IMPROVED'
+        print('==== [LOSS]   Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+                                    epoch+1, s, prev_best_loss, prev_best_epoch, best_loss, best_epoch))
+        print('==== [FLOSS]  Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+                                    epoch+1, sf, prev_best_floss, prev_best_fepoch, best_floss, best_fepoch))
+        print('==== [FCLOSS] Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+                                    epoch+1, sfc, prev_best_fcloss, prev_best_fcepoch, best_loss, best_fcepoch))
+
+        # Write losses to stats file
+        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch+1, train_stats.loss.avg,
+                                                                     train_stats.ptloss.avg.sum(),
+                                                                     train_stats.consisloss.avg.sum(),
+                                                                     train_stats.normalloss.avg.sum(),
+                                                                     train_stats.anchorloss.avg.sum(),
+                                                                     train_stats.flowerr_sum.avg.sum()/args.batch_size,
+                                                                     train_stats.flowerr_avg.avg.sum()/args.batch_size,
+                                                                     train_stats.consiserr.avg.sum()))
+        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch + 1, val_stats.loss.avg,
+                                                                     val_stats.ptloss.avg.sum(),
+                                                                     val_stats.consisloss.avg.sum(),
+                                                                     val_stats.normalloss.avg.sum(),
+                                                                     val_stats.anchorloss.avg.sum(),
+                                                                     val_stats.flowerr_sum.avg.sum() / args.batch_size,
+                                                                     val_stats.flowerr_avg.avg.sum() / args.batch_size,
+                                                                     val_stats.consiserr.avg.sum()))
 
         # Save checkpoint
         save_checkpoint({
             'epoch': epoch+1,
             'args' : args,
-            'best_loss'  : best_val_loss,
-            'best_epoch' : best_epoch,
+            'best_loss'            : best_loss,
+            'best_flow_loss'       : best_floss,
+            'best_flowconsis_loss' : best_fcloss,
+            'best_epoch'           : best_epoch,
+            'best_flow_epoch'      : best_fepoch,
+            'best_flowconsis_epoch': best_fcepoch,
             'train_stats': {'stats': train_stats,
                             'niters': train_loader.niters, 'nruns': train_loader.nruns,
                             'totaliters': train_loader.iteration_count(),
@@ -515,15 +554,15 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
+        }, is_best, is_fbest, is_fcbest, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders
     del train_loader, val_loader
 
     # Load best model for testing (not latest one)
-    print("=> loading best model from '{}'".format(args.save_dir + "/model_best.pth.tar"))
-    checkpoint = torch.load(args.save_dir + "/model_best.pth.tar")
+    print("=> loading best model from '{}'".format(args.save_dir + "/model_flowconsis_best.pth.tar"))
+    checkpoint = torch.load(args.save_dir + "/model_flowconsis_best.pth.tar")
     num_train_iter = checkpoint['train_iter']
     try:
         model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)
@@ -531,9 +570,15 @@ def main():
         model.load_state_dict(checkpoint['model_state_dict'])
     print("=> loaded best checkpoint (epoch {}, train iter {})"
           .format(checkpoint['epoch'], num_train_iter))
-    best_epoch = checkpoint['best_epoch'] if hasattr(checkpoint, 'best_epoch') else 0
+    best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
+    best_fepoch  = checkpoint['best_flow_epoch'] if 'best_flow_epoch' in checkpoint else 0
+    best_fcepoch = checkpoint['best_flowconsis_epoch'] if 'best_flowconsis_epoch' in checkpoint else 0
     print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
+    print('==== Best validation flow loss: {} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
+                                                                         best_fepoch))
+    print('==== Best validation flow-consis loss: {} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
+                                                                         best_fcepoch))
 
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
@@ -545,8 +590,12 @@ def main():
                                     collate_fn=test_dataset.collate_batch))
     test_stats = iterate(test_loader, model, tblogger, len(test_loader),
                          mode='test', epoch=args.epochs)
-    print('==== Best validation loss: {} was from epoch: {} ===='.format(best_val_loss,
+    print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
+    print('==== Best validation flow loss: {} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
+                                                                         best_fepoch))
+    print('==== Best validation flow-consis loss: {} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
+                                                                         best_fcepoch))
 
     # Save final test error
     save_checkpoint({
@@ -556,7 +605,18 @@ def main():
                        'totaliters': test_loader.iteration_count(),
                        'ids': test_stats.data_ids,
                        },
-    }, False, savedir=args.save_dir, filename='test_stats.pth.tar')
+    }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
+
+    # Write test stats to val stats file at the end
+    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch+1, test_stats.loss.avg,
+                                                                 test_stats.ptloss.avg.sum(),
+                                                                 test_stats.consisloss.avg.sum(),
+                                                                 test_stats.normalloss.avg.sum(),
+                                                                 test_stats.anchorloss.avg.sum(),
+                                                                 test_stats.flowerr_sum.avg.sum() / args.batch_size,
+                                                                 test_stats.flowerr_avg.avg.sum() / args.batch_size,
+                                                                 test_stats.consiserr.avg.sum()))
+    statsvfile.close(); statstfile.close()
 
     # Close log file
     logfile.close()
@@ -1121,11 +1181,15 @@ def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1
     return optimizer
 
 ### Save checkpoint
-def save_checkpoint(state, is_best, savedir='.', filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, is_fbest=False, is_fcbest=False, savedir='.', filename='checkpoint.pth.tar'):
     savefile = savedir + '/' + filename
     torch.save(state, savefile)
     if is_best:
         shutil.copyfile(savefile, savedir + '/model_best.pth.tar')
+    if is_fbest:
+        shutil.copyfile(savefile, savedir + '/model_flow_best.pth.tar')
+    if is_fcbest:
+        shutil.copyfile(savefile, savedir + '/model_flowconsis_best.pth.tar')
 
 ### Compute flow errors for moving / non-moving pts (flows are size: B x S x 3 x H x W)
 def compute_masked_flow_errors(predflows, gtflows):

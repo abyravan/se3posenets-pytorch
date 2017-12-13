@@ -480,7 +480,7 @@ def main():
             print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
                   .format(args.resume, checkpoint['epoch'], num_train_iter))
             best_val_loss = checkpoint['best_loss']
-            best_epoch = checkpoint['best_epoch'] #if hasattr(checkpoint, 'best_epoch') else 0
+            best_epoch = checkpoint['best_epoch'] #if 'best_epoch' in checkpoint else 0
             print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                                  best_epoch))
         else:
@@ -579,7 +579,7 @@ def main():
         model.load_state_dict(checkpoint['model_state_dict'])
     print("=> loaded best checkpoint (epoch {}, train iter {})"
           .format(checkpoint['epoch'], num_train_iter))
-    best_epoch = checkpoint['best_epoch'] # if hasattr(checkpoint, 'best_epoch') else 0
+    best_epoch = checkpoint['best_epoch'] # if 'best_epoch' in checkpoint else 0
     print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
 

@@ -471,8 +471,8 @@ def main():
     ## Create a file to log different validation errors over training epochs
     statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
     statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
-    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr")
-    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr")
+    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr\n")
+    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr\n")
 
     ########################
     ############ Train / Validate

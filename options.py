@@ -152,6 +152,8 @@ def setup_comon_options():
                         help='Decay learning rate by this value every decay-epochs (default: 0.1)')
     parser.add_argument('--decay-epochs', default=30, type=int,
                         metavar='M', help='Decay learning rate every this many epochs (default: 10)')
+    parser.add_argument('--min-lr', '--learning-rate', default=1e-5, type=float,
+                        metavar='LR', help='min learning rate (default: 1e-5)')
 
     # Display/Save options
     parser.add_argument('--disp-freq', '-p', default=25, type=int,

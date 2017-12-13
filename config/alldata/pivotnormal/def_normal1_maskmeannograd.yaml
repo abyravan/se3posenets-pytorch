@@ -57,7 +57,7 @@ use-pin-memory: False
 epochs:         20
 start-epoch:    0
 train-ipe:      5000
-val-ipe:        1000
+val-ipe:        2500
 evaluate:       False
 seed:           100
 
@@ -65,6 +65,7 @@ seed:           100
 optimization: adam
 lr:           1e-4
 momentum:     0
+weight-decay: 0
 lr-decay:     0.1
 decay-epochs: 50
 

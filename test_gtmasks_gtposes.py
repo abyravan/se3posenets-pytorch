@@ -518,7 +518,7 @@ def main():
     train_ids, val_ids = [], []
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
-        adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs)
+        adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
 
         # Train for one epoch
         train_stats = iterate(train_loader, model, tblogger, args.train_ipe,
@@ -1351,9 +1351,12 @@ def normalize_img(img, min=-0.01, max=0.01):
     return (img - min) / (max - min)
 
 ### Adjust learning rate
-def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):
+def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_lr=1e-5):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
+    lr = min_lr if (args.lr < min_lr) else lr # Clamp at min_lr
+    print("======== Epoch: {}, Initial learning rate: {}, Current: {}, Min: {} =========".format(
+        epoch, args.lr, lr, min_lr))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 

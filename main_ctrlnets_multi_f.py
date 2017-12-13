@@ -554,15 +554,15 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, is_fbest, is_fcbest, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
+        }, is_best, is_fbest, is_fcbest, savedir=args.save_dir, filename='checkpoint_{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders
     del train_loader, val_loader
 
     # Load best model for testing (not latest one)
-    print("=> loading best model from '{}'".format(args.save_dir + "/model_flowconsis_best.pth.tar"))
-    checkpoint = torch.load(args.save_dir + "/model_flowconsis_best.pth.tar")
+    print("=> loading best model from '{}'".format(args.save_dir + "/model_flow_best.pth.tar"))
+    checkpoint = torch.load(args.save_dir + "/model_flow_best.pth.tar")
     num_train_iter = checkpoint['train_iter']
     try:
         model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)

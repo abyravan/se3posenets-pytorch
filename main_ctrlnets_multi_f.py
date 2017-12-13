@@ -506,30 +506,30 @@ def main():
             best_floss, best_fepoch, sf    = val_floss, epoch+1, 'IMPROVED'
         if is_fcbest:
             best_fcloss, best_fcepoch, sfc = val_fcloss, epoch+1, 'IMPROVED'
-        print('==== [LOSS]   Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+        print('==== [LOSS]   Epoch: {}, Status: {}, Previous best: {:.5f}/{}. Current: {:.5f}/{} ===='.format(
                                     epoch+1, s, prev_best_loss, prev_best_epoch, best_loss, best_epoch))
-        print('==== [FLOSS]  Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+        print('==== [FLOSS]  Epoch: {}, Status: {}, Previous best: {:.5f}/{}. Current: {:.5f}/{} ===='.format(
                                     epoch+1, sf, prev_best_floss, prev_best_fepoch, best_floss, best_fepoch))
-        print('==== [FCLOSS] Epoch: {}, Status: {}, Previous best: {}/{}. Current: {}/{} ===='.format(
+        print('==== [FCLOSS] Epoch: {}, Status: {}, Previous best: {:.5f}/{}. Current: {:.5f}/{} ===='.format(
                                     epoch+1, sfc, prev_best_fcloss, prev_best_fcepoch, best_loss, best_fcepoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch+1, train_stats.loss.avg,
-                                                                     train_stats.ptloss.avg.sum(),
-                                                                     train_stats.consisloss.avg.sum(),
-                                                                     train_stats.normalloss.avg.sum(),
-                                                                     train_stats.anchorloss.avg.sum(),
-                                                                     train_stats.flowerr_sum.avg.sum()/args.batch_size,
-                                                                     train_stats.flowerr_avg.avg.sum()/args.batch_size,
-                                                                     train_stats.consiserr.avg.sum()))
-        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch + 1, val_stats.loss.avg,
-                                                                     val_stats.ptloss.avg.sum(),
-                                                                     val_stats.consisloss.avg.sum(),
-                                                                     val_stats.normalloss.avg.sum(),
-                                                                     val_stats.anchorloss.avg.sum(),
-                                                                     val_stats.flowerr_sum.avg.sum() / args.batch_size,
-                                                                     val_stats.flowerr_avg.avg.sum() / args.batch_size,
-                                                                     val_stats.consiserr.avg.sum()))
+        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
+                                                                       train_stats.ptloss.avg.sum(),
+                                                                       train_stats.consisloss.avg.sum(),
+                                                                       train_stats.normalloss.avg.sum(),
+                                                                       train_stats.anchorloss.avg.sum(),
+                                                                       train_stats.flowerr_sum.avg.sum()/args.batch_size,
+                                                                       train_stats.flowerr_avg.avg.sum()/args.batch_size,
+                                                                       train_stats.consiserr.avg.sum()))
+        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
+                                                                       val_stats.ptloss.avg.sum(),
+                                                                       val_stats.consisloss.avg.sum(),
+                                                                       val_stats.normalloss.avg.sum(),
+                                                                       val_stats.anchorloss.avg.sum(),
+                                                                       val_stats.flowerr_sum.avg.sum() / args.batch_size,
+                                                                       val_stats.flowerr_avg.avg.sum() / args.batch_size,
+                                                                       val_stats.consiserr.avg.sum()))
 
         # Save checkpoint
         save_checkpoint({
@@ -573,11 +573,11 @@ def main():
     best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
     best_fepoch  = checkpoint['best_flow_epoch'] if 'best_flow_epoch' in checkpoint else 0
     best_fcepoch = checkpoint['best_flowconsis_epoch'] if 'best_flowconsis_epoch' in checkpoint else 0
-    print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
+    print('==== Best validation loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
-    print('==== Best validation flow loss: {} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
+    print('==== Best validation flow loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
                                                                          best_fepoch))
-    print('==== Best validation flow-consis loss: {} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
+    print('==== Best validation flow-consis loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
                                                                          best_fcepoch))
 
     # Do final testing (if not asked to evaluate)
@@ -590,11 +590,11 @@ def main():
                                     collate_fn=test_dataset.collate_batch))
     test_stats = iterate(test_loader, model, tblogger, len(test_loader),
                          mode='test', epoch=args.epochs)
-    print('==== Best validation loss: {} was from epoch: {} ===='.format(checkpoint['best_loss'],
+    print('==== Best validation loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
-    print('==== Best validation flow loss: {} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
+    print('==== Best validation flow loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_flow_loss'],
                                                                          best_fepoch))
-    print('==== Best validation flow-consis loss: {} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
+    print('==== Best validation flow-consis loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_flowconsis_loss'],
                                                                          best_fcepoch))
 
     # Save final test error
@@ -608,14 +608,14 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}".format(epoch+1, test_stats.loss.avg,
-                                                                 test_stats.ptloss.avg.sum(),
-                                                                 test_stats.consisloss.avg.sum(),
-                                                                 test_stats.normalloss.avg.sum(),
-                                                                 test_stats.anchorloss.avg.sum(),
-                                                                 test_stats.flowerr_sum.avg.sum() / args.batch_size,
-                                                                 test_stats.flowerr_avg.avg.sum() / args.batch_size,
-                                                                 test_stats.consiserr.avg.sum()))
+    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, test_stats.loss.avg,
+                                                                   test_stats.ptloss.avg.sum(),
+                                                                   test_stats.consisloss.avg.sum(),
+                                                                   test_stats.normalloss.avg.sum(),
+                                                                   test_stats.anchorloss.avg.sum(),
+                                                                   test_stats.flowerr_sum.avg.sum() / args.batch_size,
+                                                                   test_stats.flowerr_avg.avg.sum() / args.batch_size,
+                                                                   test_stats.consiserr.avg.sum()))
     statsvfile.close(); statstfile.close()
 
     # Close log file

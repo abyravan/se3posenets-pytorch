@@ -827,7 +827,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 posecenter = poses[k][:,:,:,3] # Translation points (B x K x 3)
                 # Compute loss
                 curranchorloss = anchor_wt * ctrlnets.BiMSELoss(maskmean, posecenter)
-                if args.pose_anchor_grad_clip:
+                if args.pose_anchor_grad_clip and mode =='train':
                     curranchorloss = clip_grad(curranchorloss, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid explosive gradient
                 loss += curranchorloss
                 anchorloss[k] = curranchorloss.data[0]

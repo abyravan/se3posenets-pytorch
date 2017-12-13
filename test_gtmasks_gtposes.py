@@ -765,7 +765,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             deltapred, trans = model.forward_next_pose(pose0, ctrls[:,0], jtangles[:,0])
 
         ### 3) Compute pivots and update the delta transforms
-        if args.pivot_type != 'none':
+        if args.pivot_type.lower() != 'none':
             bsz, nse3 = deltapred.size(0), deltapred.size(1)
             if args.pivot_type == 'posecenter':
                 pivot = pose0.narrow(3,3,1).clone().view(bsz*nse3,3,1)

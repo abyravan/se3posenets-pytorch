@@ -1049,6 +1049,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-stillerrsum': stillerr_sum.sum() / bsz,
                 mode+'-stillerravg': stillerr_avg.sum() / bsz,
             }
+            if mode == 'train':
+                info[mode+'-lr'] = args.curr_lr # Plot current learning rate
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
 
@@ -1243,6 +1245,7 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10):
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+    args.curr_lr = lr
 
 ### Gradient clipping hook
 def clip_grad(v, min, max):

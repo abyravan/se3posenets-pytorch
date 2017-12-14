@@ -68,9 +68,10 @@ seed:           100
 optimization: adam
 lr:           1e-4
 momentum:     0
-weight-decay: 0
+weight-decay: 1e-4
 lr-decay:     0.1
-decay-epochs: 50
+decay-epochs: 10
+min-lr:		  1e-5
 
 # Display/Save options
 disp-freq: 50

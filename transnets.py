@@ -3,6 +3,50 @@ import torch.nn as nn
 import se3layers as se3nn
 import ctrlnets
 
+import torch.nn.functional as F
+import util
+
+####################################
+### Define a function that goes from SE3AA4 to R|t
+def se3aa4_to_rt(se3s):
+    bsz, nse3, ndim = se3s.size() # Assumes that se3s are lined out as: [tx,ty,tz,rx,ry,rz,theta]
+    assert (ndim == 7) or (ndim == 10), "Num. SE3 dimensions need to be equal to 10. Curr: {}".format(ndim)
+    t     = se3s.view(bsz,nse3,ndim,1).narrow(2,0,3) # Get translations as 3x1 vector
+    if (ndim == 10):
+        p = se3s.view(bsz,nse3,ndim,1).narrow(2,7,3) # Get pivots if they exist
+    # Get axis, normalize it and create skew symmetric matrix
+    axis  = F.normalize(se3s.view(bsz*nse3,ndim).narrow(1,3,3), p=2, dim=1) # Get rotation axis (B*K x 3)
+    K = torch.cat([axis.narrow(1,0,1)*0, -axis.narrow(1,2,1)  ,  axis.narrow(1,1,1),
+                   axis.narrow(1,2,1)  ,  axis.narrow(1,1,1)*0, -axis.narrow(1,0,1),
+                  -axis.narrow(1,1,1)  ,  axis.narrow(1,0,1)  ,  axis.narrow(1,2,1)*0], dim=1).view(bsz*nse3,3,3) # From: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+    K2= torch.bmm(K,K) # B*K x 3 x 3
+
+    # Get angle & compute sin/cos
+    angle = se3s.view(bsz*nse3,ndim).narrow(1,6,1) # Get rotation angle  (B*K x 1)
+    S, C  = torch.sin(angle).view(bsz*nse3,1,1), (1.0 - torch.cos(angle)).view(bsz*nse3,1,1)
+
+    # Compute rotation matrix
+    I = util.to_var(torch.eye(3).view(1,3,3).expand(bsz*nse3,3,3).type_as(se3s.data).clone())
+    R = I + K * S + K2 * C # # From: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+
+    # Concat R|t
+    if (ndim == 7):
+        Rt = torch.cat([R.view(bsz,nse3,3,3), t], dim=3) # B x K x 3 x 4
+    else:
+        Rt = torch.cat([R.view(bsz,nse3,3,3), t, p], dim=3)  # B x K x 3 x 5
+    return Rt
+
+### Gradcheck code
+'''
+import transnets
+import torch
+from torch.autograd import gradcheck
+torch.set_default_tensor_type('torch.DoubleTensor')
+input1 = torch.autograd.Variable(torch.rand(2, 2, 7), requires_grad=True)
+
+assert (gradcheck(transnets.se3aa4_to_rt, [input1]))
+'''
+
 ####################################
 ### Transition model (predicts change in poses based on the applied control)
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
@@ -12,6 +56,7 @@ class TransitionModel(nn.Module):
                  local_delta_se3=False, use_jt_angles=False, num_state=7, use_bn=False,
                  use_snn=False):
         super(TransitionModel, self).__init__()
+        self.se3_type = se3_type
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
 
@@ -50,7 +95,8 @@ class TransitionModel(nn.Module):
         self.delta_pivot = delta_pivot
         self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
         self.deltaposedecoder = nn.Sequential()
-        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        if (se3_type != 'se3aa4'):
+            self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
         if (self.delta_pivot != ''):
             self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
         #if use_kinchain:
@@ -95,6 +141,8 @@ class TransitionModel(nn.Module):
         x = x.view(-1, self.num_se3, self.se3_dim)
         if self.inp_pivot: # For these two cases, we don't need to handle anything
             x = torch.cat([x, pivot.view(-1, self.num_se3, 3)], 2) # Use externally provided pivots
+        if self.se3_type == 'se3aa4':
+            x = se3aa4_to_rt(x) # Convert to R|t first
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly
@@ -139,7 +187,10 @@ class SimpleTransitionModel(nn.Module):
             ctrlnets.init_se3layer_identity(self.deltase3decoder[-1], num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
-        self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
+        if se3_type == 'se3aa4':
+            self.deltaposedecoder = se3aa4_to_rt
+        else:
+            self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
 
         # Compose deltas with prev pose to get next pose
         # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
@@ -193,7 +244,10 @@ class SimpleDenseNetTransitionModel(nn.Module):
             ctrlnets.init_se3layer_identity(self.deltase3decoder, num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
-        self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
+        if se3_type == 'se3aa4':
+            self.deltaposedecoder = se3aa4_to_rt
+        else:
+            self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (delta_pivot != ''))  # Convert to Rt
 
         # Compose deltas with prev pose to get next pose
         # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
@@ -236,6 +290,7 @@ class DeepTransitionModel(nn.Module):
         super(DeepTransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
+        self.se3_type = se3_type
 
         # Type of linear layer
         linlayer = ctrlnets.SelfNormalizingLinear if use_snn else \
@@ -274,7 +329,8 @@ class DeepTransitionModel(nn.Module):
         self.delta_pivot = delta_pivot
         self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
         self.deltaposedecoder = nn.Sequential()
-        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        if se3_type != 'se3aa4':
+            self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
         if (self.delta_pivot != ''):
             self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
         #if use_kinchain:
@@ -316,6 +372,8 @@ class DeepTransitionModel(nn.Module):
         x = x.view(-1, self.num_se3, self.se3_dim)
         if self.inp_pivot: # For these two cases, we don't need to handle anything
             x = torch.cat([x, pivot.view(-1, self.num_se3, 3)], 2) # Use externally provided pivots
+        if self.se3_type == 'se3aa4':
+            x = se3aa4_to_rt(x)  # Convert to R|t first
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly

@@ -253,7 +253,7 @@ def main():
         args.mesh_ids      = args.baxter_labels['meshIds']
 
     # SE3 stuff
-    assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat']), 'Unknown SE3 type: ' + args.se3_type
+    assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat', 'se3aa4']), 'Unknown SE3 type: ' + args.se3_type
     args.delta_pivot = '' if (args.delta_pivot == 'None') else args.delta_pivot # Workaround since we can't specify empty string in the yaml
     assert (args.delta_pivot in ['', 'pred', 'ptmean', 'maskmean', 'maskmeannograd', 'posecenter']),\
         'Unknown delta pivot type: ' + args.delta_pivot

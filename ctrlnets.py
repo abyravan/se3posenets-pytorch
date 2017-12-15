@@ -30,7 +30,7 @@ def get_nonlinearity(nonlinearity):
 def get_se3_dimension(se3_type, use_pivot):
     # Get dimension (6 for se3aa, se3euler, se3spquat)
     se3_dim = 6
-    if se3_type == 'se3quat':
+    if se3_type == 'se3quat' or se3_type == 'se3aa4':
         se3_dim = 7
     elif se3_type == 'affine':
         se3_dim = 12

@@ -465,7 +465,7 @@ class PoseEncoder(nn.Module):
 class MaskEncoder(nn.Module):
     def __init__(self, num_se3, pre_conv=False, input_channels=3, use_bn=True, nonlinearity='prelu',
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 use_sigmoid_mask=False, wide=False, full_res=False):
+                 use_sigmoid_mask=False, wide=False, full_res=False, noise_stop_iter=1e6):
         super(MaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -542,6 +542,7 @@ class MaskEncoder(nn.Module):
             self.sharpen_start_iter = sharpen_start_iter  # Start iter for the sharpening
             self.sharpen_rate = sharpen_rate  # Rate for sharpening
             self.maskdecoder = sharpen_masks  # Use the weight-sharpener
+            self.noise_stop_iter = noise_stop_iter # Stop adding noise after this many iters
         elif use_sigmoid_mask:
             #lastdeconvlayer = self.deconv5.deconv if pre_conv else self.deconv5
             #init_sigmoidmask_bg(lastdeconvlayer, num_se3) # Initialize last deconv layer to predict BG | all zeros
@@ -555,6 +556,8 @@ class MaskEncoder(nn.Module):
         if (citer > 0):
             noise_std = min((citer / 125000.0) * self.sharpen_rate,
                             0.1)  # Should be 0.1 by ~12500 iters from start (if rate=1)
+            if hasattr(self, 'noise_stop_iter') and train_iter > self.noise_stop_iter:
+                noise_std = 0
             pow = min(1 + (citer / 500.0) * self.sharpen_rate,
                       100)  # Should be 26 by ~12500 iters from start (if rate=1)
         return noise_std, pow
@@ -609,7 +612,7 @@ class PoseMaskEncoder(nn.Module):
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -689,6 +692,7 @@ class PoseMaskEncoder(nn.Module):
             self.sharpen_start_iter = sharpen_start_iter # Start iter for the sharpening
             self.sharpen_rate = sharpen_rate # Rate for sharpening
             self.maskdecoder = sharpen_masks # Use the weight-sharpener
+            self.noise_stop_iter = noise_stop_iter
         elif use_sigmoid_mask:
             #lastdeconvlayer = self.deconv5.deconv if pre_conv else self.deconv5
             #init_sigmoidmask_bg(lastdeconvlayer, num_se3) # Initialize last deconv layer to predict BG | all zeros
@@ -738,6 +742,8 @@ class PoseMaskEncoder(nn.Module):
         noise_std, pow = 0, 1
         if (citer > 0):
             noise_std = min((citer/125000.0) * self.sharpen_rate, 0.1) # Should be 0.1 by ~12500 iters from start (if rate=1)
+            if hasattr(self, 'noise_stop_iter') and train_iter > self.noise_stop_iter:
+                noise_std = 0
             pow = min(1 + (citer/500.0) * self.sharpen_rate, 100) # Should be 26 by ~12500 iters from start (if rate=1)
         return noise_std, pow
 
@@ -935,7 +941,7 @@ class SE3PoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(SE3PoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -946,7 +952,7 @@ class SE3PoseModel(nn.Module):
                                              sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                              use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                              use_jt_angles=use_jt_angles, num_state=num_state,
-                                             full_res=full_res)
+                                             full_res=full_res, noise_stop_iter=noise_stop_iter)
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
                                                se3_type=se3_type, use_kinchain=use_kinchain,
@@ -989,7 +995,7 @@ class SE3OnlyPoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(SE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -1042,7 +1048,7 @@ class SE3OnlyMaskModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(SE3OnlyMaskModel, self).__init__()
 
         # Initialize the pose-mask model
@@ -1051,7 +1057,7 @@ class SE3OnlyMaskModel(nn.Module):
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                     full_res=full_res)
+                                     full_res=full_res, noise_stop_iter=noise_stop_iter)
 
     # Forward pass through the model
     def forward(self, x, train_iter=0):
@@ -1075,7 +1081,7 @@ class SE3DecompModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(SE3DecompModel, self).__init__()
 
         # Initialize the pose model
@@ -1092,7 +1098,7 @@ class SE3DecompModel(nn.Module):
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                     full_res=full_res)
+                                     full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
@@ -1141,7 +1147,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1159,7 +1165,7 @@ class MultiStepSE3PoseModel(nn.Module):
                                          nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                          sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                          use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                         full_res=full_res)
+                                         full_res=full_res, noise_stop_iter=noise_stop_iter)
         else:
             print('Using single network for pose & mask prediction')
             self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
@@ -1169,7 +1175,7 @@ class MultiStepSE3PoseModel(nn.Module):
                                                  sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                                  use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                                  use_jt_angles=use_jt_angles, num_state=num_state,
-                                                 full_res=full_res)
+                                                 full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
@@ -1225,7 +1231,7 @@ class MultiStepSE3OnlyPoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3OnlyPoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1279,7 +1285,7 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3OnlyMaskModel, self).__init__()
 
         # Initialize the mask model
@@ -1288,7 +1294,7 @@ class MultiStepSE3OnlyMaskModel(nn.Module):
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                     full_res=full_res)
+                                     full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
@@ -1334,7 +1340,7 @@ class MultiStepSE3OnlyMaskNoTransModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3OnlyMaskNoTransModel, self).__init__()
 
         # Initialize the mask model
@@ -1343,7 +1349,7 @@ class MultiStepSE3OnlyMaskNoTransModel(nn.Module):
                                      nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                      sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                      use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                     full_res=full_res)
+                                     full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Options
         self.use_jt_angles_trans = use_jt_angles_trans
@@ -1379,7 +1385,7 @@ class MultiStepSE3OnlyTransModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3OnlyTransModel, self).__init__()
 
         # Initialize the transition model
@@ -1427,7 +1433,7 @@ class MultiStepSE3NoTransModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False):
+                 full_res=False, noise_stop_iter=1e6):
         super(MultiStepSE3NoTransModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1445,7 +1451,7 @@ class MultiStepSE3NoTransModel(nn.Module):
                                          nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
                                          sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                          use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                         full_res=full_res)
+                                         full_res=full_res, noise_stop_iter=noise_stop_iter)
         else:
             print('Using single network for pose & mask prediction')
             self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
@@ -1455,7 +1461,7 @@ class MultiStepSE3NoTransModel(nn.Module):
                                                  sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                                  use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                                  use_jt_angles=use_jt_angles, num_state=num_state,
-                                                 full_res=full_res)
+                                                 full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Options
         self.use_jt_angles = use_jt_angles

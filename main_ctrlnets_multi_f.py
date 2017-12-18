@@ -240,8 +240,8 @@ def main():
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
-        print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}'.format(
-            args.sharpen_start_iter, args.sharpen_rate))
+        print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}, Noise stop iter: {}'.format(
+            args.sharpen_start_iter, args.sharpen_rate, args.noise_stop_iter))
 
     # Normal loss
     if (args.normal_wt > 0):
@@ -399,7 +399,7 @@ def main():
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
-                    full_res=args.full_res)
+                    full_res=args.full_res, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

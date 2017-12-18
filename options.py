@@ -99,6 +99,8 @@ def setup_comon_options():
                         metavar='N', help='Start the weight sharpening from this training iteration (default: 0)')
     parser.add_argument('--sharpen-rate', default=1.0, type=float,
                         metavar='W', help='Slope of the weight sharpening (default: 1.0)')
+    parser.add_argument('--noise-stop-iter', default=1e6, type=int,
+                        metavar='N', help='Stop noise addition during weight sharpening from this training iteration(default: 1e6)')
     parser.add_argument('--use-sigmoid-mask', action='store_true', default=False,
                         help='treat each mask channel independently using the sigmoid non-linearity. Pixel can belong to multiple masks (default: False)')
     parser.add_argument('--soft-wt-sharpening', action='store_true', default=False,

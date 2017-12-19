@@ -168,13 +168,18 @@ def MotionNormalizedLoss3D(input, target, motion, loss_type='mse',
     return loss
 
 # Loss for normal error
-def NormalLoss(input, target, wts=None):
+def NormalLoss(input, target, wts=None, motion=None, thresh=2.5e-3):
     # Get number of "visible" points that move in each example of the batch
     bsz = input.size(0) # batch size
     assert input.is_same_size(target), "Input and Target sizes need to match"
     weights = wts.view(bsz,-1) if wts is not None else 1 # Per-point scalar
     cossim  = 1.0 - F.cosine_similarity(input, target, dim=1).view(bsz,-1) # BxHxW #### (1 - cos(theta))
-    loss    = (weights * cossim).mean()
+    if motion is None:
+        loss    = (weights * cossim).mean()
+    else:
+        nummotionpts = 1.0 if motion is None else \
+            ((motion.abs().sum(1) > thresh).type_as(wts) * wts).float().view(bsz, -1).sum(1).clamp(min=100)  # Takes care of numerical instabilities & acts as margin
+        loss = (weights * cossim).sum(1).div(nummotionpts).mean() # Divide by num points moving for each example of batch & average across batch
     return loss
 
 ### Pose dis-similarity loss

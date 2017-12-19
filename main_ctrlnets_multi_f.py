@@ -66,6 +66,8 @@ parser.add_argument('--normal-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the cosine distance of normal loss (default: 1)')
 parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
                     metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
+parser.add_argument('--motion-norm-normal-loss', action='store_true', default=False,
+                    help='normalize the normal loss by number of points that actually move instead of all pts (default: False)')
 
 # Define xrange
 try:
@@ -869,7 +871,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             if (args.normal_wt > 0):
                 # Compute loss only for those points which have valid normals & only those which are visible
                 currnormalloss = normal_wt * ctrlnets.NormalLoss(nextunitnormals, tarnormals[:,k],
-                                                                 wts=fwdvis[:,k] * validinitnormals[:,k])
+                                                                 wts=fwdvis[:,k] * validinitnormals[:,k],
+                                                                 motion=targets if args.motion_norm_normal_loss else None)
                 loss += currnormalloss
                 normalloss[k] = currnormalloss.data[0]
                 prednormals = torch.cat(prednormals, 1) # B x S x 3 x H x W

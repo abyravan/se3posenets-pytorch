@@ -6,27 +6,41 @@ from layers._ext import se3layers
 import util
 import cv2
 
-#datadir = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/learn_physics_models/data/singlebox_fixsz_visbullet_2016_04_20_20_55_18_1/bag1002/'
-datadir = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/olddata/baxter_babbling_rarm_3min/postprocessmotions/motion0/'
-cam_extrinsics = data.read_cameradata_file(datadir + '/../cameradata.txt')
+## Real vs sim data
+realdata = True
+ht, wd = 240, 320
+if realdata:
+    datadir = '/home/barun/Projects/se3nets-pytorch/test/normaltest/realdata/'
+    cam_extrinsics = data.read_cameradata_file(datadir + '/cameradata.txt')
+    # Setup camera intrinsics
+    cam_intrinsics = {'fx': 525.0 / 2,
+                      'fy': 525.0 / 2,
+                      'cx': 319.5 / 2,
+                      'cy': 239.5 / 2}
+    suffix, scale = '', 1e-3
+else:
+    #datadir = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/learn_physics_models/data/singlebox_fixsz_visbullet_2016_04_20_20_55_18_1/bag1002/'
+    datadir = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/olddata/baxter_babbling_rarm_3min/postprocessmotions/motion0/'
+    cam_extrinsics = data.read_cameradata_file(datadir + '/../cameradata.txt')
 
-# Setup camera intrinsics
-cam_intrinsics = {'fx': 589.3664541825391 / 2,
-                  'fy': 589.3664541825391 / 2,
-                  'cx': 320.5 / 2,
-                  'cy': 240.5 / 2}
-print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(240, 320,
+    # Setup camera intrinsics
+    cam_intrinsics = {'fx': 589.3664541825391 / 2,
+                      'fy': 589.3664541825391 / 2,
+                      'cx': 320.5 / 2,
+                      'cy': 240.5 / 2}
+    suffix, scale = 'sub', 1e-4
+
+print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(ht, wd,
                                                                             cam_intrinsics['fx'],
                                                                             cam_intrinsics['fy'],
                                                                             cam_intrinsics['cx'],
                                                                             cam_intrinsics['cy']))
-cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(240, 320,
+cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(ht, wd,
                                                                       cam_intrinsics)
 
 # Read depth, labels & clouds (t = 0)
-depth_1  = data.read_depth_image(datadir+'/depthsub1000.png',240,320,1e-4).view(1,1,240,320).clone()
-labels_1 = data.read_label_image(datadir+'/labelssub1000.png',240,320).view(1,1,240,320).clone()
-cloud_1  = se3nn.DepthImageToDense3DPoints(height=240,width=320)(util.to_var(depth_1)).data.clone()
+depth_1  = data.read_depth_image(datadir+'/depth'+suffix+'1000.png',ht,wd,scale).view(1,1,ht,wd).clone()
+labels_1 = data.read_label_image(datadir+'/labels'+suffix+'1000.png',ht,wd).view(1,1,ht,wd).clone()
 se3state_1 = data.read_baxter_se3state_file(datadir+'/se3state1000.txt')
 poses_1    = torch.Tensor(1, len(se3state_1)+1, 3, 4).fill_(0) # Setup size
 poses_1[0,0,:,0:3] = torch.eye(3).float()  # Identity transform for BG
@@ -35,15 +49,30 @@ for id, tfm in se3state_1.items():
     poses_1[0][id] = se3tfm[0:3, :] # 3 x 4 transform (id is 1-indexed already, 0 is BG)
 
 # Read depth, labels & clouds (t = 10)
-depth_2  = data.read_depth_image(datadir+'/depthsub2000.png',240,320,1e-4).view(1,1,240,320).clone()
-labels_2 = data.read_label_image(datadir+'/labelssub2000.png',240,320).view(1,1,240,320).clone()
-cloud_2  = se3nn.DepthImageToDense3DPoints(height=240,width=320)(util.to_var(depth_2)).data.clone()
+depth_2  = data.read_depth_image(datadir+'/depth'+suffix+'2000.png',ht,wd,scale).view(1,1,ht,wd).clone()
+labels_2 = data.read_label_image(datadir+'/labels'+suffix+'2000.png',ht,wd).view(1,1,ht,wd).clone()
 se3state_2 = data.read_baxter_se3state_file(datadir+'/se3state2000.txt')
 poses_2  = torch.Tensor(1, len(se3state_2)+1, 3, 4).fill_(0) # Setup size
 poses_2[0,0,:,0:3] = torch.eye(3).float()  # Identity transform for BG
 for id, tfm in se3state_2.items():
     se3tfm = torch.mm(cam_extrinsics['modelView'], tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
     poses_2[0][id] = se3tfm[0:3, :] # 3 x 4 transform (id is 1-indexed already, 0 is BG)
+
+# Do bilateral smoothing
+depths_1 = data.BilateralDepthSmoothing(depth=depth_1, width=9, depthstd=0.005) # 1mm std.dev
+depths_2 = data.BilateralDepthSmoothing(depth=depth_2, width=9, depthstd=0.005) # 1mm std.dev
+
+# Viz
+import matplotlib.pyplot as plt
+plt.ion()
+plt.figure(100); plt.imshow(depth_1.squeeze().numpy())
+plt.figure(101); plt.imshow(depths_1.squeeze().numpy())
+plt.figure(102); plt.imshow((depth_1 - depths_1).abs().squeeze().numpy())
+plt.show()
+
+# Compute point clouds
+cloud_1  = se3nn.DepthImageToDense3DPoints(height=ht,width=wd)(util.to_var(depths_1)).data.clone()
+cloud_2  = se3nn.DepthImageToDense3DPoints(height=ht,width=wd)(util.to_var(depths_2)).data.clone()
 
 # Compute the flows and visibility
 tarpts    = cloud_2    # t+1, t+2, t+3, ....
@@ -65,8 +94,8 @@ deltas_12 = data.ComposeRtPair(poses_2, data.RtInverse(poses_1))  # Pose_t+1 * P
 
 
 # Get memory for output
-normals_1  = torch.FloatTensor(1,3,240,320).fill_(0)
-tnormals_2 = torch.FloatTensor(1,3,240,320).fill_(0)
+normals_1  = torch.FloatTensor(1,3,ht,wd).fill_(0)
+tnormals_2 = torch.FloatTensor(1,3,ht,wd).fill_(0)
 
 # Compute the normals
 se3layers.ComputeNormals_float(cloud_1,
@@ -88,6 +117,9 @@ tcloud2   = (tcloud_2.squeeze().permute(1,2,0).clone().numpy() * 1e4).astype(np.
 tnormals2 = (tnormals_2.squeeze().permute(1,2,0).clone().numpy() * 1e4).astype(np.uint16)
 cv2.imwrite("/home/barun/Projects/se3nets-pytorch/test/normaltest/displaynormals/cloud2.png", tcloud2)
 cv2.imwrite("/home/barun/Projects/se3nets-pytorch/test/normaltest/displaynormals/normals2.png", tnormals2)
+
+# Wait before quitting
+plt.pause(25)
 
 # # Read camera data
 # state = data.read_box_state_file(datadir+'/state0.txt')

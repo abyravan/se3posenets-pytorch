@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import cv2
 import os
+import math
 from torch.utils.data import Dataset
 import se3layers as se3nn
 from torch.autograd import Variable
@@ -438,6 +439,38 @@ def ComputeNormals(cloud_1, cloud_2, label_1, delta_12,
     # Return
     return normal_1, normal_2, valid_normal_1, valid_normal_2
 
+
+### Compute fwd/bwd visibility (for points in time t, which are visible in time t+1 & vice-versa)
+# Expects 4D inputs: seq x ndim x ht x wd (or seq x ndim x 3 x 4)
+def BilateralDepthSmoothing(depth, width=9, depthstd=0.001):
+    # Create memory
+    seq, dim, ht, wd = depth.size()
+    assert(dim == 1) # Depth only
+    depth_s = torch.FloatTensor(seq, dim, ht, wd).type_as(depth)
+
+    # Create half of the smoothing kernel (in position space)
+    # This is symmetric about zero (so we only go from 0->width/2)
+    # It is also same for x & y so it's a symmetric 2D Gaussian with independent x and y
+    lockernel = torch.zeros(width//2+1) # TODO: Is this correct for even sized kernels?
+    lockernelstd = lockernel.nelement()/2. # Std deviation in pixel space (~1/2 of half the kernel size, for a 9x9 kernel it is 2.5 pixels)
+    for k in range(lockernel.nelement()):
+        lockernel[k] = math.exp(-(k*k) / (2.0*lockernelstd*lockernelstd))
+
+    # Call cpp/CUDA functions
+    if depth.is_cuda:
+        assert NotImplementedError, "Only Float version implemented!"
+    else:
+        assert (depth.type() == 'torch.FloatTensor')
+        # This computes normals for the initial cloud and transforms
+        # these based on the R/t to get transformed normal clouds
+        se3layers.BilateralDepthSmoothing_float(depth,
+                                                depth_s,
+                                                lockernel,
+                                                depthstd)
+
+    # Return
+    return depth_s
+
 ############
 ###  SETUP DATASETS: RECURRENT VERSIONS FOR BAXTER DATA - FROM NATHAN'S BAG FILE
 
@@ -707,7 +740,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    #camera_extrinsics={}, camera_intrinsics=[],
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
                                    dathreshold=0.01, dawinsize=5, use_only_da=False,
-                                   noise_func=None, compute_normals=False, maxdepthdiff=0.05):
+                                   noise_func=None, compute_normals=False, maxdepthdiff=0.05,
+                                   bismooth_depths=False, bismooth_width=9, bismooth_std=0.001):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -851,9 +885,28 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Compute normal maps & target normal maps (rot/trans of init ones)
     if compute_normals:
+        # If asked to do bilateral depth smoothing, do it afresh here
+        if bismooth_depths:
+            # Compute smoothed depths
+            depths_s = BilateralDepthSmoothing(depths, bismooth_width, bismooth_std)
+            points_s = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd) # Create "smoothed" pts
+            points_s[:,2].copy_(depths_s) # Copy smoothed depths
+
+            # Compute x & y values for the 3D points (= xygrid * depths)
+            xy_s = points_s[:, 0:2]
+            xy_s.copy_(camera_intrinsics['xygrid'].expand_as(xy_s))  # = xygrid
+            xy_s.mul_(depths_s.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
+
+            # Get init and tar pts
+            initpt_s = points_s[0:1].expand_as(tarpts)
+            tarpts_s = points_s[1:]  # t+1, t+2, t+3, ....
+        else:
+            initpt_s = initpt # Use unsmoothed init pts
+            tarpts_s = tarpts # Use unsmoothed tar pts
+
         tardeltas = ComposeRtPair(tarposes, RtInverse(initpose.clone()))  # Pose_t+1 * Pose_t^-1
         initnormals, tarnormals,\
-        validinitnormals, validtarnormals = ComputeNormals(initpt, tarpts, initlabel, tardeltas,
+        validinitnormals, validtarnormals = ComputeNormals(initpt_s, tarpts_s, initlabel, tardeltas,
                                                            maxdepthdiff=maxdepthdiff)
 
     # Return loaded data

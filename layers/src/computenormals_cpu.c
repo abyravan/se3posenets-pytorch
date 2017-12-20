@@ -174,3 +174,111 @@ int ComputeNormals_float(
     // Return
     return 1;
 }
+
+
+// ===== FLOAT DATA
+
+long min(long a, long b)
+{
+    return (a > b) ? b : a;
+}
+
+long max(long a, long b)
+{
+    return (a > b) ? a : b;
+}
+
+int BilateralDepthSmoothing_float(
+            THFloatTensor *depth_i,
+            THFloatTensor *depth_o,
+            THFloatTensor *lochalfkernel,
+            float depthstd)
+{
+    // Initialize vars
+    long batchsize = depth_i->size[0];
+    long ndim      = depth_i->size[1];
+    long nrows     = depth_i->size[2];
+    long ncols     = depth_i->size[3];
+    assert(ndim == 1);
+
+    // New memory in case the inputs are not contiguous
+    depth_i       = THFloatTensor_newContiguous(depth_i);
+    depth_o       = THFloatTensor_newContiguous(depth_o);
+    lochalfkernel = THFloatTensor_newContiguous(lochalfkernel);
+
+    // Get data pointers
+    const float *depthi_data 	    = THFloatTensor_data(depth_i);
+    float *deptho_data 	            = THFloatTensor_data(depth_o);
+    const float *lochalfkernel_data = THFloatTensor_data(lochalfkernel);
+
+    // Set output depth to zero by default
+    THFloatTensor_fill(depth_o, 0);
+
+    // Get kernel width
+    int kdim = lochalfkernel->nDimension; assert(kdim == 1); // Kernel is 1D
+    long khalfwidth = lochalfkernel->size[0]-1; // half-width of kernel (-khalfwidth -> khalfwidth)
+
+    // Depth std.
+    float oneOverTwoSigmaDepth = 0.5/(depthstd*depthstd); // 1/2*sigma^2
+
+    // Get strides
+    long *ds = depth_i->stride;
+
+    /// ====== Iterate over all pixels, compute smoothed depths
+    long b,r,c;
+    for(b = 0; b < batchsize; b++)
+    {
+        for(r = 0; r < nrows; r++)
+        {
+            for(c = 0; c < ncols; c++)
+            {
+                // Get center value
+                long vald = b*ds[0] + r*ds[2] + c*ds[3]; // Don't add stride along 3D dim
+                float center = *(depthi_data + vald); // Depth at center
+                if (center) // Only for pixels with non-zero depth
+                {
+                    // Iterate over the window and compute smoothed result
+                    float totalWeight = 0;
+                    float totalValue  = 0;
+
+                    // Get window extents around current pixel
+                    const long drMin = max(-khalfwidth, -r);
+                    const long drMax = min( khalfwidth, nrows-r-1);
+                    const long dcMin = max(-khalfwidth, -c);
+                    const long dcMax = min( khalfwidth, ncols-c-1);
+                    long dr, dc;
+                    for (dr = drMin; dr <= drMax; dr++)
+                    {
+                        for (dc = dcMin; dc <= dcMax; dc++)
+                        {
+                            float val = *(depthi_data + vald + dr*ds[2] + dc*ds[3]); // pixel at (r+dr, c+dc)
+                            if (val) // Use non-zero depth only
+                            {
+                                // Compute weight under Gaussian in depth space & multiply with Gaussian in position space
+                                float diff = val - center;
+                                float wt = lochalfkernel_data[abs(dr)] * lochalfkernel_data[abs(dc)] *
+                                           exp(-(diff * diff) * oneOverTwoSigmaDepth);
+
+                                // Gather sums
+                                totalWeight += wt;
+                                totalValue  += wt * val;
+
+                            }
+                        }
+                    }
+
+                    // Save smoothed value
+                    *(deptho_data + vald) =  totalValue / totalWeight;
+                }
+            }
+        }
+    }
+
+    // Free contiguous
+    THFloatTensor_free(depth_i);
+    THFloatTensor_free(depth_o);
+    THFloatTensor_free(lochalfkernel);
+
+    // Return
+    return 1;
+}

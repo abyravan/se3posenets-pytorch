@@ -24,6 +24,7 @@ int main( int /*argc*/, char** /*argv*/ )
     int panelWidth = 180;
     pangolin::CreatePanel("gui").SetBounds(0.0,1,0,pangolin::Attach::Pix(panelWidth));
     static pangolin::Var<int> arrowDensity("gui.arrowDensity",4,1,10);
+    static pangolin::Var<float> arrowLength("gui.arrowLength",0.025,0.005,0.1);
 
     pangolin::OpenGlRenderState camState1(glK_pangolin);
     pangolin::OpenGlRenderState camState2(glK_pangolin);
@@ -122,9 +123,9 @@ int main( int /*argc*/, char** /*argv*/ )
                 glVertex3f(((short) x(0)) * 1e-4,
                            ((short) x(1)) * 1e-4,
                            ((short) x(2)) * 1e-4);
-                glVertex3f(((short) x(0)) * 1e-4 + ((short) n(0)) * 1e-4 * 0.05,
-                           ((short) x(1)) * 1e-4 + ((short) n(1)) * 1e-4 * 0.05,
-                           ((short) x(2)) * 1e-4 + ((short) n(2)) * 1e-4 * 0.05);
+                glVertex3f(((short) x(0)) * 1e-4 + ((short) n(0)) * 1e-4 * arrowLength,
+                           ((short) x(1)) * 1e-4 + ((short) n(1)) * 1e-4 * arrowLength,
+                           ((short) x(2)) * 1e-4 + ((short) n(2)) * 1e-4 * arrowLength);
             }
         }
         glEnd();
@@ -175,9 +176,9 @@ int main( int /*argc*/, char** /*argv*/ )
                 glVertex3f(((short) x(0)) * 1e-4,
                            ((short) x(1)) * 1e-4,
                            ((short) x(2)) * 1e-4);
-                glVertex3f(((short) x(0)) * 1e-4 + ((short) n(0)) * 1e-4 * 0.05,
-                           ((short) x(1)) * 1e-4 + ((short) n(1)) * 1e-4 * 0.05,
-                           ((short) x(2)) * 1e-4 + ((short) n(2)) * 1e-4 * 0.05);
+                glVertex3f(((short) x(0)) * 1e-4 + ((short) n(0)) * 1e-4 * arrowLength,
+                           ((short) x(1)) * 1e-4 + ((short) n(1)) * 1e-4 * arrowLength,
+                           ((short) x(2)) * 1e-4 + ((short) n(2)) * 1e-4 * arrowLength);
             }
         }
         glEnd();

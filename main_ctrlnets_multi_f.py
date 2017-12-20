@@ -68,6 +68,12 @@ parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
                     metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
 parser.add_argument('--motion-norm-normal-loss', action='store_true', default=False,
                     help='normalize the normal loss by number of points that actually move instead of all pts (default: False)')
+parser.add_argument('--bilateral-depth-smoothing', action='store_true', default=False,
+                    help='do bilateral depth smoothing before computing normals (default: False)')
+parser.add_argument('--bilateral-window-width', default=9, type=int,
+                    metavar='K', help='Size of window for bilateral filtering (default: 9x9)')
+parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
+                    metavar='WT', help='Standard deviation in depth for bilateral filtering kernel (default: 0.005)')
 
 # Define xrange
 try:
@@ -248,6 +254,10 @@ def main():
     # Normal loss
     if (args.normal_wt > 0):
         print('Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.normal_wt))
+        if args.bilateral_depth_smoothing:
+            print('Applying bi-lateral filter to smooth the depths before computing normals.'
+                  ' Window size: {}x{}, Depth std: {}'.format(args.bilateral_window_width, args.bilateral_window_width,
+                                                              args.bilateral_depth_std))
 
     # Pose center anchor loss
     if (args.pose_anchor_wt > 0):
@@ -338,7 +348,10 @@ def main():
                                                  noise_func=noise_func,
                                                  load_color=args.use_xyzrgb,
                                                  compute_normals=(args.normal_wt > 0),
-                                                 maxdepthdiff=args.normal_max_depth_diff) # Need BWD flows / masks if using GT masks
+                                                 maxdepthdiff=args.normal_max_depth_diff,
+                                                 bismooth_depths=args.bilateral_depth_smoothing,
+                                                 bismooth_width=args.bilateral_window_width,
+                                                 bismooth_std=args.bilateral_depth_std) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

@@ -7,3 +7,9 @@ int ComputeNormals_float(
             THFloatTensor *normals_1,
             THFloatTensor *tnormals_2,
             float maxdepthdiff);
+
+int BilateralDepthSmoothing_float(
+            THFloatTensor *depth_i,
+            THFloatTensor *depth_o,
+            THFloatTensor *lochalfkernel,
+            float depthstd);

@@ -39,7 +39,7 @@ use-jt-angles-trans: False
 # Mask options
 use-wt-sharpening: True
 sharpen-start-iter: 0
-sharpen-rate: 1.0
+sharpen-rate: 2.0
 use-sigmoid-mask:  False
 
 # Loss options
@@ -51,6 +51,7 @@ pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0
 normal-wt:			0.1
 normal-max-depth-diff: 0.05
+motion-norm-normal-loss: False
 bilateral-depth-smoothing: True
 bilateral-window-width: 9
 bilateral-depth-std:	0.005

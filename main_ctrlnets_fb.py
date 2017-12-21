@@ -769,8 +769,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             bsz, nse3 = delta.size(0), delta.size(1)
             delta01 = se3nn.CollapseRtPivots()(torch.cat([delta,
                                                           pivot0.view(bsz,nse3,3,1)], 3)) # Transform of delta around pivot0
-            deltainv = se3nn.RtInverse()(delta)
-            delta10 = se3nn.CollapseRtPivots()(torch.cat([deltainv,
+            delta10 = se3nn.CollapseRtPivots()(torch.cat([se3nn.RtInverse()(delta),
                                                           pivot1.view(bsz,nse3,3,1)], 3))  # Transform of delta around pivot1
 
         ### 3) Compute losses (TODO: Add normal losses)
@@ -970,7 +969,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Print the predicted delta-SE3s
                 deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                if pivot0 and pivot1:
+                if pivot0 is not None and pivot1 is not None:
                     deltase3s = torch.cat([deltase3s,
                                            pivot0.data[id].view(args.num_se3,-1).cpu(),
                                            pivot1.data[id].view(args.num_se3, -1).cpu()], 1)

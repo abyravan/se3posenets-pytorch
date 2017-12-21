@@ -39,8 +39,8 @@ class RtInverseFunction(Function):
 		input_v = input.view(-1, 3, 4);
 		r = input_v.narrow(2, 0, 3);
 		t = input_v.narrow(2, 3, 1);
-		ro_g = grad_output.view(-1, 3, 4).narrow(2, 0, 3);
-		to_g = grad_output.view(-1, 3, 4).narrow(2, 3, 1);
+		ro_g = grad_output.contiguous().view(-1, 3, 4).narrow(2, 0, 3);
+		to_g = grad_output.contiguous().view(-1, 3, 4).narrow(2, 3, 1);
 
 		# Initialize grad input
 		input_g = input.new().resize_as_(input);

@@ -32,8 +32,14 @@ import options
 parser = options.setup_comon_options()
 
 # Loss options
-parser.add_argument('--pt-wt', default=1, type=float,
-                    metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
+parser.add_argument('--fwd-pt-wt', default=1.0, type=float,
+                    metavar='WT', help='Weight for the 3D point loss - FWD direction (default: 1)')
+parser.add_argument('--bwd-pt-wt', default=1.0, type=float,
+                    metavar='WT', help='Weight for the 3D point loss - BWD direction (default: 1)')
+parser.add_argument('--fwd-consis-wt', default=10.0, type=float,
+                    metavar='WT', help='Weight for the consistency loss - FWD direction (default: 10)')
+parser.add_argument('--bwd-consis-wt', default=10.0, type=float,
+                    metavar='WT', help='Weight for the consistency loss - BWD direction (default: 10)')
 
 # Pivot options
 parser.add_argument('--pose-center', default='pred', type=str,
@@ -236,8 +242,8 @@ def main():
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
-    print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
-        args.loss_scale, args.pt_wt, args.consis_wt))
+    print('Loss scale: {}, Loss weights (FWD/BWD) => PT: {}/{}, CONSIS: {}/{}'.format(
+        args.loss_scale, args.fwd_pt_wt, args.bwd_pt_wt, args.fwd_consis_wt, args.bwd_consis_wt))
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
@@ -1008,7 +1014,6 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
               # 'Norm:  {:.3f} ({:.3f}),'
               'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               # 'Anchor: {:.3f}/{:.4f}, '
-              # 'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               # 'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(

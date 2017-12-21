@@ -1,13 +1,4 @@
-# Global imports
-import os
-import sys
-import shutil
-import time
-import numpy as np
-import matplotlib.pyplot as plt
-import random
-
-# Torch imports
+# Torch imports (to ensure there are no segfaults due to ld load - mainly on ava)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,6 +7,15 @@ import torch.utils.data
 from torch.autograd import Variable
 import torchvision
 torch.multiprocessing.set_sharing_strategy('file_system')
+
+# Global imports
+import os
+import sys
+import shutil
+import time
+import numpy as np
+import matplotlib.pyplot as plt
+import random
 
 # Local imports
 import se3layers as se3nn
@@ -404,7 +404,7 @@ def main():
     else:
         modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                    se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
+                    se3_type=args.se3_type, delta_pivot='pred' if args.delta_pivot == 'pred' else '', use_kinchain=False, # Never take in pivots except when predicting them
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
@@ -769,8 +769,9 @@ def iterate(data_loader, model, tblogger, num_iters,
             bsz, nse3 = delta.size(0), delta.size(1)
             delta01 = se3nn.CollapseRtPivots()(torch.cat([delta,
                                                           pivot0.view(bsz,nse3,3,1)], 3)) # Transform of delta around pivot0
-            delta10 = se3nn.CollapseRtPivots()(torch.cat([se3nn.RtInverse()(delta),
-                                                          pivot1.view(bsz,nse3,3,1)], 3))  # Transform of delta around pivot0
+            deltainv = se3nn.RtInverse()(delta)
+            delta10 = se3nn.CollapseRtPivots()(torch.cat([deltainv,
+                                                          pivot1.view(bsz,nse3,3,1)], 3))  # Transform of delta around pivot1
 
         ### 3) Compute losses (TODO: Add normal losses)
 

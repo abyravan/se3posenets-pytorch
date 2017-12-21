@@ -908,7 +908,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 info[mode+'-'+sval+'consiserr']    = consiserror[k]
                 info[mode+'-'+sval+'consiserrmax'] = consiserrormax[k]
                 info[mode+'-'+sval+'flowerrsum']   = flowerr_sum[k]/bsz
-                info[mode+'-'+sval+'flowerrsum']   = flowerr_avg[k]/bsz
+                info[mode+'-'+sval+'flowerravg']   = flowerr_avg[k]/bsz
             if mode == 'train':
                 info[mode+'-lr'] = args.curr_lr # Plot current learning rate
             for tag, value in info.items():

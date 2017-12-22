@@ -40,10 +40,10 @@ use-sigmoid-mask:  False
 loss-type:        normmsesqrt
 motion-norm-loss: True
 fwd-pt-wt:        1.0
-bwd-pt-wt:        1.0
+bwd-pt-wt:        0.0
 fwd-consis-wt:    10.0
-bwd-consis-wt:    10.0
-fwd-normal-wt:		0.0
+bwd-consis-wt:    0.0
+fwd-normal-wt:		1.0
 bwd-normal-wt:		0.0
 fwd-poseanchor-wt: 0.0
 bwd-poseanchor-wt: 0.0
@@ -77,5 +77,5 @@ min-lr:		  1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/fwdbwd/def_fwdbwd_pt1_consis10
+save-dir:  trained_nets/alldata/fwdbwd/normal/def_onlyfwd_pt1_consis10_normal1
 disp-err-per-mask: False

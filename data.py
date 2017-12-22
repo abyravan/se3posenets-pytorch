@@ -741,7 +741,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    compute_bwdflows=True, load_color=False, num_tracker=0,
                                    dathreshold=0.01, dawinsize=5, use_only_da=False,
                                    noise_func=None, compute_normals=False, maxdepthdiff=0.05,
-                                   bismooth_depths=False, bismooth_width=9, bismooth_std=0.001):
+                                   bismooth_depths=False, bismooth_width=9, bismooth_std=0.001,
+                                   compute_bwdnormals=False):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -909,6 +910,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         validinitnormals, validtarnormals = ComputeNormals(initpt_s, tarpts_s, initlabel, tardeltas,
                                                            maxdepthdiff=maxdepthdiff)
 
+        # Compute normals in the BWD dirn (along with their transformed versions)
+        if compute_bwdnormals:
+            initdeltas = ComposeRtPair(initpose.clone(), RtInverse(tarposes))  # Pose_t+1 * Pose_t^-1
+            bwdinitnormals, bwdtarnormals, \
+            validbwdinitnormals, validbwdtarnormals = ComputeNormals(tarpts_s, initpt_s, tarlabels, initdeltas,
+                                                                     maxdepthdiff=maxdepthdiff)
+
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
             'controls': controls, 'comconfigs': comconfigs, 'poses': poses,
@@ -922,6 +930,11 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['tarnormals']  = tarnormals
         data['validinitnormals'] = validinitnormals
         data['validtarnormals']  = validtarnormals
+        if compute_bwdnormals:
+            data['bwdinitnormals'] = bwdinitnormals
+            data['bwdtarnormals']  = bwdtarnormals
+            data['validbwdinitnormals'] = validbwdinitnormals
+            data['validbwdtarnormals']  = validbwdtarnormals
     if load_color:
         data['rgbs']   = rgbs
         #data['labels'] = labels

@@ -43,7 +43,10 @@ fwd-pt-wt:        1.0
 bwd-pt-wt:        1.0
 fwd-consis-wt:    10.0
 bwd-consis-wt:    10.0
-normal-wt:			0.0
+fwd-normal-wt:		0.0
+bwd-normal-wt:		0.0
+fwd-poseanchor-wt: 0.0
+bwd-poseanchor-wt: 0.0
 normal-max-depth-diff: 0.05
 bilateral-depth-smoothing: False
 bilateral-window-width: 7

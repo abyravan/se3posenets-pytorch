@@ -40,9 +40,9 @@ use-sigmoid-mask:  False
 loss-type:        normmsesqrt
 motion-norm-loss: True
 fwd-pt-wt:        1.0
-bwd-pt-wt:        1.0
+bwd-pt-wt:        0.0
 fwd-consis-wt:    10.0
-bwd-consis-wt:    10.0
+bwd-consis-wt:    0.0
 fwd-normal-wt:		0.0
 bwd-normal-wt:		0.0
 fwd-poseanchor-wt: 0.0
@@ -54,7 +54,7 @@ bilateral-depth-std: 0.005
 loss-scale:       10000.0
 
 # Pivot options
-delta-pivot: None
+delta-pivot: maskmean
 
 # Training options
 no-cuda:        False
@@ -77,5 +77,5 @@ min-lr:		  1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/fwdbwd/def_fwdbwd_pt1_consis10
+save-dir:  trained_nets/alldata/fwdbwd/def_onlyfwd_pt1_consis10_maskmean
 disp-err-per-mask: False

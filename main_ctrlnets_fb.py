@@ -40,6 +40,14 @@ parser.add_argument('--fwd-consis-wt', default=10.0, type=float,
                     metavar='WT', help='Weight for the consistency loss - FWD direction (default: 10)')
 parser.add_argument('--bwd-consis-wt', default=10.0, type=float,
                     metavar='WT', help='Weight for the consistency loss - BWD direction (default: 10)')
+parser.add_argument('--fwd-normal-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the normal loss - FWD direction (default: 0)')
+parser.add_argument('--bwd-normal-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the normal loss - BWD direction (default: 0)')
+parser.add_argument('--fwd-poseanchor-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the pose anchor loss - FWD direction (default: 0)')
+parser.add_argument('--bwd-poseanchor-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for the pose anchor loss - BWD direction (default: 0)')
 
 # Pivot options
 parser.add_argument('--pose-center', default='pred', type=str,
@@ -61,8 +69,6 @@ parser.add_argument('--box-data', action='store_true', default=False,
                     help='Dataset has box/ball data (default: False)')
 
 # Use normal data
-parser.add_argument('--normal-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for the cosine distance of normal loss (default: 1)')
 parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
                     metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
 parser.add_argument('--motion-norm-normal-loss', action='store_true', default=False,
@@ -251,16 +257,20 @@ def main():
             args.sharpen_start_iter, args.sharpen_rate, args.noise_stop_iter))
 
     # Normal loss
-    if (args.normal_wt > 0):
-        print('Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.normal_wt))
+    if (args.fwd_normal_wt > 0):
+        print('[FWD] Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.fwd_normal_wt))
+        if (args.bwd_normal_wt > 0):
+            print('[BWD] Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.bwd_normal_wt))
         if args.bilateral_depth_smoothing:
             print('Applying bi-lateral filter to smooth the depths before computing normals.'
                   ' Window size: {}x{}, Depth std: {}'.format(args.bilateral_window_width, args.bilateral_window_width,
                                                               args.bilateral_depth_std))
 
     # Pose center anchor loss
-    if (args.pose_anchor_wt > 0):
-        print('Adding loss encouraging pose centers to be close to mask mean. Loss wt: {}'.format(args.pose_anchor_wt))
+    if (args.fwd_poseanchor_wt > 0):
+        print('[FWD] Adding loss encouraging pose centers to be close to mask mean. Loss wt: {}'.format(args.fwd_poseanchor_wt))
+        if (args.bwd_poseanchor_wt > 0):
+            print('[BWD] Adding loss encouraging pose centers to be close to mask mean. Loss wt: {}'.format(args.bwd_poseanchor_wt))
         if args.pose_anchor_maskbprop:
             print("Will backprop pose anchor error gradient to mask mean")
 
@@ -346,11 +356,12 @@ def main():
                                                  use_only_da=args.use_only_da_for_flows,
                                                  noise_func=noise_func,
                                                  load_color=args.use_xyzrgb,
-                                                 compute_normals=(args.normal_wt > 0),
+                                                 compute_normals=(args.fwd_normal_wt > 0),
                                                  maxdepthdiff=args.normal_max_depth_diff,
                                                  bismooth_depths=args.bilateral_depth_smoothing,
                                                  bismooth_width=args.bilateral_window_width,
-                                                 bismooth_std=args.bilateral_depth_std) # Need BWD flows / masks if using GT masks
+                                                 bismooth_std=args.bilateral_depth_std,
+                                                 compute_bwdnormals=(args.fwd_normal_wt > 0)) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -567,7 +578,7 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, is_fbest, is_fcbest, savedir=args.save_dir, filename='checkpoint_{}.pth.tar'.format(epoch+1))
+        }, is_best, is_fbest, is_fcbest, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders
@@ -695,6 +706,8 @@ def iterate(data_loader, model, tblogger, num_iters,
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     fwd_pt_wt, bwd_pt_wt = args.fwd_pt_wt * args.loss_scale, args.bwd_pt_wt * args.loss_scale
     fwd_consis_wt, bwd_consis_wt = args.fwd_consis_wt * args.loss_scale, args.bwd_consis_wt * args.loss_scale
+    fwd_normal_wt, bwd_normal_wt = args.fwd_normal_wt * args.loss_scale, args.bwd_normal_wt * args.loss_scale
+    fwd_poseanchor_wt, bwd_poseanchor_wt = args.fwd_poseanchor_wt * args.loss_scale, args.bwd_poseanchor_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -727,11 +740,16 @@ def iterate(data_loader, model, tblogger, num_iters,
         bwdvis   = util.to_var(sample['bwdvisibilities'].type(deftype), requires_grad=False)
 
         ## TODO: FWD & BWD normals (with smoothing)
-        # # Get normals (if computed)
-        # if (args.normal_wt > 0):
-        #     initnormals = util.to_var(sample['initnormals'].type(deftype), requires_grad=train)
-        #     tarnormals  = util.to_var(sample['tarnormals'].type(deftype), requires_grad=train)
-        #     validinitnormals = util.to_var(sample['validinitnormals'].type(deftype), requires_grad=train)
+        # Get normals (if computed)
+        if (fwd_normal_wt > 0):
+            # FWD
+            fwdinitnormals  = util.to_var(sample['initnormals'].type(deftype), requires_grad=False)
+            fwdtarnormals   = util.to_var(sample['tarnormals'].type(deftype), requires_grad=False)
+            fwdnormalsvalid = util.to_var(sample['validinitnormals'].type(deftype), requires_grad=False)
+            # BWD
+            bwdinitnormals  = util.to_var(sample['bwdinitnormals'].type(deftype), requires_grad=False)
+            bwdtarnormals   = util.to_var(sample['bwdtarnormals'].type(deftype), requires_grad=False)
+            bwdnormalsvalid = util.to_var(sample['validbwdinitnormals'].type(deftype), requires_grad=False)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -741,8 +759,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         start = time.time()
 
         ### 1) Predict poses and masks for t & t+1
-        pose0, mask0 = model.forward_pose_mask([netinput[:, 0], jtangles[:, 0]], train_iter=num_train_iter)
-        pose1, mask1 = model.forward_pose_mask([netinput[:, 1], jtangles[:, 1]], train_iter=num_train_iter)
+        pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
+        pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
         poses, masks = [pose0, pose1], [mask0, mask1]
 
         # Compute pivots for the delta transforms (can be None too)
@@ -803,16 +821,45 @@ def iterate(data_loader, model, tblogger, num_iters,
         currconsisloss_f = fwd_consis_wt * ctrlnets.BiMSELoss(pose1_t, pose1)
         currconsisloss_b = bwd_consis_wt * ctrlnets.BiMSELoss(pose0_t, pose0)
 
+        # c) Normal loss (fwd/bwd)
+        currnormalloss_f, currnormalloss_b, normalloss = 0, 0, torch.zeros(2)
+        if (fwd_normal_wt > 0):
+            delta01rot = delta01.clone(); delta01rot[:,:,:,3] = 0 # No translation
+            delta10rot = delta10.clone(); delta10rot[:,:,:,3] = 0 # No translation
+            prednormals_f = F.normalize(ptpredlayer()(fwdinitnormals[:,0], mask0, delta01rot), p=2, dim=1)
+            prednormals_b = F.normalize(ptpredlayer()(bwdinitnormals[:,0], mask1, delta10rot), p=2, dim=1)
+            currnormalloss_f = fwd_normal_wt * ctrlnets.NormalLoss(prednormals_f, fwdtarnormals[:,0],
+                                                                   wts=fwdvis[:,0] * fwdnormalsvalid[:,0])
+            currnormalloss_b = bwd_normal_wt * ctrlnets.NormalLoss(prednormals_b, bwdtarnormals[:,0],
+                                                                   wts=fwdvis[:,0] * bwdnormalsvalid[:,0])
+            normalloss = torch.Tensor([currnormalloss_f.data[0], currnormalloss_b.data[0]])
+
+        # d) Anchor loss (fwd/bwd)
+        curranchorloss_f, curranchorloss_b, anchorloss = 0, 0, torch.zeros(2)
+        if (fwd_poseanchor_wt > 0) or (bwd_poseanchor_wt > 0):
+            mask0_p = mask0 if args.pose_anchor_maskbprop else util.to_var(mask0.data.clone(), requires_grad=False) # Cut gradient path to mask0
+            mask1_p = mask1 if args.pose_anchor_maskbprop else util.to_var(mask1.data.clone(), requires_grad=False)  # Cut gradient path to mask1
+            anchor0 = se3nn.WeightedAveragePoints()(pts[:,0], mask0_p)
+            anchor1 = se3nn.WeightedAveragePoints()(pts[:,1], mask1_p)
+            curranchorloss_f = fwd_poseanchor_wt * ctrlnets.BiMSELoss(pose0[:,:,:,3], anchor0)
+            curranchorloss_b = bwd_poseanchor_wt * ctrlnets.BiMSELoss(pose1[:,:,:,3], anchor1)
+            if args.pose_anchor_grad_clip and mode == 'train':
+                curranchorloss_f = clip_grad(curranchorloss_f, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid large gradient
+                curranchorloss_b = clip_grad(curranchorloss_b, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid large gradient
+            anchorloss = torch.Tensor([curranchorloss_f.data[0], curranchorloss_b.data[0]])
+
         # Append to total loss
-        loss = currptloss_f + currptloss_b + currconsisloss_f +  currconsisloss_b
+        loss = currptloss_f + currptloss_b + \
+               currconsisloss_f +  currconsisloss_b + \
+               currnormalloss_f + currnormalloss_b +\
+               curranchorloss_f + curranchorloss_b
         ptloss      = torch.Tensor([currptloss_f.data[0], currptloss_b.data[0]])
         consisloss  = torch.Tensor([currconsisloss_f.data[0], currconsisloss_b.data[0]])
-        normalloss, anchorloss  = torch.zeros(2), torch.zeros(2) # TODO: Add these
 
         # Update stats
+        stats.loss.update(loss.data[0])
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
-        stats.loss.update(loss.data[0])
         stats.normalloss.update(normalloss)
         stats.anchorloss.update(anchorloss)
 
@@ -909,6 +956,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 info[mode+'-'+sval+'consiserrmax'] = consiserrormax[k]
                 info[mode+'-'+sval+'flowerrsum']   = flowerr_sum[k]/bsz
                 info[mode+'-'+sval+'flowerravg']   = flowerr_avg[k]/bsz
+                info[mode+'-'+sval+'normalloss']   = normalloss[k]
+                info[mode+'-'+sval+'anchorloss']   = anchorloss[k]
             if mode == 'train':
                 info[mode+'-lr'] = args.curr_lr # Plot current learning rate
             for tag, value in info.items():
@@ -942,7 +991,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Concat the flows, depths and masks into one tensor
                 flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
                                                                    predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                                                        nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
+                                                        nrow=2, normalize=True, range=(-0.01, 0.01))
                 maskdisp  = torchvision.utils.make_grid(torch.cat([mask0.data.narrow(0,id,1),
                                                                    mask1.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                         nrow=args.num_se3, normalize=True, range=(0,1))
@@ -955,15 +1004,16 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
-                         mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
+                         mode+'-masks' : util.to_np(maskdisp.narrow(1,0,1))
                 }
                 if args.use_xyzrgb:
                     info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
-                # if (args.normal_wt > 0):
-                #     normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.data.narrow(0, id, 1),
-                #                                                       prednormals.data.narrow(0, id, 1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                #                                            nrow=args.seq_len, normalize=True, range=(-1, 1))
-                #     info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
+                if (fwd_normal_wt > 0):
+                    prednormals = torch.cat([prednormals_f.data.narrow(0,id,1), prednormals_b.data.narrow(0,id,1)], 0)
+                    tarnormals  = torch.cat([fwdtarnormals[:,0].data.narrow(0,id,1), bwdtarnormals[:,0].data.narrow(0,id,1)], 0)
+                    normdisp = torchvision.utils.make_grid(torch.cat([tarnormals, prednormals], 0).cpu(),
+                                                           nrow=2, normalize=True, range=(-1, 1))
+                    info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 
@@ -1011,18 +1061,18 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     for k in xrange(2):
         sval = '[FWD]' if (k == 1) else '[BWD]'
         print('\t{}, Pt: {:.3f} ({:.3f}), '
-              # 'Norm:  {:.3f} ({:.3f}),'
+              'Norm:  {:.3f} ({:.3f}), '
               'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
-              # 'Anchor: {:.3f}/{:.4f}, '
+              'Anchor: {:.3f}/{:.4f}, '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               # 'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             sval,
             stats.ptloss.val[k], stats.ptloss.avg[k],
-            # stats.normalloss.val[k], stats.normalloss.avg[k],
+            stats.normalloss.val[k], stats.normalloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
-            # stats.anchorloss.val[k], stats.anchorloss.avg[k],
+            stats.anchorloss.val[k], stats.anchorloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
             # stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,

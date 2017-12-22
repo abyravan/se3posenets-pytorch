@@ -949,7 +949,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             iterct = data_loader.iteration_count() # Get total number of iterations so far
             info = {mode+'-loss': loss.data[0]}
             for k in xrange(2):
-                sval = 'fwd' if (k == 1) else 'bwd'
+                sval = 'fwd' if (k == 0) else 'bwd'
                 info[mode+'-'+sval+'ptloss']       = ptloss[k]
                 info[mode+'-'+sval+'consisloss']   = consisloss[k]
                 info[mode+'-'+sval+'consiserr']    = consiserror[k]
@@ -1004,7 +1004,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
-                         mode+'-masks' : util.to_np(maskdisp.narrow(1,0,1))
+                         mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                 }
                 if args.use_xyzrgb:
                     info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
@@ -1059,7 +1059,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
 
     # Print flow loss per timestep
     for k in xrange(2):
-        sval = '[FWD]' if (k == 1) else '[BWD]'
+        sval = '[FWD]' if (k == 0) else '[BWD]'
         print('\t{}, Pt: {:.3f} ({:.3f}), '
               'Norm:  {:.3f} ({:.3f}), '
               'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '

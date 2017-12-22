@@ -79,5 +79,5 @@ min-lr:		  1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/alldata/fwdbwd/normal/def_fwdbwd_pt1_consis10_maskmean_normal1
+save-dir:  trained_nets/alldata/fwdbwd/normal/def_fwdbwd_pt1_consis10_maskmean_normal1_anchor0.01
 disp-err-per-mask: False

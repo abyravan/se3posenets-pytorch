@@ -64,7 +64,7 @@ int Weighted3DTransformNormLoss_forward_cuda(
                       stream);
 
     // Divide by number of points if asked for average
-    loss /= (2.0 * ((double) batchSize));
+    loss /= (2.0 * ((float) batchSize));
 
     // Free memory
     THCudaTensor_free(state, points);

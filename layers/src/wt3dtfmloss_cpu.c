@@ -19,7 +19,7 @@ float Weighted3DTransformLoss_forward_float(
 			THFloatTensor *masks,
 			THFloatTensor *tfms,
 			THFloatTensor *targetpoints,
-            int sizeAverage)
+			THFloatTensor *numpts)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -33,12 +33,14 @@ float Weighted3DTransformLoss_forward_float(
     masks  = THFloatTensor_newContiguous(masks);
     tfms   = THFloatTensor_newContiguous(tfms);
     targetpoints = THFloatTensor_newContiguous(targetpoints);
+    numpts = THFloatTensor_newContiguous(numpts);
 
     // Get data pointers
     float *points_data    = THFloatTensor_data(points);
     float *masks_data 	  = THFloatTensor_data(masks);
     float *tfms_data      = THFloatTensor_data(tfms);
     float *targetpts_data = THFloatTensor_data(targetpoints);
+    float *numpts_data    = THFloatTensor_data(numpts);
 
     // Get strides
     long *ps = points->stride;
@@ -80,25 +82,21 @@ float Weighted3DTransformLoss_forward_float(
 
                     // Weight the error by the mask weight
                     float w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th component of the error
-                    loss += w_k * err;
+                    loss += w_k * err / numpts_data[b];
                 }
             }
         }
     }
 
-    // Divide by number of points if asked for average
-    loss *= 0.5; // Scale loss by 0.5
-    if(sizeAverage)
-    {
-        long nElements = THFloatTensor_nElement(points);
-        loss /= ((double)nElements);
-    }
+    // Average across examples of the batch
+    loss /= (2.0 * ((double) batchSize));
 
     // Free memory
     THFloatTensor_free(points);
     THFloatTensor_free(masks);
     THFloatTensor_free(tfms);
     THFloatTensor_free(targetpoints);
+    THFloatTensor_free(numpts);
 
     return (float)loss;
 }
@@ -108,11 +106,11 @@ void Weighted3DTransformLoss_backward_float(
 			THFloatTensor *masks,
 			THFloatTensor *tfms,
 			THFloatTensor *targetpoints,
+            THFloatTensor *numpts,
 			THFloatTensor *gradPoints,
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
             THFloatTensor *gradOutput,
-            int sizeAverage,
             int useMaskGradMag)
 {
     // Initialize vars
@@ -131,6 +129,7 @@ void Weighted3DTransformLoss_backward_float(
     masks  = THFloatTensor_newContiguous(masks);
     tfms   = THFloatTensor_newContiguous(tfms);
     targetpoints = THFloatTensor_newContiguous(targetpoints);
+    numpts = THFloatTensor_newContiguous(numpts);
 
     // Get data pointers
     float *points_data        = THFloatTensor_data(points);
@@ -141,6 +140,7 @@ void Weighted3DTransformLoss_backward_float(
     float *gradTfms_data      = THFloatTensor_data(gradTfms);
     float *targetpts_data     = THFloatTensor_data(targetpoints);
     float *gradOutput_data    = THFloatTensor_data(gradOutput);
+    float *numpts_data        = THFloatTensor_data(numpts);
 
     // Get strides
     long *ps = points->stride;
@@ -192,11 +192,16 @@ void Weighted3DTransformLoss_backward_float(
                     gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
                     // === Gradient w.r.t mask (w_k) = 0.5 * err [OR] 0.5 * sign(err)
-                    float err = (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    float err = (pow(xd, 2) + pow(yd, 2) + pow(zd, 2)) / numpts_data[b];
                     *(gradMasks_data + k*ms[1] + valm) = useMaskGradMag ? 0.5*err : 0.5; // grad vs sign of grad (always +ve)
 
                     // === Gradients w.r.t transforms (t_k)
                     float *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
+
+                    // Divide by numpts
+                    xd /= numpts_data[b];
+                    yd /= numpts_data[b];
+                    zd /= numpts_data[b];
 
                     // Grads w.r.t rotation parameters (sum across all pts)
                     gT[0]  += w_k * x * xd;
@@ -216,23 +221,15 @@ void Weighted3DTransformLoss_backward_float(
                 }
 
                 // Save gradients w.r.t points
-                *(gradPoints_data + 0*ps[1] + valp) = gx;
-                *(gradPoints_data + 1*ps[1] + valp) = gy;
-                *(gradPoints_data + 2*ps[1] + valp) = gz;
+                *(gradPoints_data + 0*ps[1] + valp) = gx / numpts_data[b];
+                *(gradPoints_data + 1*ps[1] + valp) = gy / numpts_data[b];
+                *(gradPoints_data + 2*ps[1] + valp) = gz / numpts_data[b];
             }
         }
     }
 
-    // Get gradient w.r.t output
-    float norm = gradOutput_data[0];
-    if (sizeAverage)
-    {
-        // Average the gradients if "sizeAverage" is set
-        long nElements = THFloatTensor_nElement(points);
-        norm *= 1.0/((float)nElements);
-    }
-
     // Scale by grad output & average gradients
+    float norm = gradOutput_data[0] / (float) batchSize;
     THFloatTensor_mul(gradPoints, gradPoints, norm);
     THFloatTensor_mul(gradMasks, gradMasks, norm);
     THFloatTensor_mul(gradTfms, gradTfms, norm);
@@ -242,6 +239,7 @@ void Weighted3DTransformLoss_backward_float(
     THFloatTensor_free(masks);
     THFloatTensor_free(tfms);
     THFloatTensor_free(targetpoints);
+    THFloatTensor_free(numpts);
 }
 
 // ===== DOUBLE DATA
@@ -251,7 +249,7 @@ double Weighted3DTransformLoss_forward_double(
 			THDoubleTensor *masks,
 			THDoubleTensor *tfms,
 			THDoubleTensor *targetpoints,
-            int sizeAverage)
+            THDoubleTensor *numpts)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -265,12 +263,14 @@ double Weighted3DTransformLoss_forward_double(
     masks  = THDoubleTensor_newContiguous(masks);
     tfms   = THDoubleTensor_newContiguous(tfms);
     targetpoints = THDoubleTensor_newContiguous(targetpoints);
+    numpts = THDoubleTensor_newContiguous(numpts);
 
     // Get data pointers
     double *points_data    = THDoubleTensor_data(points);
-    double *masks_data 	  = THDoubleTensor_data(masks);
+    double *masks_data 	   = THDoubleTensor_data(masks);
     double *tfms_data      = THDoubleTensor_data(tfms);
     double *targetpts_data = THDoubleTensor_data(targetpoints);
+    double *numpts_data    = THDoubleTensor_data(numpts);
 
     // Get strides
     long *ps = points->stride;
@@ -312,25 +312,21 @@ double Weighted3DTransformLoss_forward_double(
 
                     // Weight the error by the mask weight
                     double w_k = *(masks_data + k*ms[1] + valm); // Get the weight for the 'k'th component of the error
-                    loss += w_k * err;
+                    loss += w_k * err / numpts_data[b];
                 }
             }
         }
     }
 
-    // Divide by number of points if asked for average
-    loss *= 0.5; // Scale loss by 0.5
-    if(sizeAverage)
-    {
-        long nElements = THDoubleTensor_nElement(points);
-        loss /= ((double)nElements);
-    }
+    // Average across examples of the batch
+    loss /= (2.0 * ((double) batchSize));
 
     // Free memory
     THDoubleTensor_free(points);
     THDoubleTensor_free(masks);
     THDoubleTensor_free(tfms);
     THDoubleTensor_free(targetpoints);
+    THDoubleTensor_free(numpts);
 
     return loss;
 }
@@ -340,11 +336,11 @@ void Weighted3DTransformLoss_backward_double(
 			THDoubleTensor *masks,
 			THDoubleTensor *tfms,
 			THDoubleTensor *targetpoints,
+            THDoubleTensor *numpts,
 			THDoubleTensor *gradPoints,
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
             THDoubleTensor *gradOutput,
-            int sizeAverage,
             int useMaskGradMag)
 {
     // Initialize vars
@@ -363,6 +359,7 @@ void Weighted3DTransformLoss_backward_double(
     masks  = THDoubleTensor_newContiguous(masks);
     tfms   = THDoubleTensor_newContiguous(tfms);
     targetpoints = THDoubleTensor_newContiguous(targetpoints);
+    numpts = THDoubleTensor_newContiguous(numpts);
 
     // Get data pointers
     double *points_data        = THDoubleTensor_data(points);
@@ -373,6 +370,7 @@ void Weighted3DTransformLoss_backward_double(
     double *gradTfms_data      = THDoubleTensor_data(gradTfms);
     double *targetpts_data     = THDoubleTensor_data(targetpoints);
     double *gradOutput_data    = THDoubleTensor_data(gradOutput);
+    double *numpts_data        = THDoubleTensor_data(numpts);
 
     // Get strides
     long *ps = points->stride;
@@ -424,11 +422,16 @@ void Weighted3DTransformLoss_backward_double(
                     gz += w_k * (T[2] * xd + T[6] * yd + T[10] * zd);
 
                     // === Gradient w.r.t mask (w_k) = 0.5 * err [OR] 0.5 * sign(err)
-                    double err = (pow(xd, 2) + pow(yd, 2) + pow(zd, 2));
+                    double err = (pow(xd, 2) + pow(yd, 2) + pow(zd, 2)) / numpts_data[b];
                     *(gradMasks_data + k*ms[1] + valm) = useMaskGradMag ? 0.5*err : 0.5; // grad vs sign of grad (always +ve)
 
                     // === Gradients w.r.t transforms (t_k)
                     double *gT = gradTfms_data + b*ts[0] + k*ts[1]; // Get the gradient of the 'k'th transform
+
+                    // Divide by numpts
+                    xd /= numpts_data[b];
+                    yd /= numpts_data[b];
+                    zd /= numpts_data[b];
 
                     // Grads w.r.t rotation parameters (sum across all pts)
                     gT[0]  += w_k * x * xd;
@@ -448,21 +451,15 @@ void Weighted3DTransformLoss_backward_double(
                 }
 
                 // Save gradients w.r.t points
-                *(gradPoints_data + 0*ps[1] + valp) = gx;
-                *(gradPoints_data + 1*ps[1] + valp) = gy;
-                *(gradPoints_data + 2*ps[1] + valp) = gz;
+                *(gradPoints_data + 0*ps[1] + valp) = gx / numpts_data[b];
+                *(gradPoints_data + 1*ps[1] + valp) = gy / numpts_data[b];
+                *(gradPoints_data + 2*ps[1] + valp) = gz / numpts_data[b];
             }
         }
     }
 
     // Get gradient w.r.t output
-    double norm = gradOutput_data[0];
-    if (sizeAverage)
-    {
-        // Average the gradients if "sizeAverage" is set
-        long nElements = THDoubleTensor_nElement(points);
-        norm *= 1.0/((double)nElements);
-    }
+    double norm = gradOutput_data[0] / (double) batchSize;
 
     // Scale by grad output & average gradients
     THDoubleTensor_mul(gradPoints, gradPoints, norm);
@@ -474,4 +471,5 @@ void Weighted3DTransformLoss_backward_double(
     THDoubleTensor_free(masks);
     THDoubleTensor_free(tfms);
     THDoubleTensor_free(targetpoints);
+    THDoubleTensor_free(numpts);
 }

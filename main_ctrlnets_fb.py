@@ -795,22 +795,46 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Pt loss in fwd and bwd dirn
         predpts1 = ptpredlayer()(pts[:,0], mask0, delta01)
         predpts0 = ptpredlayer()(pts[:,1], mask1, delta10)
-
-        # a) 3D loss (if motion-normalized loss, pass in GT flows)
         predflows_f, tarflows_f, vis_f = (predpts1 - pts[:,0]), fwdflows[:,0], fwdvis[:,0]
         predflows_b, tarflows_b, vis_b = (predpts0 - pts[:,1]), bwdflows[:,0], bwdvis[:,0]
-        if args.motion_norm_loss:
-            currptloss_f = fwd_pt_wt * ctrlnets.MotionNormalizedLoss3D(predflows_f, tarflows_f,
-                                                                       motion=tarflows_f,
-                                                                       loss_type=args.loss_type, wts=vis_f)
-            currptloss_b = bwd_pt_wt * ctrlnets.MotionNormalizedLoss3D(predflows_b, tarflows_b,
-                                                                       motion=tarflows_b,
-                                                                       loss_type=args.loss_type, wts=vis_b)
+
+        # a) 3D loss (if motion-normalized loss, pass in GT flows)
+        if args.soft_wt_sharpening:
+            # For weighted 3D transform loss, it is enough to set the mask values of not-visible pixels to all zeros
+            # These pixels will end up having zero loss then
+            vismask0 = mask0 * vis_f  # Should be broadcasted properly
+            vismask1 = mask1 * vis_b  # Should be broadcasted properly
+
+            # Motion normalization
+            nummotionpts_f, nummotionpts_b = False, False
+            if args.motion_norm_loss:
+                nummotionpts_f = ((tarflows_f.abs().sum(1) > 2.5e-3).type_as(vis_f) * vis_f).float().view(vis_f.size(0), -1).sum(1).clamp(min=100)  # Takes care of numerical instabilities & acts as margin
+                nummotionpts_b = ((tarflows_b.abs().sum(1) > 2.5e-3).type_as(vis_b) * vis_b).float().view(vis_b.size(0), -1).sum(1).clamp(min=100)  # Takes care of numerical instabilities & acts as margin
+
+            # Use the weighted 3D transform loss, do not use explicitly predicted point
+            if (args.loss_type.find('normmsesqrt') >= 0):
+                currptloss_f = fwd_pt_wt * se3nn.Weighted3DTransformNormLoss()(pts[:,0], vismask0, delta01,
+                                                                               tarflows_f, nummotionpts_f) # Predict pts in FWD dirn and compare to target @ t1
+                currptloss_b = bwd_pt_wt * se3nn.Weighted3DTransformNormLoss()(pts[:,1], vismask1, delta10,
+                                                                               tarflows_b, nummotionpts_b) # Predict pts in BWD dirn and compare to target @ t0
+            else:
+                currptloss_f = fwd_pt_wt * se3nn.Weighted3DTransformLoss()(pts[:,0], vismask0, delta01,
+                                                                           (pts[:,0] + tarflows_f), nummotionpts_f) # Predict pts in FWD dirn and compare to target @ t1
+                currptloss_b = bwd_pt_wt * se3nn.Weighted3DTransformLoss()(pts[:,1], vismask1, delta10,
+                                                                           (pts[:,1] + tarflows_b), nummotionpts_b) # Predict pts in BWD dirn and compare to target @ t0
         else:
-            currptloss_f = fwd_pt_wt * ctrlnets.Loss3D(predflows_f, tarflows_f,
-                                                       loss_type=args.loss_type, wts=vis_f)
-            currptloss_b = bwd_pt_wt * ctrlnets.Loss3D(predflows_b, tarflows_b,
-                                                       loss_type=args.loss_type, wts=vis_b)
+            if args.motion_norm_loss:
+                currptloss_f = fwd_pt_wt * ctrlnets.MotionNormalizedLoss3D(predflows_f, tarflows_f,
+                                                                           motion=tarflows_f,
+                                                                           loss_type=args.loss_type, wts=vis_f)
+                currptloss_b = bwd_pt_wt * ctrlnets.MotionNormalizedLoss3D(predflows_b, tarflows_b,
+                                                                           motion=tarflows_b,
+                                                                           loss_type=args.loss_type, wts=vis_b)
+            else:
+                currptloss_f = fwd_pt_wt * ctrlnets.Loss3D(predflows_f, tarflows_f,
+                                                           loss_type=args.loss_type, wts=vis_f)
+                currptloss_b = bwd_pt_wt * ctrlnets.Loss3D(predflows_b, tarflows_b,
+                                                           loss_type=args.loss_type, wts=vis_b)
 
         # b) Consistency loss (backprop only the poses, deltas are not affected by the gradients)
         # FWD dirn: t->t+1

@@ -12,9 +12,9 @@ int Weighted3DTransformNormLoss_forward_cuda(
 			THCudaTensor *masks,
 			THCudaTensor *tfms,
 			THCudaTensor *targetflows,
+            THCudaTensor *numpts,
 			float normWt,
-			int normPerPt,
-            int sizeAverage)
+			int normPerPt)
 {
     // Initialize vars
     int batchSize = points->size[0];
@@ -38,12 +38,14 @@ int Weighted3DTransformNormLoss_forward_cuda(
     masks  = THCudaTensor_newContiguous(state, masks);
     tfms   = THCudaTensor_newContiguous(state, tfms);
     targetflows = THCudaTensor_newContiguous(state, targetflows);
+    numpts = THCudaTensor_newContiguous(state, numpts);
 
     // Get data pointers
     float *points_data      = THCudaTensor_data(state, points);
     float *masks_data 	    = THCudaTensor_data(state, masks);
     float *tfms_data        = THCudaTensor_data(state, tfms);
     float *targetflows_data = THCudaTensor_data(state, targetflows);
+    float *numpts_data      = THCudaTensor_data(state, numpts);
 
     // Get strides
     long *ps = points->stride;
@@ -55,25 +57,21 @@ int Weighted3DTransformNormLoss_forward_cuda(
 
 	// Run the kernel
     float loss = Weighted3DTransformNormLoss_ForwardLauncher(
-                      points_data, masks_data, tfms_data, targetflows_data,
+                      points_data, masks_data, tfms_data, targetflows_data, numpts_data,
                       batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
                       normWt, normPerPt,
                       ps, ms, ts,
                       stream);
 
     // Divide by number of points if asked for average
-    loss *= 0.5; // Scale loss by 0.5
-    if(sizeAverage)
-    {
-        long nElements = THCudaTensor_nElement(state, points);
-        loss /= ((float)nElements);
-    }
+    loss /= (2.0 * ((double) batchSize));
 
     // Free memory
     THCudaTensor_free(state, points);
     THCudaTensor_free(state, masks);
     THCudaTensor_free(state, tfms);
     THCudaTensor_free(state, targetflows);
+    THCudaTensor_free(state, numpts);
 
     return loss;
 }
@@ -84,13 +82,13 @@ void Weighted3DTransformNormLoss_backward_cuda(
 			THCudaTensor *masks,
 			THCudaTensor *tfms,
 			THCudaTensor *targetflows,
+            THCudaTensor *numpts,
 			THCudaTensor *gradPoints,
 			THCudaTensor *gradMasks,
 			THCudaTensor *gradTfms,
             THCudaTensor *gradOutput,
             float normWt,
-            int normPerPt,
-			int sizeAverage)
+            int normPerPt)
 {
     // Initialize vars
     long batchSize = points->size[0];
@@ -118,6 +116,7 @@ void Weighted3DTransformNormLoss_backward_cuda(
     masks  = THCudaTensor_newContiguous(state, masks);
     tfms   = THCudaTensor_newContiguous(state, tfms);
     targetflows = THCudaTensor_newContiguous(state, targetflows);
+    numpts = THCudaTensor_newContiguous(state, numpts);
 
     // Get data pointers
     float *points_data        = THCudaTensor_data(state, points);
@@ -128,6 +127,7 @@ void Weighted3DTransformNormLoss_backward_cuda(
     float *gradMasks_data 	  = THCudaTensor_data(state, gradMasks);
     float *gradTfms_data      = THCudaTensor_data(state, gradTfms);
     float *gradOutput_data    = THCudaTensor_data(state, gradOutput);
+    float *numpts_data 		  = THCudaTensor_data(state, numpts);
 
 	 // Get strides
     long *ps = points->stride;
@@ -139,7 +139,7 @@ void Weighted3DTransformNormLoss_backward_cuda(
 
 	// Run the kernel
     Weighted3DTransformNormLoss_BackwardLauncher(
-		  points_data, masks_data, tfms_data, targetflows_data,
+		  points_data, masks_data, tfms_data, targetflows_data, numpts_data,
 		  gradPoints_data, gradMasks_data, gradTfms_data,
 		  batchSize, ndim, nrows, ncols, nSE3, nTfmParams,
 		  normWt, normPerPt,
@@ -149,12 +149,7 @@ void Weighted3DTransformNormLoss_backward_cuda(
     // Get gradient w.r.t output
     float norm;
     cudaMemcpy(&norm, gradOutput_data, sizeof(float), cudaMemcpyDeviceToHost);
-    if (sizeAverage)
-    {
-        // Average the gradients if "sizeAverage" is set
-        long nElements = THCudaTensor_nElement(state, points);
-        norm *= 1.0/((float)nElements);
-    }
+    norm /= (float) batchSize;
 
     // Scale by grad output & average gradients
     THCudaTensor_mul(state, gradPoints, gradPoints, norm);
@@ -166,4 +161,5 @@ void Weighted3DTransformNormLoss_backward_cuda(
     THCudaTensor_free(state, masks);
     THCudaTensor_free(state, tfms);
     THCudaTensor_free(state, targetflows);
+    THCudaTensor_free(state, numpts);
 }

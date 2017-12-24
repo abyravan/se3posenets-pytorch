@@ -5,12 +5,12 @@
 extern "C" {
 #endif
 
-int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts,
+int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
                                             int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                             const long *ps, const long *ms, const long *ts,
                                             cudaStream_t stream);
 
-int Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts,
+int Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
                                              float *gradPoints, float *gradMasks, float *gradTfms, int useMaskGradMag,
                                              int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                              const long *ps, const long *ms, const long *ts,

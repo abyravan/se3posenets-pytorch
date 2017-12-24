@@ -949,6 +949,9 @@ w = Weighted3DTransformLoss()
 torch.set_default_tensor_type('torch.DoubleTensor')
 pts = Variable(torch.rand(2, 3, 24, 32), requires_grad=True)
 masks = Variable(torch.rand(2, 4, 24, 32), requires_grad=True)
+masks.data.scatter_(1, masks.data.max(1)[1].unsqueeze(1), -1)
+masks.data[masks.data.ne(-1.0)] = 0
+masks.data[masks.data.eq(-1.0)] = 1
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
 targetpts = Variable(torch.rand(2, 3, 24, 32), requires_grad=False)
 assert (gradcheck(w, [pts, masks, tfms, targetpts]))
@@ -974,16 +977,19 @@ import torch
 from layers.Weighted3DTransformNormLoss import Weighted3DTransformNormLoss
 from torch.autograd import gradcheck, Variable
 
-w = Weighted3DTransformNormLoss(norm_per_pt=True)
+w = Weighted3DTransformNormLoss(norm_per_pt=False)
 torch.set_default_tensor_type('torch.DoubleTensor')
 pts = Variable(torch.rand(2, 3, 12, 16), requires_grad=True)
 masks = Variable(torch.rand(2, 4, 12, 16), requires_grad=True)
+masks.data.scatter_(1, masks.data.max(1)[1].unsqueeze(1), -1)
+masks.data[masks.data.ne(-1.0)] = 0
+masks.data[masks.data.eq(-1.0)] = 1
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
 targetflows = Variable(torch.rand(2, 3, 12, 16)-0.5, requires_grad=False)
 assert (gradcheck(w, [pts, masks, tfms, targetflows]))
 
 # Compare double vs float
-w = Weighted3DTransformNormLoss(norm_per_pt=True)
+w = Weighted3DTransformNormLoss(norm_per_pt=False)
 pts = Variable(torch.rand(2, 3, 12, 16), requires_grad=True)
 masks = Variable(torch.rand(2, 4, 12, 16), requires_grad=True)
 tfms = Variable(torch.rand(2, 4, 3, 4), requires_grad=True)
@@ -991,7 +997,7 @@ targetflows = Variable(torch.rand(2, 3, 12, 16)-0.5, requires_grad=False)
 loss = w(pts,masks,tfms,targetflows)
 loss.backward()
 
-w_f = Weighted3DTransformNormLoss(norm_per_pt=True)
+w_f = Weighted3DTransformNormLoss(norm_per_pt=False)
 pts_f = Variable(pts.data.float(), requires_grad=True)
 masks_f = Variable(masks.data.float(), requires_grad=True)
 tfms_f = Variable(tfms.data.float(), requires_grad=True)
@@ -1010,7 +1016,7 @@ print("MsG diff, Max: {}, Min: {}, Median: {}".format(maskgdiff.max(), maskgdiff
 print("TfG diff, Max: {}, Min: {}, Median: {}".format(tfmgdiff.max(), tfmgdiff.min(), tfmgdiff.abs().median()))
 
 ## CUDA
-w_c = Weighted3DTransformNormLoss(norm_per_pt=True)
+w_c = Weighted3DTransformNormLoss(norm_per_pt=False)
 pts_c = Variable(pts.data.float().cuda(), requires_grad=True)
 masks_c = Variable(masks.data.float().cuda(), requires_grad=True)
 tfms_c = Variable(tfms.data.float().cuda(), requires_grad=True)

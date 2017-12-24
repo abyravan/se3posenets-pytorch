@@ -1,5 +1,5 @@
 import torch
-from torch.autograd import Function
+from torch.autograd import Function, Variable
 import torch.nn.modules.loss as Loss
 from _ext import se3layers
 
@@ -23,34 +23,34 @@ from _ext import se3layers
 
 ## FWD/BWD pass function
 class Weighted3DTransformLossFunction(Function):
-    def __init__(self, size_average=True, use_mask_gradmag=True):
+    def __init__(self, use_mask_gradmag=True):
         super(Weighted3DTransformLossFunction, self).__init__()
-        self.size_average     = size_average
         self.use_mask_gradmag = use_mask_gradmag # Default this is true
 
-    def forward(self, inputpts, inputmasks, inputtfms, targetpts):
+    def forward(self, inputpts, inputmasks, inputtfms, targetpts, numpts):
         # Check dimensions
         batch_size, num_channels, data_height, data_width = inputpts.size()
         num_se3 = inputmasks.size()[1]
         assert (num_channels == 3);
         assert (inputmasks.size() == torch.Size([batch_size, num_se3, data_height, data_width]));
         assert (inputtfms.size() == torch.Size([batch_size, num_se3, 3, 4]));  # Transforms [R|t]
+        assert (numpts.size() == torch.Size([batch_size]))
 
         # Run the FWD pass
-        self.save_for_backward(inputpts, inputmasks, inputtfms, targetpts)  # Save for BWD pass
+        self.save_for_backward(inputpts, inputmasks, inputtfms, targetpts, numpts)  # Save for BWD pass
         if inputpts.is_cuda:
-            output = se3layers.Weighted3DTransformLoss_forward_cuda(inputpts, inputmasks, inputtfms, targetpts, self.size_average)
+            output = se3layers.Weighted3DTransformLoss_forward_cuda(inputpts, inputmasks, inputtfms, targetpts, numpts)
         elif inputpts.type() == 'torch.DoubleTensor':
-            output = se3layers.Weighted3DTransformLoss_forward_double(inputpts, inputmasks, inputtfms, targetpts, self.size_average)
+            output = se3layers.Weighted3DTransformLoss_forward_double(inputpts, inputmasks, inputtfms, targetpts, numpts)
         else:
-            output = se3layers.Weighted3DTransformLoss_forward_float(inputpts, inputmasks, inputtfms, targetpts, self.size_average)
+            output = se3layers.Weighted3DTransformLoss_forward_float(inputpts, inputmasks, inputtfms, targetpts, numpts)
 
         # Return a tensor
         return inputpts.new((output,))
 
     def backward(self, grad_output):
         # Get saved tensors
-        inputpts, inputmasks, inputtfms, targetpts = self.saved_tensors
+        inputpts, inputmasks, inputtfms, targetpts, numpts = self.saved_tensors
 
         # Initialize grad input
         grad_inputpts   = inputpts.new().resize_as_(inputpts)
@@ -59,29 +59,32 @@ class Weighted3DTransformLossFunction(Function):
 
         # Run the BWD pass
         if grad_output.is_cuda:
-            se3layers.Weighted3DTransformLoss_backward_cuda(inputpts, inputmasks, inputtfms, targetpts,
+            se3layers.Weighted3DTransformLoss_backward_cuda(inputpts, inputmasks, inputtfms, targetpts, numpts,
                                                             grad_inputpts, grad_inputmasks, grad_inputtfms,
-                                                            grad_output, self.size_average, self.use_mask_gradmag)
+                                                            grad_output, self.use_mask_gradmag)
         elif grad_output.type() == 'torch.DoubleTensor':
-            se3layers.Weighted3DTransformLoss_backward_double(inputpts, inputmasks, inputtfms, targetpts,
+            se3layers.Weighted3DTransformLoss_backward_double(inputpts, inputmasks, inputtfms, targetpts, numpts,
                                                               grad_inputpts, grad_inputmasks, grad_inputtfms,
-                                                              grad_output, self.size_average, self.use_mask_gradmag)
+                                                              grad_output, self.use_mask_gradmag)
         else:
-            se3layers.Weighted3DTransformLoss_backward_float(inputpts, inputmasks, inputtfms, targetpts,
+            se3layers.Weighted3DTransformLoss_backward_float(inputpts, inputmasks, inputtfms, targetpts, numpts,
                                                              grad_inputpts, grad_inputmasks, grad_inputtfms,
-                                                             grad_output, self.size_average, self.use_mask_gradmag)
+                                                             grad_output, self.use_mask_gradmag)
 
         # Return (no gradient for target)
-        return grad_inputpts, grad_inputmasks, grad_inputtfms, None
+        return grad_inputpts, grad_inputmasks, grad_inputtfms, None, None
 
 
 ## FWD/BWD pass module
 class Weighted3DTransformLoss(torch.nn.Module):
-    def __init__(self, size_average=True, use_mask_gradmag=True):
+    def __init__(self, use_mask_gradmag=True):
         super(Weighted3DTransformLoss, self).__init__()
-        self.size_average = size_average
         self.use_mask_gradmag = use_mask_gradmag # Default this is true
 
-    def forward(self, inputpts, inputmasks, inputtfms, targetpts):
+    def forward(self, inputpts, inputmasks, inputtfms, targetpts, numpts=None):
         Loss._assert_no_grad(targetpts)
-        return Weighted3DTransformLossFunction(self.size_average, self.use_mask_gradmag)(inputpts, inputmasks, inputtfms, targetpts)
+        if numpts is None:
+            numpts = Variable(torch.FloatTensor(targetpts.size(0)).fill_(targetpts.size(2) * targetpts.size(3)).type_as(targetpts.data))
+        else:
+            Loss._assert_no_grad(numpts)
+        return Weighted3DTransformLossFunction(self.use_mask_gradmag)(inputpts, inputmasks, inputtfms, targetpts, numpts)

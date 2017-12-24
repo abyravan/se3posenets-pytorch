@@ -4,18 +4,18 @@ float Weighted3DTransformLoss_forward_float(
 			THFloatTensor *masks,
 			THFloatTensor *tfms,
 			THFloatTensor *targetpoints,
-            int sizeAverage);
+            THFloatTensor *numpts);
 
 void Weighted3DTransformLoss_backward_float(
 			THFloatTensor *points,
 			THFloatTensor *masks,
 			THFloatTensor *tfms,
 			THFloatTensor *targetpoints,
+            THFloatTensor *numpts,
 			THFloatTensor *gradPoints,
 			THFloatTensor *gradMasks,
 			THFloatTensor *gradTfms,
             THFloatTensor *gradOutput,
-            int sizeAverage,
             int useMaskGradMag);
 
 // == Double
@@ -24,16 +24,16 @@ double Weighted3DTransformLoss_forward_double(
 			THDoubleTensor *masks,
 			THDoubleTensor *tfms,
 			THDoubleTensor *targetpoints,
-            int sizeAverage);
+            THDoubleTensor *numpts);
 
 void Weighted3DTransformLoss_backward_double(
 			THDoubleTensor *points,
 			THDoubleTensor *masks,
 			THDoubleTensor *tfms,
 			THDoubleTensor *targetpoints,
+            THDoubleTensor *numpts,
 			THDoubleTensor *gradPoints,
 			THDoubleTensor *gradMasks,
 			THDoubleTensor *gradTfms,
             THDoubleTensor *gradOutput,
-            int sizeAverage,
             int useMaskGradMag);

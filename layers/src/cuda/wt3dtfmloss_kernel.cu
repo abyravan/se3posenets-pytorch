@@ -47,7 +47,7 @@ int sgn(float val) {
 ///////////// Kernel
 // Compute the loss by transforming each input point by all the "k" transforms, measuring the error
 // between the prediction and the target and weighing the corresponding error by the predicted mask weight
-__global__ void computeLoss(const float *inputpts, const float *masks, const float *targetpts,
+__global__ void computeLoss(const float *inputpts, const float *masks, const float *targetpts, const float *numpts,
                             float *devLoss, int nrows, int ncols, int npoints, int nSE3,
                             int ps0, int ps1, int ps2, int ps3,
                             int ms0, int ms1, int ms2, int ms3,
@@ -99,7 +99,7 @@ __global__ void computeLoss(const float *inputpts, const float *masks, const flo
             float w_k = *(masks + k*ms1 + valm); // Get the weight for the 'k'th component of the error
 
             // Store scaled loss in shared memory
-            sharedLoss[tid] += w_k * err;
+            sharedLoss[tid] += w_k * err / numpts[b];
         }
     }
     __syncthreads();
@@ -127,7 +127,7 @@ __global__ void computeLoss(const float *inputpts, const float *masks, const flo
 }
 
 ///////////////// FWD pass launcher
-int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts,
+int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 								  const long *ps, const long *ms, const long *ts,
 								  cudaStream_t stream)
@@ -158,6 +158,7 @@ int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *ma
                                                                      points,
                                                                      masks,
                                                                      targetpts,
+                                                                     numpts,
                                                                      devloss,
                                                                      nrows,
                                                                      ncols,
@@ -204,7 +205,7 @@ int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *ma
 // ============= BWD PASS =================== //
 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
-__global__ void computeLossGradients(const float *inputpts, const float *masks,
+__global__ void computeLossGradients(const float *inputpts, const float *masks, const float *numpts,
                                      float *gradInputpts, float *gradMasks, float *gradTfms,
                                      const float *targetpts, int useMaskGradMag,
                                      int nrows, int ncols, int nSE3,
@@ -277,8 +278,14 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
                 *(gradMasks + k*ms1 + valm) = 0.5 * ( (xp-xt)*(xp-xt) + (yp-yt)*(yp-yt) + (zp-zt)*(zp-zt) );
             else
                 *(gradMasks + k*ms1 + valm) = 0.5; // sign is always +ve
+            *(gradMasks + k*ms1 + valm) /= numpts[b];
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
+            // Divide by numpts
+            xd /= numpts[b];
+            yd /= numpts[b];
+            zd /= numpts[b];
+
             // Grads w.r.t rotation parameters (sum across all pts)
             // First nThreads params is Tfm(0,0), next is Tfm(0,1) etc for removing memory bank conflicts when reading to shared memory
             sharedGradTfms[0*nThreads+tid]  = w_k * x * xd;
@@ -348,15 +355,15 @@ __global__ void computeLossGradients(const float *inputpts, const float *masks,
     // Gradients w.r.t pts (copy after sum across tfms)
     if (withinLimits)
     {
-        *(gradInputpts + 0*ps1 + valp) = gx;
-        *(gradInputpts + 1*ps1 + valp) = gy;
-        *(gradInputpts + 2*ps1 + valp) = gz;
+        *(gradInputpts + 0*ps1 + valp) = gx / numpts[b];
+        *(gradInputpts + 1*ps1 + valp) = gy / numpts[b];
+        *(gradInputpts + 2*ps1 + valp) = gz / numpts[b];
     }
 }
 
 ////////////////////////////////////
 // == BWD pass code
-void Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts,
+void Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
                                               float *gradPoints, float *gradMasks, float *gradTfms, int useMaskGradMag,
                                               int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                               const long *ps, const long *ms, const long *ts,
@@ -385,6 +392,7 @@ void Weighted3DTransformLoss_BackwardLauncher(const float *points, const float *
     computeLossGradients<<< blocks, threads, sharedMemSize, stream >>>(
                                                                         points,
                                                                         masks,
+                                                                        numpts,
                                                                         gradPoints,
                                                                         gradMasks,
                                                                         gradTfms,

@@ -41,7 +41,7 @@ __device__ void getCoordinates_4(const int tid, const int nrows, const int ncols
 ///////////// Kernel
 // Compute the loss by transforming each input point by all the "k" transforms, measuring the error
 // between the prediction and the target and weighing the corresponding error by the predicted mask weight
-__global__ void computeLoss_f(const float *inputpts, const float *masks, const float *targetflows,
+__global__ void computeLoss_f(const float *inputpts, const float *masks, const float *targetflows, const float *numpts,
                               float *devLoss, int nrows, int ncols, int npoints, int nSE3,
                               float normWt, int normPerPt,
                               int ps0, int ps1, int ps2, int ps3,
@@ -117,7 +117,7 @@ __global__ void computeLoss_f(const float *inputpts, const float *masks, const f
             float w_k = *(masks + k*ms1 + valm); // Get the weight for the 'k'th component of the error
 
             // Store scaled loss in shared memory
-            sharedLoss[tid] += w_k * err;
+            sharedLoss[tid] += w_k * err / numpts[b];
         }
     }
     __syncthreads();
@@ -145,7 +145,7 @@ __global__ void computeLoss_f(const float *inputpts, const float *masks, const f
 }
 
 ///////////////// FWD pass launcher
-int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows,
+int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows, const float *numpts,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                   float normWt, int normPerPt,
 								  const long *ps, const long *ms, const long *ts,
@@ -177,6 +177,7 @@ int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float
                                                                      points,
                                                                      masks,
                                                                      targetflows,
+                                                                     numpts,
                                                                      devloss,
                                                                      nrows,
                                                                      ncols,
@@ -225,7 +226,7 @@ int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float
 // ============= BWD PASS =================== //
 
 // Compute the gradients w.r.t input points & masks given gradients w.r.t output 3D points
-__global__ void computeLossGradients_f(const float *inputpts, const float *masks,
+__global__ void computeLossGradients_f(const float *inputpts, const float *masks, const float *numpts,
                                        float *gradInputpts, float *gradMasks, float *gradTfms,
                                        const float *targetflows,
                                        int nrows, int ncols, int nSE3,
@@ -309,7 +310,7 @@ __global__ void computeLossGradients_f(const float *inputpts, const float *masks
                 err = (ex*ex + ey*ey + ez*ez) / s;
             else
                 err = (ex*ex)/sx + (ey*ey)/sy + (ez*ez)/sz; // different scale per dimension
-            *(gradMasks + k*ms1 + valm) = 0.5*err;
+            *(gradMasks + k*ms1 + valm) = 0.5*err / numpts[b];
 
             // == Scale error terms by sigma (from here on we only use the scaled terms)
             ex /= normPerPt ? s : sx;
@@ -323,6 +324,11 @@ __global__ void computeLossGradients_f(const float *inputpts, const float *masks
             gz += w_k * (T[2]       * ex + T[6]       * ey + (T[10]-1.0) * ez);
 
             // === Gradients w.r.t transforms (t_k), stored in shared memory
+            // Divide by numpts
+            ex /= numpts[b];
+            ey /= numpts[b];
+            ez /= numpts[b];
+
             // Grads w.r.t rotation parameters (sum across all pts)
             // First nThreads params is Tfm(0,0), next is Tfm(0,1) etc for removing memory bank conflicts when reading to shared memory
             sharedGradTfms[0*nThreads+tid]  = w_k * x * ex;
@@ -392,15 +398,15 @@ __global__ void computeLossGradients_f(const float *inputpts, const float *masks
     // Gradients w.r.t pts (copy after sum across tfms)
     if (withinLimits)
     {
-        *(gradInputpts + 0*ps1 + valp) = gx;
-        *(gradInputpts + 1*ps1 + valp) = gy;
-        *(gradInputpts + 2*ps1 + valp) = gz;
+        *(gradInputpts + 0*ps1 + valp) = gx / numpts[b];
+        *(gradInputpts + 1*ps1 + valp) = gy / numpts[b];
+        *(gradInputpts + 2*ps1 + valp) = gz / numpts[b];
     }
 }
 
 ////////////////////////////////////
 // == BWD pass code
-void Weighted3DTransformNormLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows,
+void Weighted3DTransformNormLoss_BackwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows, const float *numpts,
                                               float *gradPoints, float *gradMasks, float *gradTfms,
                                               int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                               float normWt, int normPerPt,
@@ -430,6 +436,7 @@ void Weighted3DTransformNormLoss_BackwardLauncher(const float *points, const flo
     computeLossGradients_f<<< blocks, threads, sharedMemSize, stream >>>(
                                                                         points,
                                                                         masks,
+                                                                        numpts,
                                                                         gradPoints,
                                                                         gradMasks,
                                                                         gradTfms,

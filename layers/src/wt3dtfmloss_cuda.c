@@ -7,7 +7,7 @@
 extern THCState *state;
 
 // =============== FWD PASS ================== //
-int Weighted3DTransformLoss_forward_cuda(
+float Weighted3DTransformLoss_forward_cuda(
 			THCudaTensor *points,
 			THCudaTensor *masks,
 			THCudaTensor *tfms,

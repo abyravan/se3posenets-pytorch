@@ -145,7 +145,7 @@ __global__ void computeLoss_f(const float *inputpts, const float *masks, const f
 }
 
 ///////////////// FWD pass launcher
-int Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows, const float *numpts,
+float Weighted3DTransformNormLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetflows, const float *numpts,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
                                   float normWt, int normPerPt,
 								  const long *ps, const long *ms, const long *ts,

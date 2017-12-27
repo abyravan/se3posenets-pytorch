@@ -127,7 +127,7 @@ __global__ void computeLoss(const float *inputpts, const float *masks, const flo
 }
 
 ///////////////// FWD pass launcher
-int Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
+float Weighted3DTransformLoss_ForwardLauncher(const float *points, const float *masks, const float *tfms, const float *targetpts, const float *numpts,
 								  int batchSize, int ndim, int nrows, int ncols, int nSE3, int nTfmParams,
 								  const long *ps, const long *ms, const long *ts,
 								  cudaStream_t stream)

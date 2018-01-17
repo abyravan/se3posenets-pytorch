@@ -4,3 +4,4 @@
 build
 _ext
 .DS_Store
+*.cu.o

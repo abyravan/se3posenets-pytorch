@@ -1,6 +1,6 @@
 ---
 # Dataset options
-data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_183851/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_203124/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_214259/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_230213/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-12_190929/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-12_201115/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-14_154517/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-14_174138/]
+data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_183851/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_203124/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_214259/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-11_230213/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-12_190929/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-12_201115/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-14_154517/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2017-9-14_174138/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2018-2-2_190536_jt4_0to0.5/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2018-2-2_205941_jt5_0to0.25/, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/realdata/session_2018-2-2_221258_jt5_0.25to0.5/]
 batch-size:   16
 num-workers:  8
 train-per:    0.8
@@ -59,7 +59,7 @@ use-pin-memory: False
 epochs:         15
 start-epoch:    0
 train-ipe:      5000
-val-ipe:        500
+val-ipe:        2000
 evaluate:       False
 seed:           100
 

@@ -931,7 +931,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['bwdflows']        = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
     if supervised_seg_loss:
-        data['labels'] = masks.max(1)[0] # Get label image for supervised classification
+        data['labels'] = masks.max(dim=1)[1] # Get label image for supervised classification
     if compute_normals:
         data['initnormals'] = initnormals
         data['tarnormals']  = tarnormals

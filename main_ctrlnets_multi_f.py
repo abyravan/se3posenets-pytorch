@@ -1166,7 +1166,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
                 if (args.seg_wt > 0):
                     segdisp = torchvision.utils.make_grid(sample['labels'][id,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                            nrow=1, normalize=True)
+                                                            nrow=1, normalize=True, range=(0, len(args.mesh_ids)-1))
                     info[mode+'-seglabels'] = util.to_np(segdisp.unsqueeze(0))  # Optional segmentation labels
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)

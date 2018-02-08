@@ -250,12 +250,17 @@ def read_label_image(filename, ht=240, wd=320):
     return torch.ByteTensor(imgscale).unsqueeze(0)  # Add extra dimension
 
 # Read label image from disk
-def read_color_image(filename, ht=240, wd=320):
+def read_color_image(filename, ht=240, wd=320, colormap='rgb'):
     imgl = cv2.imread(filename) # This can be an image with 1 or 3 channels. If 3 channel image, choose 2nd channel
     if (imgl.shape[0] != int(ht) or imgl.shape[1] != int(wd)):
         imgscale = cv2.resize(imgl, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
     else:
         imgscale = imgl
+    # Convert colormaps
+    if colormap == 'hsv':
+        imgscale = cv2.cvtColor(imgscale, cv2.COLOR_RGB2HSV) # Seems like by default images are RGB, not BGR
+    elif colormap != 'rgb':
+        assert False, "Wrong colormap input: {}".format(colormap)
     return torch.ByteTensor(imgscale.transpose(2,0,1)).unsqueeze(0)  # Add extra dimension
 
 #############
@@ -738,11 +743,11 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                    mesh_ids=torch.Tensor(),
                                    #ctrl_ids=torch.LongTensor(),
                                    #camera_extrinsics={}, camera_intrinsics=[],
-                                   compute_bwdflows=True, load_color=False, num_tracker=0,
+                                   compute_bwdflows=True, load_color=None, num_tracker=0,
                                    dathreshold=0.01, dawinsize=5, use_only_da=False,
                                    noise_func=None, compute_normals=False, maxdepthdiff=0.05,
                                    bismooth_depths=False, bismooth_width=9, bismooth_std=0.001,
-                                   compute_bwdnormals=False):
+                                   compute_bwdnormals=False, supervised_seg_loss=False):
     # Setup vars
     num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step'] # Get sequence & step length
@@ -808,7 +813,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
         # Load RGB
         if load_color:
-            rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
+            rgbs[k] = read_color_image(s['color'], img_ht, img_wd, colormap=load_color)
             #actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
             #comvels[k] = state['comjtvel']
 
@@ -925,6 +930,8 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         data['masks']           = masks
         data['bwdflows']        = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+    if supervised_seg_loss:
+        data['labels'] = masks.max(1)[0].unsqueeze(1) # Get label image for supervised classification
     if compute_normals:
         data['initnormals'] = initnormals
         data['tarnormals']  = tarnormals

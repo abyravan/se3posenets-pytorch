@@ -75,6 +75,14 @@ parser.add_argument('--bilateral-window-width', default=9, type=int,
 parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
                     metavar='WT', help='Standard deviation in depth for bilateral filtering kernel (default: 0.005)')
 
+# XYZ hue
+parser.add_argument('--use-xyzhue', action='store_true', default=False,
+                    help='Use hue channel (from HSV) as input along with XYZ -> XYZHUE input (default: False)')
+
+# Supervised segmentation loss
+parser.add_argument('--seg-wt', default=0.0, type=float,
+                    metavar='WT', help='Weight for a supervised mask segmentation loss (both @ t & t+1)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -114,6 +122,8 @@ def main():
     # XYZ-RGB
     if args.use_xyzrgb:
         print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
+    elif args.use_xyzhue:
+        print("Using XYZ-Hue input - 4 channels. Assumes registered depth/RGB")
 
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
@@ -270,6 +280,10 @@ def main():
     norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
     print('3D loss type: ' + args.loss_type + norm_motion + delta_loss)
 
+    # Supervised segmentation loss
+    if (args.seg_wt > 0):
+        print("Using supervised segmentation loss with weight: {}".format(args.seg_wt))
+
     # Wide model
     if args.wide_model:
         print('Using a wider network!')
@@ -298,6 +312,11 @@ def main():
     ########################
     ############ Load datasets
     # Get datasets
+    load_color = None
+    if args.use_xyzrgb:
+        load_color = 'rgb'
+    elif args.use_xyzhue:
+        load_color = 'hsv'
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
@@ -346,12 +365,13 @@ def main():
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
                                                  noise_func=noise_func,
-                                                 load_color=args.use_xyzrgb,
+                                                 load_color=load_color,
                                                  compute_normals=(args.normal_wt > 0),
                                                  maxdepthdiff=args.normal_max_depth_diff,
                                                  bismooth_depths=args.bilateral_depth_smoothing,
                                                  bismooth_width=args.bilateral_window_width,
-                                                 bismooth_std=args.bilateral_depth_std) # Need BWD flows / masks if using GT masks
+                                                 bismooth_std=args.bilateral_depth_std,
+                                                 supervised_seg_loss=(args.seg_wt > 0)) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -394,7 +414,11 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    num_input_channels = 6 if args.use_xyzrgb else 3 # Num input channels
+    num_input_channels = 3 # Num input channels
+    if args.use_xyzrgb:
+        num_input_channels = 6
+    elif args.use_xyzhue:
+        num_input_channels = 4 # Use only hue as input
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
         assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
@@ -652,6 +676,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
     stats.dissimposeloss, stats.dissimdeltaloss = AverageMeter(), AverageMeter()
     stats.normalloss, stats.anchorloss          = AverageMeter(), AverageMeter()
+    stats.segloss                               = AverageMeter()
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
@@ -696,7 +721,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     pt_wt, consis_wt, normal_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.normal_wt * args.loss_scale
-    anchor_wt = args.pose_anchor_wt * args.loss_scale
+    anchor_wt, seg_wt = args.pose_anchor_wt * args.loss_scale, args.seg_wt * args.loss_scale
     identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
     for i in xrange(num_iters):
         # ============ Load data ============#
@@ -720,6 +745,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_xyzrgb:
             rgb = util.to_var(sample['rgbs'].type(deftype)/255.0, requires_grad=train) # Normalize RGB to 0-1
             netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
+        elif args.use_xyzhue:
+            hue = util.to_var(sample['rgbs'].narrow(2,0,1).type(deftype)/179.0, requires_grad=train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
+            netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
         else:
             netinput = pts # XYZ
 
@@ -737,6 +765,11 @@ def iterate(data_loader, model, tblogger, num_iters,
             initnormals = util.to_var(sample['initnormals'].type(deftype), requires_grad=train)
             tarnormals  = util.to_var(sample['tarnormals'].type(deftype), requires_grad=train)
             validinitnormals = util.to_var(sample['validinitnormals'].type(deftype), requires_grad=train)
+
+        # Get segmentation labels
+        if (args.seg_wt > 0):
+            deflabtype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor'
+            seglabels = util.to_var(sample['labels'].type(deflabtype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -826,6 +859,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
         dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         prednormals, normalloss, anchorloss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        segloss = 0
         for k in xrange(args.seq_len):
             ### Make the 3D point predictions and set up loss
             # Separate between using the full gradient & gradient only for the first delta pose
@@ -890,6 +924,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 normalloss[k] = currnormalloss.data[0]
                 prednormals = torch.cat(prednormals, 1) # B x S x 3 x H x W
 
+            ### Segmentation loss (only for mask at t = 0)
+            if (args.seg_wt > 0) and (k == 0):
+                segloss = seg_wt * nn.NLLLoss2d(weight=None, size_average=True)(initmask.log(), seglabels[:,0])
+                loss += segloss
+
             ### Pose anchor loss
             if (args.pose_anchor_wt > 0):
                 # Get pose centers and mask mean
@@ -942,6 +981,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         stats.dissimdeltaloss.update(dissimdeltaloss)
         stats.normalloss.update(normalloss)
         stats.anchorloss.update(anchorloss)
+        stats.segloss.update(segloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -1064,6 +1104,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-motionerravg': motionerr_avg.sum()/bsz,
                 mode+'-stillerrsum': stillerr_sum.sum() / bsz,
                 mode+'-stillerravg': stillerr_avg.sum() / bsz,
+                mode+'-segloss': segloss
             }
             if mode == 'train':
                 info[mode+'-lr'] = args.curr_lr # Plot current learning rate
@@ -1106,19 +1147,26 @@ def iterate(data_loader, model, tblogger, num_iters,
                 if args.use_xyzrgb:
                     rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
                                                             nrow=args.seq_len, normalize=True, range=(0.0,255.0))
+                elif args.use_xyzhue:
+                    rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id,:,0].float().view(-1, 1, args.img_ht, args.img_wd),
+                                                            nrow=args.seq_len, normalize=True, range=(0.0, 179.0)) # Show only hue, goes from 0-179 in OpenCV
 
                 # Show as an image summary
                 info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                          mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                          mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                 }
-                if args.use_xyzrgb:
+                if args.use_xyzrgb or args.use_xyzhue:
                     info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                 if (args.normal_wt > 0):
                     normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.data.narrow(0, id, 1),
                                                                       prednormals.data.narrow(0, id, 1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
                                                            nrow=args.seq_len, normalize=True, range=(-1, 1))
                     info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
+                if (args.seg_wt > 0):
+                    segdisp = torchvision.utils.make_grid(sample['labels'][id,0].float().view(-1, 1, args.img_ht, args.img_wd),
+                                                            nrow=1, normalize=True)
+                    info[mode+'-seglabels'] = util.to_np(segdisp.unsqueeze(0))  # Optional segmentation labels
                 for tag, images in info.items():
                     tblogger.image_summary(tag, images, iterct)
 
@@ -1161,9 +1209,10 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print loss
     bsz = args.batch_size if bsz is None else bsz
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], Batch size: {}, '
-          'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
+          'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
+          'Seg : {seg.val:.4f} ({seg.avg:.4f}) '.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
-        sampletotal, bsz, loss=stats.loss))
+        sampletotal, bsz, loss=stats.loss, seg=stats.segloss))
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):

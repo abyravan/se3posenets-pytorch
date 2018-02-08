@@ -770,7 +770,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     depths = points.narrow(1,2,1)  # Last channel in points is the depth
     
     # Setup vars for BWD flow computation
-    if compute_bwdflows:
+    if compute_bwdflows or supervised_seg_loss:
         masks = torch.ByteTensor( seq_len + 1, num_meshes+1, img_ht, img_wd)
 
     # Setup vars for color image
@@ -866,7 +866,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd)) # = xygrid * depths
 
     # Compute masks
-    if compute_bwdflows:
+    if compute_bwdflows or supervised_seg_loss:
         # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
         # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
         for j in xrange(num_meshes):

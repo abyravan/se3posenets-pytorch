@@ -926,8 +926,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             ### Segmentation loss (only for mask at t = 0)
             if (args.seg_wt > 0) and (k == 0):
-                segloss = seg_wt * nn.NLLLoss2d(weight=None, size_average=True)(initmask.log(), seglabels[:,0])
-                loss += segloss
+                currsegloss = seg_wt * nn.NLLLoss2d(weight=None, size_average=True)(initmask.log(), seglabels[:,0])
+                loss += currsegloss
+                segloss = currsegloss.data[0]
 
             ### Pose anchor loss
             if (args.pose_anchor_wt > 0):

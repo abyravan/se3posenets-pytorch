@@ -769,7 +769,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Get segmentation labels
         if (args.seg_wt > 0):
             deflabtype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor'
-            seglabels = util.to_var(sample['labels'].type(deflabtype), requires_grad=train)
+            seglabels = util.to_var(sample['labels'].type(deflabtype), requires_grad=False)
 
         # Measure data loading time
         data_time.update(time.time() - start)

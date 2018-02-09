@@ -1460,11 +1460,11 @@ void run_pangolin(const boost::shared_ptr<PyRealData> data)
             // Display RGB image
             glColor3f(1,1,1);
             rgbDisp.ActivateScissorAndClear();
-            texRGB.Upload(datac->curr_rgb,GL_BGR,GL_UNSIGNED_BYTE);
+            texRGB.Upload(datac->curr_rgb,GL_RGB,GL_UNSIGNED_BYTE);
             texRGB.RenderToViewportFlipY();
 
             rgbDispT.ActivateScissorAndClear();
-            texRGBTar.Upload(datac->final_rgb,GL_BGR,GL_UNSIGNED_BYTE);
+            texRGBTar.Upload(datac->final_rgb,GL_RGB,GL_UNSIGNED_BYTE);
             texRGBTar.RenderToViewportFlipY();
         }
 

@@ -252,9 +252,9 @@ class RGBImageSubscriber:
         try:
             # By default, we assume input image is 640x480, we subsample to 320x240
             if (self.ht == 240):
-                self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3")[::2, ::2].astype(np.uint8)
+                self.rgbf = self.bridge.imgmsg_to_cv2(data, "rgb8")[::2, ::2].astype(np.uint8) # We want RGB
             else:
-                self.rgbf = self.bridge.imgmsg_to_cv2(data, "8UC3").astype(np.uint8)
+                self.rgbf = self.bridge.imgmsg_to_cv2(data, "rgb8").astype(np.uint8) # We want RGB
             self.flag = True
         except CvBridgeError as e:
             print(e)
@@ -266,7 +266,7 @@ class RGBImageSubscriber:
         self.flag = False # We've read the latest image
 
         # Return clone
-        return torch.from_numpy(self.rgbf).clone()
+        return torch.from_numpy(self.rgbf).clone() # Convert from BGR to RGB
 
 #############################################################333
 # Setup functions
@@ -1174,6 +1174,11 @@ def main():
                 ctrl_grad[5:] = 0
             elif pargs.only_top6_jts:
                 ctrl_grad[6:] = 0
+            elif pargs.ctrl_specific_jts:
+                ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
+                for k in xrange(7):
+                    if k not in ctrl_jts:
+                        ctrl_grad[k] = 0
 
             # Decay controls if loss is small
             if loss < 1:
@@ -1201,6 +1206,11 @@ def main():
                 next_angles[5:] = start_angles[5:] # Lock these angles
             elif pargs.only_top6_jts:
                 next_angles[6:] = start_angles[6:] # Lock these angles
+            elif pargs.ctrl_specific_jts:
+                ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
+                for k in xrange(7):
+                    if k not in ctrl_jts:
+                        next_angles[k] = start_angles[k]  # Lock these angles
 
             # Send commands to the robot
             if pargs.ctrlr_type == 'blockpos':
@@ -1313,7 +1323,7 @@ def main():
                     status = -1
                     conv_iter = it + 1
                     print("*****************************************")
-                    break
+                    #break
             else:
                 inc_ctr = 0 # Reset max(inc_ctr-1, 0) # Reset
             prev_loss = loss

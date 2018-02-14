@@ -865,7 +865,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Compute deltas - this is tricky, we need to get deltas such that we can take points from global
                 # frame back into the global frame, so we need the delta to be: SE3_2 * SE3_1^-1
-                camdeltapose = se3nn.ComposeRtPair()(camtranspose, se3nn.RtInverse(campose))
+                camdeltapose = se3nn.ComposeRtPair()(camtranspose, se3nn.RtInverse()(campose))
                 deltaposes.append(camdeltapose)
 
         # Now compute the losses across the sequence

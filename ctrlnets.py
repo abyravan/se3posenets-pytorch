@@ -927,7 +927,7 @@ class TransitionModel(nn.Module):
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly
             z = self.posedecoder(p, x) # SE3_2 = SE3_1 * D_local (takes a point in local frame to global frame)
-            y = self.globaldeltadecoder(z, self.rtinv(p)) # D_global = SE3_2 * SE3_1^-1 = SE3_1 * D_local * SE3_1^-1 (from global to global)
+            y = x #TODO: This is not correct, fix it! self.globaldeltadecoder(z, self.rtinv(p)) # D_global = SE3_2 * SE3_1^-1 = SE3_1 * D_local * SE3_1^-1 (from global to global)
         else:
             # Predicted delta is already in the global frame of reference, use it directly (from global to global)
             z = self.posedecoder(x, p) # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)

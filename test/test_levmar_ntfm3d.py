@@ -114,24 +114,26 @@ print("Setup inputs, parameters, targets")
 # print(np.abs(diff).max(), np.abs(diff).min())
 
 # Optimize
-nruns = 20
+nruns, mbsz = 20, 2
 import time
 tt = torch.zeros(nruns)
 for k in range(nruns):
-    tti, diffmax, diffmin = torch.zeros(bsz), torch.zeros(bsz), torch.zeros(bsz)
-    for j in range(bsz):
-        tfmparams_init = torch.rand(1,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
+    tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
+    for j in range(0,bsz,mbsz):
+        tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
         l = NTfm3DOptimizer()
-        loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,1), masks.narrow(0,j,1), tgtpts.narrow(0,j,1))
-        lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,1), masks.narrow(0,j,1), tgtpts.narrow(0,j,1))
+        loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
+        lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
 
         st = time.time()
         res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
-        tti[j] = time.time() - st
-        diff = res.x.reshape(1,nmsk,3,4) - tfmparams_gt.narrow(0,j,1).cpu().numpy()
-        diffmax[j], diffmin[j] = diff.max(), diff.min()
-    tt[k] = tti.sum()
-    print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(diffmax.mean(), diffmin.mean(),
+        tti.append(time.time() - st)
+        diff = res.x.reshape(mbsz,nmsk,3,4) - tfmparams_gt.narrow(0,j,mbsz).cpu().numpy()
+        diffmax.append(diff.max())
+        diffmin.append(diff.min())
+    tt[k] = torch.Tensor(tti).sum()
+    print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
+                                                                             torch.Tensor(diffmin).mean(),
                                                               tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
 
 

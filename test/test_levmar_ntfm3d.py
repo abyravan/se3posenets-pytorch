@@ -85,7 +85,7 @@ class NTfm3DOptimizer:
         return self.jac.view(bsz,bsz,nmaskch,ht,wd,3,4).permute(0,3,4,1,2,5,6).clone().view(bsz*ht*wd, bsz*nmaskch*3*4).cpu().numpy()
 #
 # Setup stuff
-bsz, nch, nmsk, ht, wd = 16, 3, 4, 24, 32
+bsz, nch, nmsk, ht, wd = 16, 3, 8, 120, 160
 tensortype = 'torch.FloatTensor'
 if torch.cuda.is_available():
     tensortype = 'torch.cuda.FloatTensor'
@@ -114,7 +114,7 @@ print("Setup inputs, parameters, targets")
 # print(np.abs(diff).max(), np.abs(diff).min())
 
 # Optimize
-nruns, mbsz = 20, 2
+nruns, mbsz = 20, 1
 import time
 tt = torch.zeros(nruns)
 for k in range(nruns):

@@ -6,6 +6,7 @@ import sys, os
 sys.path.append("/home/barun/Projects/se3nets-pytorch/")
 import data
 import time
+from multiprocessing import Pool
 
 class NTfm3DOptimizer:
     def __init__(self):
@@ -84,9 +85,25 @@ class NTfm3DOptimizer:
 
         return self.jac.view(bsz,bsz,nmaskch,ht,wd,3,4).permute(0,3,4,1,2,5,6).clone().view(bsz*ht*wd, bsz*nmaskch*3*4).cpu().numpy()
 
-#
+def minimize(args):
+    # Setup stuff
+    optimclass, pts, masks, tgtpts = args
+    bsz, nch, ht, wd = pts.size()
+    nmsk = masks.size(1)
+
+    # Initialize params / loss / jac fns
+    initparams = torch.rand(bsz, nmsk, 3, 4).type_as(pts).view(-1).cpu().numpy()
+    l = NTfm3DOptimizer()
+    loss = lambda params: l.compute_loss(params, pts, masks, tgtpts)
+    lossjac = lambda params: l.compute_jac(params, pts, masks, tgtpts)
+
+    # Optimize
+    res = scipy.optimize.least_squares(loss, initparams, jac=lossjac)
+    return res.x
+
+###########
 # Setup stuff
-bsz, nch, nmsk, ht, wd = 16, 3, 8, 120, 160
+bsz, nch, nmsk, ht, wd = 16, 3, 8, 24, 32 #120, 160
 tensortype = 'torch.FloatTensor'
 if torch.cuda.is_available():
     tensortype = 'torch.cuda.FloatTensor'
@@ -99,6 +116,7 @@ tfmparams_gt = torch.rand(bsz, nmsk, 3, 4).type(tensortype)  # 3x4 matrix
 tgtpts = data.NTfm3D(pts, masks, tfmparams_gt)
 print("Setup inputs, parameters, targets")
 
+##########
 # ### Finite difference to check stuff
 # params_t = torch.rand(bsz, nmsk, 3, 4).double().view(-1).numpy()
 # l1 = NTfm3DOptimizer()
@@ -114,28 +132,53 @@ print("Setup inputs, parameters, targets")
 # diff = jacf - jacb
 # print(np.abs(diff).max(), np.abs(diff).min())
 
-# Optimize
+###########
+# # Optimize
+# nruns, mbsz = 20, 1
+# import time
+# tt = torch.zeros(nruns)
+# for k in range(nruns):
+#     tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
+#     for j in range(0,bsz,mbsz):
+#         tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
+#         l = NTfm3DOptimizer()
+#         loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
+#         lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
+#
+#         st = time.time()
+#         res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
+#         tti.append(time.time() - st)
+#         diff = res.x.reshape(mbsz,nmsk,3,4) - tfmparams_gt.narrow(0,j,mbsz).cpu().numpy()
+#         diffmax.append(diff.max())
+#         diffmin.append(diff.min())
+#     tt[k] = torch.Tensor(tti).sum()
+#     print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
+#                                                                              torch.Tensor(diffmin).mean(),
+#                                                               tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
+
+##########
+# Optimize parallel
 nruns, mbsz = 20, 1
+
+# Parallel pool
+nthreads = 4
+pool = Pool(nthreads)
+
 import time
 tt = torch.zeros(nruns)
 for k in range(nruns):
-    tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
-    for j in range(0,bsz,mbsz):
-        tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
-        l = NTfm3DOptimizer()
-        loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
-        lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
+    # Optimize & time
+    st = time.time()
+    args = [ (NTfm3DOptimizer, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz)) for j in range(0,bsz,mbsz) ]
+    results = pool.map(minimize, args) # Optimize in parallel
+    tt[k] = (time.time() - st)
 
-        st = time.time()
-        res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
-        tti.append(time.time() - st)
-        diff = res.x.reshape(mbsz,nmsk,3,4) - tfmparams_gt.narrow(0,j,mbsz).cpu().numpy()
-        diffmax.append(diff.max())
-        diffmin.append(diff.min())
-    tt[k] = torch.Tensor(tti).sum()
-    print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
-                                                                             torch.Tensor(diffmin).mean(),
-                                                              tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
+    # Check error w.r.t GT
+    diff = torch.Tensor(results).view(bsz,nmsk,3,4) - tfmparams_gt
+    print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(diff.max(), diff.min(),
+                                                                             tt[:k+1].mean(), tt[:k+1].std(),
+                                                                             tt[:k+1].mean()/bsz))
+
 
 
 '''

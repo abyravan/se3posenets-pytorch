@@ -5,6 +5,7 @@ import sys
 import sys, os
 sys.path.append("/home/barun/Projects/se3nets-pytorch/")
 import data
+import time
 
 class NTfm3DOptimizer:
     def __init__(self):
@@ -20,12 +21,14 @@ class NTfm3DOptimizer:
         assert masks.size() == torch.Size([bsz, nmaskch, ht, wd]), "Tfms need to be of size [bsz x nch x 3 x 4]"
 
         # Compute loss
+        t = time.time()
         tfms = torch.from_numpy(tfmparams).view(bsz,nmaskch,3,4).type_as(pts).clone() # 3 x 4 matrix of params
         predpts = data.NTfm3D(pts, masks, tfms) # Transform points through non-rigid transform
 
         # Compute residual & loss
         residual = (predpts - targets) # B x 3 x H x W
         loss = torch.pow(residual, 2).sum(1).view(-1).cpu().numpy() # "BHW" vector of losses
+        print('Loss: {}'.format(time.time()-t))
         return loss
 
     def compute_jac(self, tfmparams, pts, masks, targets):
@@ -36,6 +39,7 @@ class NTfm3DOptimizer:
         assert masks.size() == torch.Size([bsz, nmaskch, ht, wd]), "Tfms need to be of size [bsz x nch x 3 x 4]"
 
         # Compute loss
+        t = time.time()
         tfms = torch.from_numpy(tfmparams).view(bsz, nmaskch, 3, 4).type_as(pts)  # 3 x 4 matrix of params
         predpts = data.NTfm3D(pts, masks, tfms)  # Transform points through non-rigid transform
 
@@ -80,6 +84,8 @@ class NTfm3DOptimizer:
         self.jac[::(bsz+1), :, :, :, 0, 2] = gxtm * pts.narrow(1, 2, 1) # (gxt * z * m)
         self.jac[::(bsz+1), :, :, :, 1, 2] = gytm * pts.narrow(1, 2, 1) # (gyt * z * m)
         self.jac[::(bsz+1), :, :, :, 2, 2] = gztm * pts.narrow(1, 2, 1) # (gzt * z * m)
+
+        print('Loss Jac: {}'.format(time.time()-t))
 
         # Return
         return self.jac.view(bsz,bsz,nmaskch,ht,wd,3,4).permute(0,3,4,1,2,5,6).clone().view(bsz*ht*wd, bsz*nmaskch*3*4).cpu().numpy()

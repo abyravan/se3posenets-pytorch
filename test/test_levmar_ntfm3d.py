@@ -85,10 +85,11 @@ class NTfm3DOptimizer:
         self.jac[::(bsz+1), :, :, :, 1, 2] = gytm * pts.narrow(1, 2, 1) # (gyt * z * m)
         self.jac[::(bsz+1), :, :, :, 2, 2] = gztm * pts.narrow(1, 2, 1) # (gzt * z * m)
 
+        vv = self.jac.view(bsz,bsz,nmaskch,ht,wd,3,4).permute(0,3,4,1,2,5,6).clone().view(bsz*ht*wd, bsz*nmaskch*3*4).cpu().numpy()
         print('Loss Jac: {}'.format(time.time()-t))
 
         # Return
-        return self.jac.view(bsz,bsz,nmaskch,ht,wd,3,4).permute(0,3,4,1,2,5,6).clone().view(bsz*ht*wd, bsz*nmaskch*3*4).cpu().numpy()
+        return vv
 #
 # Setup stuff
 bsz, nch, nmsk, ht, wd = 16, 3, 8, 120, 160

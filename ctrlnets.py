@@ -28,7 +28,7 @@ def get_nonlinearity(nonlinearity):
 
 # Get SE3 dimension based on se3 type & pivot
 def get_se3_dimension(se3_type, use_pivot):
-    # Get dimension (6 for se3aa, se3euler, se3spquat)
+    # Get dimension (6 for se3aa, se3euler, se3spquat, se3aar)
     se3_dim = 6
     if se3_type == 'se3quat' or se3_type == 'se3aa4':
         se3_dim = 7
@@ -356,6 +356,84 @@ def update_pose_centers(ptcloud, masks, poses, centertype):
     else:
         assert False, 'Unknown pose center type input: {}'.format(centertype)
 
+#############################
+### NEW SE3 LAYER (se3toSE3 with some additional transformation for the translation vector)
+
+# Create a skew-symmetric matrix "S" of size [(Bk) x 3 x 3] (passed in) given a [(Bk) x 3] vector
+def create_skew_symmetric_matrix(vector):
+    # Create the skew symmetric matrix:
+    # [0 -z y; z 0 -x; -y x 0]
+    N = vector.size(0)
+    output = vector.view(N,3,1).expand(N,3,3).clone()
+    output[:, 0, 0] = 0
+    output[:, 1, 1] = 0
+    output[:, 2, 2] = 0
+    output[:, 0, 1] = -vector[:, 2]
+    output[:, 1, 0] =  vector[:, 2]
+    output[:, 0, 2] =  vector[:, 1]
+    output[:, 2, 0] = -vector[:, 1]
+    output[:, 1, 2] = -vector[:, 0]
+    output[:, 2, 1] =  vector[:, 0]
+    return output
+
+# Compute the rotation matrix R & translation vector from the axis-angle parameters using Rodriguez's formula:
+# (R = I + (sin(theta)/theta) * K + ((1-cos(theta))/theta^2) * K^2)
+# (t = I + (1-cos(theta))/theta^2 * K + ((theta-sin(theta)/theta^3) * K^2
+# where K is the skew symmetric matrix based on the un-normalized axis & theta is the norm of the input parameters
+# From Wikipedia: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+# Eqns: 77-84 (PAGE: 10) of http://ethaneade.com/lie.pdf
+def se3ToRt(input):
+    # Check dimensions
+    bsz, nse3, ndim = input.size()
+    N = bsz*nse3
+    eps = 1e-12
+    assert (ndim == 6)
+
+    # Trans | Rot params
+    input_v = input.view(N, ndim, 1)
+    rotparam   = input_v.narrow(1,3,3) # so(3)
+    transparam = input_v.narrow(1,0,3) # R^3
+
+    # Get the un-normalized axis and angle
+    axis = rotparam.clone().view(N, 3, 1)  # Un-normalized axis
+    angle2 = (axis * axis).sum(1).view(N, 1, 1)  # Norm of vector (squared angle)
+    angle  = torch.sqrt(angle2)  # Angle
+    small  = (angle2 < eps).data # Don't need gradient w.r.t this operation (also because of pytorch error: https://discuss.pytorch.org/t/get-error-message-maskedfill-cant-differentiate-the-mask/9129/4)
+
+    # Create Identity matrix
+    I = angle2.expand(N,3,3).clone()
+    I[:] = 0 # Fill will all zeros
+    I[:,0,0], I[:,1,1], I[:,2,2] = 1.0, 1.0, 1.0 # Diagonal elements = 1
+
+    # Compute skew-symmetric matrix "K" from the axis of rotation
+    K = create_skew_symmetric_matrix(axis)
+    K2 = torch.bmm(K, K)  # K * K
+
+    # Compute A = (sin(theta)/theta)
+    A = torch.sin(angle) / angle
+    A[small] = 1.0 # sin(0)/0 ~= 1
+
+    # Compute B = (1 - cos(theta)/theta^2)
+    B = (1 - torch.cos(angle)) / angle2
+    B[small] = 1/2 # lim 0-> 0 (1 - cos(0))/0^2 = 1/2
+
+    # Compute C = (theta - sin(theta))/theta^3
+    C = (1 - A) / angle2
+    C[small] = 1/6 # lim 0-> 0 (0 - sin(0))/0^3 = 1/6
+
+    # Compute the rotation matrix: R = I + (sin(theta)/theta)*K + ((1-cos(theta))/theta^2) * K^2
+    R = I + K * A.expand(N, 3, 3) + K2 * B.expand(N, 3, 3)
+
+    # Compute the translation tfm matrix: V = I + ((1-cos(theta))/theta^2) * K + ((theta-sin(theta))/theta^3)*K^2
+    V = I + K * B.expand(N, 3, 3) + K2 * C.expand(N, 3, 3)
+
+    # Compute translation vector
+    t = torch.bmm(V, transparam) # V*u
+
+    # Final tfm
+    return torch.cat([R, t], 2).view(bsz,nse3,3,4).clone() # B x K x 3 x 4
+
+
 ################################################################################
 '''
     Single step / Recurrent models
@@ -427,8 +505,10 @@ class PoseEncoder(nn.Module):
             init_se3layer_identity(layer, num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
+        self.se3_type = se3_type
         self.posedecoder = nn.Sequential()
-        self.posedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, use_pivot)) # Convert to Rt
+        if se3_type != 'se3aar':
+            self.posedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, use_pivot)) # Convert to Rt
         if use_pivot:
             self.posedecoder.add_module('pivotrt', se3nn.CollapseRtPivots()) # Collapse pivots
         if use_kinchain:
@@ -459,6 +539,8 @@ class PoseEncoder(nn.Module):
         # Run pose-decoder to predict poses
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
+        if self.se3_type == 'se3aar':
+            p = se3ToRt(p) # Use new se3ToRt layer!
         p = self.posedecoder(p)
 
         # Return poses
@@ -735,8 +817,10 @@ class PoseMaskEncoder(nn.Module):
             init_se3layer_identity(layer, num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
+        self.se3_type = se3_type
         self.posedecoder = nn.Sequential()
-        self.posedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, use_pivot)) # Convert to Rt
+        if se3_type != 'se3aar':
+            self.posedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, use_pivot)) # Convert to Rt
         if use_pivot:
             self.posedecoder.add_module('pivotrt', se3nn.CollapseRtPivots()) # Collapse pivots
         if use_kinchain:
@@ -780,6 +864,8 @@ class PoseMaskEncoder(nn.Module):
         # Run pose-decoder to predict poses
         p = self.se3decoder(p)
         p = p.view(-1, self.num_se3, self.se3_dim)
+        if self.se3_type == 'se3aar':
+            p = se3ToRt(p) # Use new se3ToRt layer!
         p = self.posedecoder(p)
 
         # Run mask-decoder to predict a smooth mask
@@ -875,10 +961,12 @@ class TransitionModel(nn.Module):
             init_se3layer_identity(layer, num_se3, se3_type) # Init to identity
 
         # Create pose decoder (convert to r/t)
+        self.se3_type    = se3_type
         self.delta_pivot = delta_pivot
         self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
         self.deltaposedecoder = nn.Sequential()
-        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        if se3_type != 'se3aar':
+            self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
         if (self.delta_pivot != ''):
             self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
         #if use_kinchain:
@@ -923,6 +1011,8 @@ class TransitionModel(nn.Module):
         x = x.view(-1, self.num_se3, self.se3_dim)
         if self.inp_pivot: # For these two cases, we don't need to handle anything
             x = torch.cat([x, pivot.view(-1, self.num_se3, 3)], 2) # Use externally provided pivots
+        if self.se3_type == 'se3aar':
+            x = se3ToRt(x) # Use new se3ToRt layer!
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly

@@ -1076,3 +1076,91 @@ targetflows_b = Variable(targetflows.data.clone(), requires_grad=False)
 predpts_b = NTfm3D()(pts_b, masks_b, tfms_b)
 loss_b = BiNormMSESqrtLoss(predpts_b-pts_b,targetflows_b,norm_per_pt=False)
 loss_b.backward()
+
+
+#################################################################
+# se3ToRt
+
+# Grad check
+import torch
+from torch.autograd import gradcheck, Variable
+
+# Create a skew-symmetric matrix "S" of size [(Bk) x 3 x 3] (passed in) given a [(Bk) x 3] vector
+def create_skew_symmetric_matrix(vector):
+    # Create the skew symmetric matrix:
+    # [0 -z y; z 0 -x; -y x 0]
+    N = vector.size(0)
+    output = vector.view(N,3,1).expand(N,3,3).clone()
+    output[:, 0, 0] = 0
+    output[:, 1, 1] = 0
+    output[:, 2, 2] = 0
+    output[:, 0, 1] = -vector[:, 2]
+    output[:, 1, 0] =  vector[:, 2]
+    output[:, 0, 2] =  vector[:, 1]
+    output[:, 2, 0] = -vector[:, 1]
+    output[:, 1, 2] = -vector[:, 0]
+    output[:, 2, 1] =  vector[:, 0]
+    return output
+
+# Compute the rotation matrix R & translation vector from the axis-angle parameters using Rodriguez's formula:
+# (R = I + (sin(theta)/theta) * K + ((1-cos(theta))/theta^2) * K^2)
+# (t = I + (1-cos(theta))/theta^2 * K + ((theta-sin(theta)/theta^3) * K^2
+# where K is the skew symmetric matrix based on the un-normalized axis & theta is the norm of the input parameters
+# From Wikipedia: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+# Eqns: 77-84 (PAGE: 10) of http://ethaneade.com/lie.pdf
+def se3ToRt(input):
+    # Check dimensions
+    bsz, nse3, ndim = input.size()
+    N = bsz*nse3
+    eps = 1e-12
+    assert (ndim == 6)
+
+    # Trans | Rot params
+    input_v = input.view(N, ndim, 1)
+    rotparam   = input_v.narrow(1,3,3) # so(3)
+    transparam = input_v.narrow(1,0,3) # R^3
+
+    # Get the un-normalized axis and angle
+    axis = rotparam.clone().view(N, 3, 1)  # Un-normalized axis
+    angle2 = (axis * axis).sum(1).view(N, 1, 1)  # Norm of vector (squared angle)
+    angle  = torch.sqrt(angle2)  # Angle
+    small  = (angle2 < eps).data # Don't need gradient w.r.t this operation (also because of pytorch error: https://discuss.pytorch.org/t/get-error-message-maskedfill-cant-differentiate-the-mask/9129/4)
+
+    # Create Identity matrix
+    I = angle2.expand(N,3,3).clone()
+    I[:] = 0 # Fill will all zeros
+    I[:,0,0], I[:,1,1], I[:,2,2] = 1.0, 1.0, 1.0 # Diagonal elements = 1
+
+    # Compute skew-symmetric matrix "K" from the axis of rotation
+    K = create_skew_symmetric_matrix(axis)
+    K2 = torch.bmm(K, K)  # K * K
+
+    # Compute A = (sin(theta)/theta)
+    A = torch.sin(angle) / angle
+    A[small] = 1.0 # sin(0)/0 ~= 1
+
+    # Compute B = (1 - cos(theta)/theta^2)
+    B = (1 - torch.cos(angle)) / angle2
+    B[small] = 1/2 # lim 0-> 0 (1 - cos(0))/0^2 = 1/2
+
+    # Compute C = (theta - sin(theta))/theta^3
+    C = (1 - A) / angle2
+    C[small] = 1/6 # lim 0-> 0 (0 - sin(0))/0^3 = 1/6
+
+    # Compute the rotation matrix: R = I + (sin(theta)/theta)*K + ((1-cos(theta))/theta^2) * K^2
+    R = I + K * A.expand(N, 3, 3) + K2 * B.expand(N, 3, 3)
+
+    # Compute the translation tfm matrix: V = I + ((1-cos(theta))/theta^2) * K + ((theta-sin(theta))/theta^3)*K^2
+    V = I + K * B.expand(N, 3, 3) + K2 * C.expand(N, 3, 3)
+
+    # Compute translation vector
+    t = torch.bmm(V, transparam) # V*u
+
+    # Final tfm
+    return torch.cat([R, t], 2).view(bsz,nse3,3,4).clone() # B x K x 3 x 4
+
+# Test code (gradcheck)
+torch.set_default_tensor_type('torch.DoubleTensor')
+bsz, nse3, ndim = 4, 3, 6
+input = Variable(torch.rand(bsz, nse3, ndim), requires_grad=True)
+assert (gradcheck(se3ToRt, [input]))

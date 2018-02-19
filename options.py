@@ -67,7 +67,7 @@ def setup_comon_options():
     parser.add_argument('--nonlin', default='prelu', type=str,
                         metavar='NONLIN', help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu | selu')
     parser.add_argument('--se3-type', default='se3aa', type=str,
-                        metavar='SE3', help='SE3 parameterization: [se3aa] | se3quat | se3spquat | se3euler | affine')
+                        metavar='SE3', help='SE3 parameterization: [se3aa] | se3quat | se3spquat | se3euler | affine | se3aar')
     parser.add_argument('-n', '--num-se3', type=int, default=8,
                         help='Number of SE3s to predict (default: 8)')
     parser.add_argument('--init-transse3-iden', action='store_true', default=False,

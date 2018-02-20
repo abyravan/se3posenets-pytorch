@@ -13,9 +13,9 @@ args.data = ['/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/
              '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint0/postprocessmotions_f/',
              '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f/']
 #args.data = ['/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/se2data/4link/']
-args.img_suffix = ''
+args.img_suffix = 'sub'
 args.step_len = 2
-args.seq_len = 10
+args.seq_len = 15
 args.train_per = 0.6
 args.val_per = 0.15
 args.ctrl_type = 'actdiffvel'
@@ -27,6 +27,7 @@ args.se3_type = 'se3aa'
 args.pred_pivot = False
 args.num_se3 = 8
 args.se2_data = False
+args.box_data = False
 
 # Get default options & camera intrinsics
 args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []

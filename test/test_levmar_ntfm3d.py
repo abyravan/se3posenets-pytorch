@@ -304,7 +304,8 @@ if __name__ == "__main__":
 
     ###########
     ## Sample example
-    sample = train_dataset[20]
+    sample = train_dataset[20000]
+    #torch.save(sample, 'levmartest.pth.tar')
 
     # Get data
     tensortype = 'torch.FloatTensor'
@@ -320,7 +321,7 @@ if __name__ == "__main__":
     bsz, nch, nmsk, ht, wd = pts.size(0), pts.size(1), masks.size(1), pts.size(2), pts.size(3)
     print(bsz, nch, nmsk, ht, wd)
     print("Setup inputs, parameters, targets")
-
+    print(deltaposes)
     # masks = torch.rand(bsz, nmsk, ht, wd).type(tensortype)
     # masks = masks/masks.sum(1).unsqueeze(1) # Normalize masks
     #
@@ -328,19 +329,19 @@ if __name__ == "__main__":
     # tgtpts = data.NTfm3D(pts, masks, tfmparams_gt)
 
     # ###########
-    # # Setup stuff
-    # bsz, nch, nmsk, ht, wd = 16, 3, 8, 24, 32 #120, 160
-    # tensortype = 'torch.FloatTensor'
-    # if torch.cuda.is_available():
-    #     tensortype = 'torch.cuda.FloatTensor'
+    ## Setup stuff
+    #bsz, nch, nmsk, ht, wd = 16, 3, 8, 24, 32 #120, 160
+    #tensortype = 'torch.FloatTensor'
+    #if torch.cuda.is_available():
+    #    tensortype = 'torch.cuda.FloatTensor'
     #
-    # pts = torch.rand(bsz, nch, ht, wd).type(tensortype) - 0.5
-    # masks = torch.rand(bsz, nmsk, ht, wd).type(tensortype)
-    # masks = masks/masks.sum(1).unsqueeze(1) # Normalize masks
+    #pts = torch.rand(bsz, nch, ht, wd).type(tensortype) - 0.5
+    #masks = torch.rand(bsz, nmsk, ht, wd).type(tensortype)
+    #masks = masks/masks.sum(1).unsqueeze(1) # Normalize masks
     #
-    # tfmparams_gt = torch.rand(bsz, nmsk, 3, 4).type(tensortype)  # 3x4 matrix
-    # tgtpts = data.NTfm3D(pts, masks, tfmparams_gt)
-    # print("Setup inputs, parameters, targets")
+    #deltaposes = torch.rand(bsz, nmsk, 3, 4).type(tensortype)  # 3x4 matrix
+    #tgtpts = datav.NTfm3D(pts, masks, deltaposes)
+    #print("Setup inputs, parameters, targets")
 
     ##########
     # ### Finite difference to check stuff
@@ -365,21 +366,26 @@ if __name__ == "__main__":
     tt = torch.zeros(nruns)
     for k in range(nruns):
         tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
+        diffmax1, diffmin1 = [], []
         for j in range(0,bsz,mbsz):
-            tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
+            #tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
+            tfmparams_init = torch.eye(4).view(1,1,4,4).narrow(2,0,3).expand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
             l = NTfm3DOptimizer()
             loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
             lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
 
             st = time.time()
-            res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
+            res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac, bounds=(-1,1), max_nfev=20)
+            print('Batch: {}, F:{}. J:{}'.format(j, res.nfev, res.njev))
             tti.append(time.time() - st)
             diff = res.x.reshape(mbsz,nmsk,3,4) - deltaposes.narrow(0,j,mbsz).cpu().numpy()
+            diff1 = (res.x - tfmparams_init)   
             diffmax.append(diff.max())
             diffmin.append(diff.min())
+            diffmax1.append(diff1.max()); diffmin1.append(diff1.min());
         tt[k] = torch.Tensor(tti).sum()
-        print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
-                                                                                 torch.Tensor(diffmin).mean(),
+        print('Init max/min error: {:.5f}/{:.5f}, Max/min error: {:.5f}/{:.5f}, Mean/std/per example time: {:.5f}/{:.5f}/{:.5f}'.format(torch.Tensor(diffmax1).mean(),
+                                                                                 torch.Tensor(diffmin1).mean(), torch.Tensor(diffmax).mean(), torch.Tensor(diffmin).mean(),
                                                                   tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
 
     # ##########

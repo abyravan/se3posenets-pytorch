@@ -1,5 +1,6 @@
 import torch
 import scipy.optimize
+import scipy.linalg
 import numpy as np
 import sys
 import sys, os
@@ -8,6 +9,7 @@ import data
 import time
 
 import multiprocessing
+#import xalglib
 
 class NTfm3DOptimizer:
     def __init__(self):
@@ -29,6 +31,7 @@ class NTfm3DOptimizer:
         # Compute residual & loss
         residual = (predpts - targets) # B x 3 x H x W
         loss = torch.pow(residual, 2).sum(1).view(-1).cpu().numpy() # "BHW" vector of losses
+
         return loss
 
     def compute_jac(self, tfmparams, pts, masks, targets):
@@ -102,6 +105,17 @@ def minimize(args):
     res = scipy.optimize.least_squares(loss, initparams, jac=lossjac)
     return res.x
 
+    # # Alglib
+    # epsx = 0.0000000001
+    # maxits = 0
+    #
+    # state = xalglib.minlmcreatevj(len(initparams), list(initparams))
+    # xalglib.minlmsetcond(state, epsx, maxits)
+    # xalglib.minlmoptimize_vj(state, loss, lossjac)
+    # res, rep = xalglib.minlmresults(state)
+    # print(res)
+    # return res
+
 if __name__ == "__main__":
     multiprocessing.set_start_method('spawn')
 
@@ -137,51 +151,58 @@ if __name__ == "__main__":
     # print(np.abs(diff).max(), np.abs(diff).min())
 
     ###########
-    # # Optimize
-    # nruns, mbsz = 20, 1
-    # import time
-    # tt = torch.zeros(nruns)
-    # for k in range(nruns):
-    #     tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
-    #     for j in range(0,bsz,mbsz):
-    #         tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
-    #         l = NTfm3DOptimizer()
-    #         loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
-    #         lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
-    #
-    #         st = time.time()
-    #         res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
-    #         tti.append(time.time() - st)
-    #         diff = res.x.reshape(mbsz,nmsk,3,4) - tfmparams_gt.narrow(0,j,mbsz).cpu().numpy()
-    #         diffmax.append(diff.max())
-    #         diffmin.append(diff.min())
-    #     tt[k] = torch.Tensor(tti).sum()
-    #     print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
-    #                                                                              torch.Tensor(diffmin).mean(),
-    #                                                               tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
-
-    ##########
-    # Optimize parallel
+    # Optimize
     nruns, mbsz = 20, 1
-
-    # Parallel pool
-    nthreads = 4
-    pool = multiprocessing.Pool(nthreads)
-
     import time
     tt = torch.zeros(nruns)
     for k in range(nruns):
-        # Optimize & time
-        st = time.time()
-        args = [ (NTfm3DOptimizer, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz)) for j in range(0,bsz,mbsz) ]
-        results = pool.map(minimize, args) # Optimize in parallel
-        tt[k] = (time.time() - st)
+        tti, diffmax, diffmin = [], [], [] #torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz), torch.zeros(bsz/mbsz)
+        for j in range(0,bsz,mbsz):
+            tfmparams_init = torch.rand(mbsz,nmsk,3,4).type(tensortype).view(-1).cpu().numpy()
+            l = NTfm3DOptimizer()
+            loss    = lambda params: l.compute_loss(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
+            lossjac = lambda params: l.compute_jac( params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
 
-        # Check error w.r.t GT
-        diff = torch.Tensor(results).view(bsz,nmsk,3,4) - tfmparams_gt
-        print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(diff.max(), diff.min(),
-                                                                                 tt[:k+1].mean(), tt[:k+1].std(),
-                                                                                 tt[:k+1].mean()/bsz))
+            st = time.time()
+            res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
+            tti.append(time.time() - st)
+            diff = res.x.reshape(mbsz,nmsk,3,4) - tfmparams_gt.narrow(0,j,mbsz).cpu().numpy()
+            diffmax.append(diff.max())
+            diffmin.append(diff.min())
+        tt[k] = torch.Tensor(tti).sum()
+        print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(torch.Tensor(diffmax).mean(),
+                                                                                 torch.Tensor(diffmin).mean(),
+                                                                  tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
+
+    # ##########
+    # # Optimize parallel
+    # nruns, mbsz = 20, 1
+    #
+    # # Parallel pool
+    # nthreads = 1
+    # pool = multiprocessing.Pool(nthreads)
+    #
+    # import time
+    # #from gridmap import grid_map
+    # tt = torch.zeros(nruns)
+    # for k in range(nruns):
+    #     # Optimize & time
+    #     st = time.time()
+    #     args = [ (NTfm3DOptimizer, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz)) for j in range(0,bsz,mbsz) ]
+    #     results = pool.map(minimize, args) # Optimize in parallel
+    #
+    #     # # The default queue used by grid_map is all.q. You must specify
+    #     # # the `queue` keyword argument if that is not the name of your queue.
+    #     # results = grid_map(minimize, args, quiet=False,
+    #     #                    max_processes=nthreads, queue='all.q')
+    #
+    #     tt[k] = (time.time() - st)
+    #
+    #     # Check error w.r.t GT
+    #     diff = torch.Tensor(results).view(bsz,nmsk,3,4) - tfmparams_gt
+    #     print('Max/min error: {}/{}, Mean/std/per example time: {}/{}/{}'.format(diff.max(), diff.min(),
+    #                                                                              tt[:k+1].mean(), tt[:k+1].std(),
+    #                                                                              tt[:k+1].mean()/bsz))
 
 
 

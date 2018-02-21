@@ -307,7 +307,8 @@ if __name__ == "__main__":
                                                                            len(test_dataset)))
 
         # Sample example
-        sample = train_dataset[20000]
+        id = np.random.randint(0,len(train_dataset))
+        sample = train_dataset[id]
         #torch.save(sample, 'levmartest.pth.tar')
 
     ###########

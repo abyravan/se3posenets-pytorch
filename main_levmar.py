@@ -968,13 +968,13 @@ def iterate(data_loader, model, tblogger, num_iters,
             for j in range(0, pts.size(0)):
                 # Setup loss/jacobian computation
                 l = NTfm3DAAOptimizer()
-                loss    = lambda params: l.compute_loss(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
-                lossjac = lambda params: l.compute_jac(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
+                oloss    = lambda params: l.compute_loss(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
+                olossjac = lambda params: l.compute_jac(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
 
                 # Initialize params and optimize
                 # TODO: Maybe initialize with prediction? For this to work, we need to get predicted SE3, not pose
                 delta_init = torch.zeros(1, args.num_se3, 6).type(deftype).view(-1).cpu().numpy()
-                res = scipy.optimize.least_squares(loss, delta_init, jac=lossjac, max_nfev=50, method='dogbox')  # , bounds=(-1,1))
+                res = scipy.optimize.least_squares(oloss, delta_init, jac=olossjac, max_nfev=50, method='dogbox')  # , bounds=(-1,1))
 
                 # Save some stats
                 levmarnfev[k] += res.nfev
@@ -982,7 +982,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 levmarcost[k] += res.cost
 
                 # Save optimal delta
-                optimdelta = AAToRt(torch.from_numpy(res.x).view(1, args.num_se3, 6).type_as(pts))
+                optimdelta = AAToRt(torch.from_numpy(res.x).view(1, args.num_se3, 6).type_as(pts.data))
                 optimdeltas.append(optimdelta)
             optimdeltaposes = util.to_var(torch.cat(optimdeltas, 0), requires_grad=False) # B x K x 3 x 4
 

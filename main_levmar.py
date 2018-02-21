@@ -87,6 +87,10 @@ parser.add_argument('--seg-wt', default=0.0, type=float,
 # Levmar wt
 parser.add_argument('--levmar-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the optimization based delta loss')
+parser.add_argument('--levmar-nfev-ipe', default=50, type=int,
+                    metavar='WT', help='Increase in number of max function evals allowed in levmar (starts off with this value at epoch 0)')
+parser.add_argument('--levmar-nfev-max', default=50, type=int,
+                    metavar='WT', help='Weight for the optimization based delta loss')
 
 # Define xrange
 try:
@@ -524,10 +528,14 @@ def main():
     ########################
     ############ Train / Validate
     args.imgdisp_freq = 5 * args.disp_freq # Tensorboard log frequency for the image data
+    args.levmar_nfev = 0
     train_ids, val_ids = [], []
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
+
+        # Adjust num func evals
+        args.levmar_nfev = min(args.levmar_nfev + args.levmar_nfev_ipe, args.levmar_nfev_max)
 
         # Train for one epoch
         train_stats = iterate(train_loader, model, tblogger, args.train_ipe,
@@ -974,7 +982,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Initialize params and optimize
                 # TODO: Maybe initialize with prediction? For this to work, we need to get predicted SE3, not pose
                 delta_init = torch.zeros(1, args.num_se3, 6).type(deftype).view(-1).cpu().numpy()
-                res = scipy.optimize.least_squares(oloss, delta_init, jac=olossjac, max_nfev=50, method='dogbox')  # , bounds=(-1,1))
+                res = scipy.optimize.least_squares(oloss, delta_init, jac=olossjac,
+                                                   max_nfev=args.levmar_nfev, method='dogbox')  # , bounds=(-1,1))
 
                 # Save some stats
                 levmarnfev[k] += res.nfev
@@ -1120,8 +1129,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
                         samplecurr=j+1, sampletotal=len(data_loader),
                         stats=stats, bsz=bsz)
-            print('\tOptim stats => Avg cost: {}, Avg NFev: {}, Avg NJev: {}'.format(
-                levmarcost.sum(), levmarnfev.sum(), levmarnjev.sum()
+            print('\tOptim stats => Avg cost: {}, Avg/Max NFev: {}/{}, Avg NJev: {}'.format(
+                levmarcost.sum(), levmarnfev.sum(), args.levmar_nfev, levmarnjev.sum()
             ))
 
             ### Print stuff if we have weight sharpening enabled

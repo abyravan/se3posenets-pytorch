@@ -496,7 +496,7 @@ for k in range(nruns):
         diff  = optimtfms - tfms.narrow(0,j,mbsz)
         diff1 = inittfms  - tfms.narrow(0,j,mbsz)
         print('Test: {}/{}, Example: {}/{}, F:{}. J:{}, Loss:{:.4f}, Diff-I:{:.4f}/{:.4f}, Diff-F:{:.4f}/{:.4f}'.format(
-            k+1, nruns, j+1, pts.size(0), res.nfev, res.njev, res.cost, diff.max(), diff.min(), diff1.max(), diff1.min()))
+            k+1, nruns, j+1, pts.size(0), res.nfev, res.njev, res.cost, diff1.max(), diff1.min(), diff.max(), diff.min()))
         #diff = res.x.reshape(mbsz,nmsk,6) - params.narrow(0,j,mbsz).cpu().numpy()
         #diff1 = (res.x - tfmparams_init)
         diffmax.append(diff.max()); diffmin.append(diff.min())

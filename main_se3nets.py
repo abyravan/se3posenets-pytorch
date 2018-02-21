@@ -31,6 +31,13 @@ parser.add_argument('--loss-wt', default=1.0, type=float,
 parser.add_argument('--use-gt-deltas', action='store_true', default=False,
                     help='Model predicts only masks. GT deltas are given. (default: False)')
 
+# Define xrange
+try:
+    a = xrange(1)
+except NameError: # Not defined in Python 3.x
+    def xrange(*args):
+        return iter(range(*args))
+
 ################ MAIN
 #@profile
 def main():
@@ -597,8 +604,8 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 ## Print the predicted delta-SE3s
                 if not args.use_gt_deltas:
-                    print '\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
-                                                                                                 args.se3_dim).cpu()
+                    print('\tPredicted delta-SE3s @ t=2:', predictions['deltase3'].data[id].view(args.num_se3,
+                                                                                                 args.se3_dim).cpu())
 
                 ## Print the predicted mask values
                 print('\tPredicted mask stats:')

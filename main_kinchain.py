@@ -415,6 +415,7 @@ def main():
         print('Using multi-step SE3-Pose-Model')
 
     ### Load the model
+    assert args.local_delta_se3, "Need to have local delta se3 enabled"
     num_train_iter = 0
     num_input_channels = 3 # Num input channels
     if args.use_xyzrgb:
@@ -437,7 +438,7 @@ def main():
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
-                    use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=True,
+                    use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
                     full_res=args.full_res, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models

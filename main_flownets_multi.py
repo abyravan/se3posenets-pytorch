@@ -42,6 +42,13 @@ parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
 parser.add_argument('--use-se3-nets', action='store_true', default=False,
                     help='Use SE3 nets instead of flow nets (default: False)')
 
+# Define xrange
+try:
+    a = xrange(1)
+except NameError: # Not defined in Python 3.x
+    def xrange(*args):
+        return iter(range(*args))
+
 ################ MAIN
 #@profile
 def main():
@@ -206,9 +213,20 @@ def main():
     else:
         print("Computing flows using tracker poses. Can get flows for all input points")
 
+    # XYZ-RGB
+    if args.use_xyzrgb:
+        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
+    elif args.use_xyzhue:
+        print("Using XYZ-Hue input - 4 channels. Assumes registered depth/RGB")
+
     ########################
     ############ Load datasets
     # Get datasets
+    load_color = None
+    if args.use_xyzrgb:
+        load_color = 'rgb'
+    elif args.use_xyzhue:
+        load_color = 'hsv'
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
@@ -243,6 +261,7 @@ def main():
                                                                        #camera_extrinsics = args.cam_extrinsics,
                                                                        #camera_intrinsics = args.cam_intrinsics,
                                                                        compute_bwdflows=args.use_gt_masks,
+                                                                       load_color=load_color,
                                                                        #num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                                        use_only_da=args.use_only_da_for_flows,
@@ -283,12 +302,19 @@ def main():
 
     print('Using multi-step Flow-Model')
 
+    ## Num input channels
+    num_input_channels = 3 # Num input channels
+    if args.use_xyzrgb:
+        num_input_channels = 6
+    elif args.use_xyzhue:
+        num_input_channels = 4 # Use only hue as input
+
     ### Load the model
     num_train_iter = 0
     if args.use_se3_nets:
         model = se3nets.SE3Model(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                         se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                        input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                         init_transse3_iden=args.init_transse3_iden,
                         use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                         sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
@@ -296,7 +322,7 @@ def main():
                         num_state=args.num_state_net, use_lstm=(args.seq_len > 1))
     else:
         model = flownets.FlowNet(num_ctrl=args.num_ctrl, num_state=args.num_state_net,
-                                 input_channels=3, use_bn=args.batch_norm, pre_conv=args.pre_conv,
+                                 input_channels=num_input_channels, use_bn=args.batch_norm, pre_conv=args.pre_conv,
                                  nonlinearity=args.nonlin, init_flow_iden=args.init_flow_iden,
                                  use_jt_angles=args.use_jt_angles, use_lstm=(args.seq_len>1))
     if args.cuda:
@@ -512,6 +538,16 @@ def iterate(data_loader, model, tblogger, num_iters,
         tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
         tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
 
+        # Get XYZRGB input
+        if args.use_xyzrgb:
+            rgb = util.to_var(sample['rgbs'].type(deftype)/255.0, requires_grad=train) # Normalize RGB to 0-1
+            netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
+        elif args.use_xyzhue:
+            hue = util.to_var(sample['rgbs'].narrow(2,0,1).type(deftype)/179.0, requires_grad=train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
+            netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
+        else:
+            netinput = pts # XYZ
+
         # Get jt angles
         #if args.use_full_jt_angles:
         #    jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
@@ -531,19 +567,20 @@ def iterate(data_loader, model, tblogger, num_iters,
         for k in xrange(args.seq_len):
             # Get current input to network
             if (k == 0):
-                currpts = pts[:,0]
+                currpts = pts[0]
             else:
+                assert (not args.use_xyzrgb), "Does not work with xyzrgb set"
                 currpts = predpts[k-1]
 
             # Make flow prediction
             if args.use_se3_nets:
-                flows, [deltapose, mask] = model([currpts, jtangles[:,k], ctrls[:,k]],
+                flows, [deltapose, mask] = model([netinput[:,k], jtangles[:,k], ctrls[:,k]],
                                                  reset_hidden_state=(k==0),
                                                  train_iter = num_train_iter) # Reset hidden state at start of sequence
                 deltaposes.append(deltapose)
                 masks.append(mask)
             else:
-                flows = model([currpts, jtangles[:,k], ctrls[:,k]], reset_hidden_state=(k==0)) # Reset hidden state at start of sequence
+                flows = model([netinput[:,k], jtangles[:,k], ctrls[:,k]], reset_hidden_state=(k==0)) # Reset hidden state at start of sequence
             nextpts = currpts + flows  # Add flow to get next prediction
 
             # Append to list of predictions
@@ -672,10 +709,24 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                    predflows_t.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
                                                         nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                 depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
+
+                # Display RGB
+                if args.use_xyzrgb:
+                    rgbdisp = torchvision.utils.make_grid(
+                        sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
+                        nrow=args.seq_len, normalize=True, range=(0.0, 255.0))
+                elif args.use_xyzhue:
+                    rgbdisp = torchvision.utils.make_grid(
+                        sample['rgbs'][id, :, 0].float().view(-1, 1, args.img_ht, args.img_wd),
+                        nrow=args.seq_len, normalize=True,
+                        range=(0.0, 179.0))  # Show only hue, goes from 0-179 in OpenCV
+
                 # Show as an image summary
                 info = {mode + '-depths': util.to_np(depthdisp.unsqueeze(0)),
                         mode + '-flows': util.to_np(flowdisp.unsqueeze(0)),
                         }
+                if args.use_xyzrgb or args.use_xyzhue:
+                    info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                 if args.use_se3_nets:
                     maskdisp = torchvision.utils.make_grid(
                         torch.cat([masks[0].data.narrow(0, id, 1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),

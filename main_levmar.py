@@ -91,6 +91,10 @@ parser.add_argument('--levmar-nfev-ipe', default=50, type=int,
                     metavar='WT', help='Increase in number of max function evals allowed in levmar (starts off with this value at epoch 0)')
 parser.add_argument('--levmar-nfev-max', default=50, type=int,
                     metavar='WT', help='Weight for the optimization based delta loss')
+parser.add_argument('--levmar-step', default=2, type=int,
+                    metavar='S', help='Subsample step for the optimization, uses 1/s resolution of original image')
+parser.add_argument('--levmar-method', default='dogbox', type=str,
+                    metavar='STR', help='Optimization methods for levmar: [dogbox] | lm | trf')
 
 # Define xrange
 try:
@@ -973,17 +977,24 @@ def iterate(data_loader, model, tblogger, num_iters,
             starto = time.time()
 
             optimdeltas = []
+            ss = args.levmar_step
             for j in range(0, pts.size(0)):
                 # Setup loss/jacobian computation
                 l = NTfm3DAAOptimizer()
-                oloss    = lambda params: l.compute_loss(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
-                olossjac = lambda params: l.compute_jac(params, pts.data[j:j+1,k], initmask.data[j:j+1], tarpts.data[j:j+1,k])
+                oloss    = lambda params: l.compute_loss(params,
+                                                         pts.data[j:j+1,k,:,::ss,::ss],
+                                                         initmask.data[j:j+1,:,::ss,::ss],
+                                                         tarpts.data[j:j+1,k,:,::ss,::ss])
+                olossjac = lambda params: l.compute_jac(params,
+                                                        pts.data[j:j+1, k, :, ::ss, ::ss],
+                                                        initmask.data[j:j+1, :, ::ss, ::ss],
+                                                        tarpts.data[j:j+1, k, :, ::ss, ::ss]                                                        )
 
                 # Initialize params and optimize
                 # TODO: Maybe initialize with prediction? For this to work, we need to get predicted SE3, not pose
                 delta_init = torch.zeros(1, args.num_se3, 6).type(deftype).view(-1).cpu().numpy()
                 res = scipy.optimize.least_squares(oloss, delta_init, jac=olossjac,
-                                                   max_nfev=args.levmar_nfev, method='dogbox')  # , bounds=(-1,1))
+                                                   max_nfev=args.levmar_nfev, method=args.levmar_method)  # , bounds=(-1,1))
 
                 # Save some stats
                 levmarnfev[k] += res.nfev

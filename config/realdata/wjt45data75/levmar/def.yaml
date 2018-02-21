@@ -43,6 +43,12 @@ sharpen-start-iter: 0
 sharpen-rate: 1.0
 use-sigmoid-mask:  False
 
+# Levmar options
+levmar-method: dogbox
+levmar-step: 2
+levmar-nfev-ipe: 5
+levmar-nfev-max: 50
+
 # Loss options
 loss-type:        normmsesqrt
 motion-norm-loss: True

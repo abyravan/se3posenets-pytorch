@@ -433,12 +433,13 @@ else:
 
     # Sample examples
     pts, masks, poses1, poses2 = [], [], [], []
-    for k in range(16):
+    step = int(sys.argv[5])
+    for k in range(int(sys.argv[2])):
         id = np.random.randint(0, len(train_dataset))
         print("Example ID: {}".format(id))
         sample = train_dataset[id]
-        pts.append(sample['points'][:-1, :, ::2, ::2].type(tensortype))
-        masks.append(sample['masks'][:-1, :, ::2, ::2].type(tensortype))
+        pts.append(sample['points'][:-1, :, ::step, ::step].type(tensortype))
+        masks.append(sample['masks'][:-1, :, ::step, ::step].type(tensortype))
         poses1.append(sample['poses'][:-1].type(tensortype))
         poses2.append(sample['poses'][1:].type(tensortype))
     pts, masks, poses1, poses2 = torch.cat(pts, 0), torch.cat(masks, 0), torch.cat(poses1, 0), torch.cat(poses2, 0)
@@ -468,8 +469,8 @@ print("Setup inputs, parameters, targets")
 
 ###########
 # Optimize
-nruns, mbsz = int(sys.argv[2]), 1
-init_type = str(sys.argv[3])
+nruns, mbsz = int(sys.argv[3]), 1
+init_type = str(sys.argv[4])
 print("Num runs: {}, Init type: {}".format(nruns, init_type))
 tt = torch.zeros(nruns)
 for k in range(nruns):
@@ -489,21 +490,25 @@ for k in range(nruns):
         lossjac = lambda params: l.compute_jac(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
 
         st = time.time()
-        res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac, max_nfev=50)
+        res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac, max_nfev=50, method='dogbox')#, bounds=(-1,1))
         tti.append(time.time() - st)
         optimtfms = AAToRt(torch.from_numpy(res.x).view(mbsz,nmsk,6).type_as(tfms))
         inittfms  = AAToRt(torch.from_numpy(tfmparams_init).view(mbsz,nmsk,6).type_as(tfms))
         diff  = optimtfms - tfms.narrow(0,j,mbsz)
         diff1 = inittfms  - tfms.narrow(0,j,mbsz)
-        print('Test: {}/{}, Example: {}/{}, F:{}. J:{}, Loss:{:.4f}, Diff-I:{:.4f}/{:.4f}, Diff-F:{:.4f}/{:.4f}'.format(
-            k+1, nruns, j+1, pts.size(0), res.nfev, res.njev, res.cost, diff1.max(), diff1.min(), diff.max(), diff.min()))
+        loss1 = l.compute_loss(res.x, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz)).sum()
+        tfmpts = data.NTfm3D(pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), AAToRt(torch.from_numpy(res.x).view(mbsz,nmsk,6).type_as(tfms)))
+        ptdiff = (tfmpts - tgtpts.narrow(0,j,mbsz)).abs()
+        ptdiffi = (pts.narrow(0,j,mbsz) - tgtpts.narrow(0,j,mbsz)).abs()
+        print('  Test: {:2d}/{:2d}, Example: {:3d}/{:3d}, F:{:2d}. J:{:2d}, Loss:{:.6f}/{:.6f}, Pt-I:{:.4f}/{:8.4f}, Pt-F:{:.4f}/{:8.4f}, Diff-I:{:.4f}/{:.4f}, Diff-F:{:.4f}/{:.4f}, Time:{:.4f}'.format(
+            k+1, nruns, j+1, pts.size(0), res.nfev, res.njev, res.cost, loss1, ptdiffi.max(), ptdiffi.sum(), ptdiff.max(), ptdiff.sum(), diff1.max(), diff1.min(), diff.max(), diff.min(), tti[-1]))
         #diff = res.x.reshape(mbsz,nmsk,6) - params.narrow(0,j,mbsz).cpu().numpy()
         #diff1 = (res.x - tfmparams_init)
         diffmax.append(diff.max()); diffmin.append(diff.min())
         diffmax1.append(diff1.max()); diffmin1.append(diff1.min());
     tt[k] = torch.Tensor(tti).sum()
-    print('Init max/min error: {:.5f}/{:.5f}, Max/min error: {:.5f}/{:.5f}, Mean/std/per example time: {:.5f}/{:.5f}/{:.5f}'.format(torch.Tensor(diffmax1).mean(),
-                                                              torch.Tensor(diffmin1).mean(), torch.Tensor(diffmax).mean(), torch.Tensor(diffmin).mean(),
+    print('Init max/min error: {:.5f}/{:.5f}, Max/min error: {:.5f}/{:.5f}, Mean/std/per example time: {:.5f}/{:.5f}/{:.5f}\n'.format(torch.Tensor(diffmax1).max(),
+                                                              torch.Tensor(diffmin1).min(), torch.Tensor(diffmax).max(), torch.Tensor(diffmin).min(),
                                                               tt[:k+1].mean(), tt[:k+1].std(), tt[:k+1].mean()/bsz))
 
 # #########

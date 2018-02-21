@@ -378,12 +378,14 @@ if __name__ == "__main__":
 
             st = time.time()
             res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac, bounds=(-1,1), max_nfev=20)
-            print('Batch: {}, F:{}. J:{}'.format(j, res.nfev, res.njev))
             tti.append(time.time() - st)
             diff = res.x.reshape(mbsz,nmsk,3,4) - deltaposes.narrow(0,j,mbsz).cpu().numpy()
             diff1 = (res.x - tfmparams_init)   
             diffmax.append(diff.max()); diffmin.append(diff.min())
             diffmax1.append(diff1.max()); diffmin1.append(diff1.min());
+            print('Test: {}/{}, Example: {}/{}, F:{}. J:{}, Loss:{:.4f}, Diff-I:{:.4f}/{:.4f}, Diff-F:{:.4f}/{:.4f}'.format(
+                    k + 1, nruns, j + 1, pts.size(0), res.nfev, res.njev, res.cost, diff1.max(), diff1.min(),
+                    diff.max(), diff.min()))
         tt[k] = torch.Tensor(tti).sum()
         print('Init max/min error: {:.5f}/{:.5f}, Max/min error: {:.5f}/{:.5f}, Mean/std/per example time: {:.5f}/{:.5f}/{:.5f}'.format(torch.Tensor(diffmax1).mean(),
                                                                                  torch.Tensor(diffmin1).mean(), torch.Tensor(diffmax).mean(), torch.Tensor(diffmin).mean(),

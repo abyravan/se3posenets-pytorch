@@ -243,6 +243,10 @@ load_from_tar = int(sys.argv[1])
 if load_from_tar:
     print("Loading from tar file")
     sample = torch.load('/home/barun/Projects/se3nets-pytorch/levmartest.pth.tar')
+    pts = sample['points'][:-1, :, ::2, ::2].type(tensortype)
+    masks = sample['masks'][:-1, :, ::2, ::2].type(tensortype)  # subsample
+    poses1 = sample['poses'][:-1].type(tensortype)
+    poses2 = sample['poses'][1:].type(tensortype)
 else:
     print("Loading from disk")
     import argparse
@@ -254,7 +258,7 @@ else:
         '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f/']
     args.img_suffix = 'sub'
     args.step_len = 2
-    args.seq_len = 16
+    args.seq_len = 1
     args.train_per = 0.6
     args.val_per = 0.15
     args.ctrl_type = 'actdiffvel'
@@ -427,16 +431,18 @@ else:
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset),
                                                                        len(test_dataset)))
 
-    # Sample example
-    id = np.random.randint(0,len(train_dataset))
-    print("Example ID: {}".format(id))
-    sample = train_dataset[id]
-    #torch.save(sample, 'levmartest.pth.tar')
+    # Sample examples
+    pts, masks, poses1, poses2 = [], [], [], []
+    for k in range(16):
+        id = np.random.randint(0, len(train_dataset))
+        print("Example ID: {}".format(id))
+        sample = train_dataset[id]
+        pts.append(sample['points'][:-1, :, ::2, ::2].type(tensortype))
+        masks.append(sample['masks'][:-1, :, ::2, ::2].type(tensortype))
+        poses1.append(sample['poses'][:-1].type(tensortype))
+        poses2.append(sample['poses'][1:].type(tensortype))
+    pts, masks, poses1, poses2 = torch.cat(pts, 0), torch.cat(masks, 0), torch.cat(poses1, 0), torch.cat(poses2, 0)
 
-pts   = sample['points'][:-1,:,::2,::2].type(tensortype)
-masks = sample['masks'][:-1,:,::2,::2].type(tensortype) # subsample
-poses1 = sample['poses'][:-1].type(tensortype)
-poses2 = sample['poses'][1:].type(tensortype)
 tfms = data.ComposeRtPair(poses2, data.RtInverse(poses1))
 # tfms[:,:,:,0:3] = torch.eye(3).view(1,1,3,3).expand(pts.size(0), masks.size(1), 3, 3)
 tgtpts = data.NTfm3D(pts, masks, tfms)

@@ -54,5 +54,5 @@ decay-epochs: 15
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/icra18results/realdata/flow/def_jtanglespose
+save-dir:  trained_nets/icra18final/realdata/flow/def_jtanglespose
 disp-err-per-mask: False

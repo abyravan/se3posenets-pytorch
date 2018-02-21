@@ -567,7 +567,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         for k in xrange(args.seq_len):
             # Get current input to network
             if (k == 0):
-                currpts = pts[0]
+                currpts = pts[:,0]
             else:
                 assert (not args.use_xyzrgb), "Does not work with xyzrgb set"
                 currpts = predpts[k-1]

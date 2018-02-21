@@ -319,14 +319,15 @@ class SE3Model(nn.Module):
     # Forward pass through the model
     def forward(self, x, reset_hidden_state=False, train_iter=0):
         # Get input vars
-        ptcloud_1, jtangles_1, ctrl_1 = x
+        input_1, jtangles_1, ctrl_1 = x
 
         # Get delta-pose & mask predictions
-        state_1        = self.encoder([ptcloud_1, jtangles_1, ctrl_1], reset_hidden_state=reset_hidden_state)
+        state_1        = self.encoder([input_1, jtangles_1, ctrl_1], reset_hidden_state=reset_hidden_state)
         mask_1         = self.maskdecoder(state_1, train_iter=train_iter)
         deltapose_t_12 = self.deltase3decoder(state_1[0])
 
         # Predict 3D points
+        ptcloud_1 = input_1.narrow(1,0,3) # First 3 channels only (input can be xyzrgb or xyzhue)
         predpts_1 = se3nn.NTfm3D()(ptcloud_1, mask_1, deltapose_t_12)
         flows_12  = predpts_1 - ptcloud_1 # Return flows
 

@@ -53,7 +53,6 @@ consis-wt:        10.0
 pose-dissim-wt:   0.0
 delta-dissim-wt:  0.0
 loss-scale:       10000.0
-backprop-only-first-delta: False
 
 # Training options
 no-cuda:        False

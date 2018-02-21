@@ -489,13 +489,14 @@ for k in range(nruns):
         lossjac = lambda params: l.compute_jac(params, pts.narrow(0,j,mbsz), masks.narrow(0,j,mbsz), tgtpts.narrow(0,j,mbsz))
 
         st = time.time()
-        res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac)
+        res = scipy.optimize.least_squares(loss, tfmparams_init, jac=lossjac, max_nfev=50)
         tti.append(time.time() - st)
-        print('Test: {}/{}, Example: {}/{}, F:{}. J:{}'.format(k+1, nruns, j+1, pts.size(0), res.nfev, res.njev))
         optimtfms = AAToRt(torch.from_numpy(res.x).view(mbsz,nmsk,6).type_as(tfms))
         inittfms  = AAToRt(torch.from_numpy(tfmparams_init).view(mbsz,nmsk,6).type_as(tfms))
         diff  = optimtfms - tfms.narrow(0,j,mbsz)
         diff1 = inittfms  - tfms.narrow(0,j,mbsz)
+        print('Test: {}/{}, Example: {}/{}, F:{}. J:{}, Loss:{:.4f}, Diff-I:{:.4f}/{:.4f}, Diff-F:{:.4f}/{:.4f}'.format(
+            k+1, nruns, j+1, pts.size(0), res.nfev, res.njev, res.cost, diff.max(), diff.min(), diff1.max(), diff1.min()))
         #diff = res.x.reshape(mbsz,nmsk,6) - params.narrow(0,j,mbsz).cpu().numpy()
         #diff1 = (res.x - tfmparams_init)
         diffmax.append(diff.max()); diffmin.append(diff.min())

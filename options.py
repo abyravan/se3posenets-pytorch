@@ -58,6 +58,8 @@ def setup_comon_options():
                         help='Full-resolution input images -> 480x640 (default: False)')
     parser.add_argument('--use-xyzrgb', action='store_true', default=False,
                         help='Use RGB as input along with XYZ -> XYZRGB input (default: False)')
+    parser.add_argument('--use-xyzhue', action='store_true', default=False,
+                        help='Use hue channel (from HSV) as input along with XYZ -> XYZHUE input (default: False)')
 
     # Model options
     parser.add_argument('--no-batch-norm', action='store_true', default=False,

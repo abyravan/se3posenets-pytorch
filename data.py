@@ -252,10 +252,13 @@ def read_label_image(filename, ht=240, wd=320):
 # Read label image from disk
 def read_color_image(filename, ht=240, wd=320, colormap='rgb'):
     imgl = cv2.imread(filename) # This can be an image with 1 or 3 channels. If 3 channel image, choose 2nd channel
-    if (imgl.shape[0] != int(ht) or imgl.shape[1] != int(wd)):
-        imgscale = cv2.resize(imgl, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
-    else:
-        imgscale = imgl
+    try:
+        if (imgl.shape[0] != int(ht) or imgl.shape[1] != int(wd)):
+            imgscale = cv2.resize(imgl, (int(wd), int(ht)), interpolation=cv2.INTER_NEAREST)  # Resize image with no interpolation (NN lookup)
+        else:
+            imgscale = imgl
+    except AttributeError:
+        assert False, "Error on image: {}".format(filename)
     # Convert colormaps
     if colormap == 'hsv':
         imgscale = cv2.cvtColor(imgscale, cv2.COLOR_RGB2HSV) # Seems like by default images are RGB, not BGR

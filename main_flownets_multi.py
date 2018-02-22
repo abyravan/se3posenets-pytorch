@@ -779,6 +779,8 @@ def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1
                                     weight_decay=weight_decay)
     elif optim_type == 'adam':
         optimizer = torch.optim.Adam(params=parameters, lr = lr, weight_decay= weight_decay)
+    elif optim_type == 'rmsprop':
+        optimizer = torch.optim.RMSprop(params=parameters, lr=lr, momentum=momentum, weight_decay=weight_decay)
     else:
         assert False, "Unknown optimizer type: " + optim_type
     return optimizer

@@ -75,10 +75,6 @@ parser.add_argument('--bilateral-window-width', default=9, type=int,
 parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
                     metavar='WT', help='Standard deviation in depth for bilateral filtering kernel (default: 0.005)')
 
-# XYZ hue
-parser.add_argument('--use-xyzhue', action='store_true', default=False,
-                    help='Use hue channel (from HSV) as input along with XYZ -> XYZHUE input (default: False)')
-
 # Supervised segmentation loss
 parser.add_argument('--seg-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for a supervised mask segmentation loss (both @ t & t+1)')

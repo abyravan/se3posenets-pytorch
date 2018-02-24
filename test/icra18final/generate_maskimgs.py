@@ -10,6 +10,7 @@ import random
 # Torch imports
 import torch.utils.data
 torch.multiprocessing.set_sharing_strategy('file_system')
+sys.path.append("/home/barun/Projects/se3nets-pytorch/")
 
 # Local imports
 import ctrlnets

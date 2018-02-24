@@ -119,19 +119,19 @@ for k in range(len(samples)):
     ##################
     ##### Run forward pass to predict masks
     if pargs.net_type == 'se3pose' or pargs.net_type == 'se3posekinchain':
-        _, initmask = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
+        _, initmask = model.forward_pose_mask([netinput[0:1], jtangles[0:1]], train_iter=num_train_iter)
     else:
-        _, [_, initmask] = model([netinput[:,0], jtangles[:,0], ctrls[:,0]],
+        _, [_, initmask] = model([netinput[0:1], jtangles[0:1], ctrls[0:1]],
                               reset_hidden_state=True,
                               train_iter=num_train_iter)  # Reset hidden state at start of sequence
 
     ##################
     ##### Save all data
-    netinputs_a.append(netinput[:,0].data.cpu().clone())
-    ctrls_a.append(ctrls[:,0].data.cpu().clone())
-    jtangles_a.append(jtangles[:,0].data.cpu().clone())
+    netinputs_a.append(netinput[0:1].data.cpu().clone())
+    ctrls_a.append(ctrls[0:1].data.cpu().clone())
+    jtangles_a.append(jtangles[0:1].data.cpu().clone())
     predmasks_a.append(initmask.data.cpu().clone())
-    gtmasks_a.append(gtmask[:,0].data.cpu().clone())
+    gtmasks_a.append(gtmask[0:1].data.cpu().clone())
 
     ##### GT labels
     labels = gtmask.data.max(dim=1).cpu().squeeze().clone()

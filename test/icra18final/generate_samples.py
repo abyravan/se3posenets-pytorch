@@ -110,7 +110,7 @@ print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dat
 #### Use examples from test dataset
 samples, ids = [], []
 for k in range(pargs.num_examples):
-    if k%10 == 0:
+    if (k+1)%10 == 0:
         print("Loading example: {}/{}".format(k+1,pargs.num_examples))
 
     # Load data
@@ -122,4 +122,5 @@ for k in range(pargs.num_examples):
 #### Save set of samples
 savedata = {'args': args, 'samples':samples, 'ids': id}
 util.create_dir(pargs.save_dir)
+print("Saving samples at {}".format(pargs.save_dir + "/sampledata.pth.tar"))
 torch.save(savedata, pargs.save_dir + "/sampledata.pth.tar")

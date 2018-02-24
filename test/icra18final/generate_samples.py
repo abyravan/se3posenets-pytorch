@@ -10,6 +10,7 @@ import random
 # Torch imports
 import torch.utils.data
 torch.multiprocessing.set_sharing_strategy('file_system')
+sys.path.append("/home/barun/Projects/se3nets-pytorch/")
 
 # Local imports
 import data
@@ -87,7 +88,7 @@ disk_read_func = lambda d, i: read_seq_func(d, i, img_ht=args.img_ht, img_wd=arg
                                             # ctrl_ids=ctrlids_in_state,
                                             # camera_extrinsics = args.cam_extrinsics,
                                             # camera_intrinsics = args.cam_intrinsics,
-                                            compute_bwdflows=args.use_gt_masks,
+                                            compute_bwdflows=True,
                                             # num_tracker=args.num_tracker,
                                             dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                             use_only_da=args.use_only_da_for_flows,

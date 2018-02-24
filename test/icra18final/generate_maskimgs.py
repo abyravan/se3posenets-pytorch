@@ -99,6 +99,9 @@ for k in range(len(samples)):
     pts   = util.to_var(sample['points'].type(deftype), volatile=True)
     ctrls = util.to_var(sample['controls'].type(deftype))
     gtmask = util.to_var(sample['masks'].type(deftype))
+    print(pts.size())
+    print(ctrls.size())
+    print(gtmask.size())
 
     # Get XYZRGB input
     if args.use_xyzrgb:
@@ -109,6 +112,7 @@ for k in range(len(samples)):
         netinput = torch.cat([pts, hue], 2)  # Concat along channels dimension
     else:
         netinput = pts  # XYZ
+    print(netinput.size())
 
     # Get jt angles
     if args.box_data:

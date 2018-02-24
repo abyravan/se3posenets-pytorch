@@ -134,8 +134,8 @@ for k in range(len(samples)):
     gtmasks_a.append(gtmask[0:1].data.cpu().clone())
 
     ##### GT labels
-    labels = gtmask.data.max(dim=1).cpu().squeeze().clone()
-    cv2.imwrite(labels, pargs.save_dir + "/mask{}.png".format(k))
+    _, labels = gtmask.data.max(dim=1)
+    cv2.imwrite(labels.cpu().squeeze().clone().numpy(), pargs.save_dir + "/mask{}.png".format(k))
 
 ##### Save masks
 print("Saving results at: {}".format(pargs.save_dir + "maskresults.pth.tar"))

@@ -111,10 +111,7 @@ for k in range(len(samples)):
         netinput = pts  # XYZ
 
     # Get jt angles
-    if args.box_data:
-        jtangles = util.to_var(sample['states'].type(deftype))
-    else:
-        jtangles = util.to_var(sample['actctrlconfigs'].type(deftype))
+    jtangles = util.to_var(sample['actctrlconfigs'].type(deftype))
 
     ##################
     ##### Run forward pass to predict masks
@@ -134,11 +131,11 @@ for k in range(len(samples)):
     gtmasks_a.append(gtmask[0:1].data.cpu().clone())
 
     ##### GT labels
-    _, labels = gtmask.data.max(dim=1)
-    cv2.imwrite(labels.cpu().squeeze().clone().numpy(), pargs.save_dir + "/mask{}.png".format(k))
+    _, labels = initmask.data.max(dim=1)
+    cv2.imwrite((pargs.save_dir + ("/mask{}.png").format(k)), labels.byte().cpu().permute(1,2,0).clone().numpy())
 
 ##### Save masks
-print("Saving results at: {}".format(pargs.save_dir + "maskresults.pth.tar"))
+print("Saving results at: {}".format(pargs.save_dir + "/maskresults.pth.tar"))
 savedata = {'netinputs': netinputs_a, 'ctrls': ctrls_a, 'jtangles': jtangles_a, 'predmasks': predmasks_a,
             'gtmasks': gtmasks_a, 'pargs': pargs, 'args': 'args', 'sampleids': loaddata['ids']}
 torch.save(loaddata, pargs.save_dir + "/maskresults.pth.tar")

@@ -79,6 +79,10 @@ ndof = 7
 jtangles = torch.zeros(nexamples, ndof)
 poses    = torch.zeros(nexamples, len(mesh_ids), 4, 4)
 for k in range(nexamples):
+    # Print stats
+    if (k % 1000) == 0:
+        print("Example: {}/{}".format(k+1, nexamples))
+    
     # Get config
     statepath = path + '/state{}.txt'.format(k)
     state = read_baxter_state_file(statepath)
@@ -87,7 +91,7 @@ for k in range(nexamples):
     # Load SE3 state & get all poses
     se3statepath = path + '/se3state{}.txt'.format(k)
     se3state = read_baxter_se3state_file(se3statepath)
-    for j in xrange(len(mesh_ids)):
+    for j in range(len(mesh_ids)):
         meshid = mesh_ids[j]
         poses[k][j] = se3state[meshid] # 4 x 4 transform
 

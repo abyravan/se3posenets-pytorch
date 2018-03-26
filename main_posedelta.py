@@ -804,7 +804,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Compute deltaposes as change in poses from pose-mask encoder
         deltaposes = []
         for k in xrange(args.seq_len):
-            delta = se3nn.ComposeRtPair(poses[k+1], se3nn.RtInverse(poses[k])) # delta = SE3_2 * SE3_1^-1
+            delta = se3nn.ComposeRtPair()(poses[k+1], se3nn.RtInverse()(poses[k])) # delta = SE3_2 * SE3_1^-1
             deltaposes.append(delta)
 
         # ## Make next-pose predictions & corresponding 3D point predictions using the transition model
@@ -1041,11 +1041,11 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # ### Pose consistency error
         # # Compute consistency error for display
-        # consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         # for k in xrange(args.seq_len):
         #     consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs().max()
         #     consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1].data, transposes[k].data)
-        # stats.consiserr.update(consiserror)
+        stats.consiserr.update(consiserror)
 
         # Display/Print frequency
         bsz = pts.size(0)

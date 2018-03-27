@@ -626,7 +626,7 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, test_stats.loss.avg, test_stats.consiserr.avg.sum()))
+    statsvfile.write("{}, {}, {}\n".format(epoch+1, test_stats.loss.avg, test_stats.consiserr.avg.sum()))
     statsvfile.close(); statstfile.close()
 
     # Close log file

@@ -79,6 +79,10 @@ parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
 parser.add_argument('--seg-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for a supervised mask segmentation loss (both @ t & t+1)')
 
+# Saved pose checkpoint
+parser.add_argument('--pose-resume', default='', type=str, metavar='PATH', required=True,
+                    help='path to pre-trained pose model checkpoint (default: none)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -412,30 +416,43 @@ def main():
 
     ### Load the model
     num_train_iter, num_train_pm_iter = 0, 0
-    num_input_channels = 3 # Num input channels
-    if args.use_xyzrgb:
-        num_input_channels = 6
-    elif args.use_xyzhue:
-        num_input_channels = 4 # Use only hue as input
-    if args.use_gt_masks:
-        assert False
-    elif args.use_gt_poses:
-        assert False
-    else:
-        modelfn = ctrlnets.MultiStepSE3NoTransModel
-    posemodel = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                        se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
-                        input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                        init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
-                        use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
-                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
-                        use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
-                        wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                        use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
-                        full_res=args.full_res, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models
-    if args.cuda:
-        posemodel.cuda() # Convert to CUDA if enabled
 
+    #####
+    # Load pose model from a pre-trained checkpoint
+    print("=> loading pose model checkpoint '{}'".format(args.pose_resume))
+    pose_checkpoint       = torch.load(args.pose_resume)
+    num_train_pm_iter   = pose_checkpoint['train_iter']
+    pmargs = pose_checkpoint['args']
+    print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
+          .format(args.pose_resume, pose_checkpoint['epoch'], num_train_pm_iter))
+    best_pm_loss = pose_checkpoint['best_loss'] if 'best_loss' in pose_checkpoint else float("inf")
+    best_pm_epoch = pose_checkpoint['best_epoch'] if 'best_epoch' in pose_checkpoint else 0
+    print('==== Best validation loss: {} was from epoch: {} ===='.format(best_pm_loss, best_pm_epoch))
+
+    num_input_channels = 3 # Num input channels
+    if pmargs.use_xyzrgb:
+        num_input_channels = 6
+    elif pmargs.use_xyzhue:
+        num_input_channels = 4 # Use only hue as input
+    modelfn = ctrlnets.MultiStepSE3NoTransModel
+    posemodel = modelfn(num_ctrl=pmargs.num_ctrl, num_se3=pmargs.num_se3,
+                        se3_type=pmargs.se3_type, delta_pivot=pmargs.delta_pivot, use_kinchain=False,
+                        input_channels=num_input_channels, use_bn=pmargs.batch_norm, nonlinearity=pmargs.nonlin,
+                        init_posese3_iden=pmargs.init_posese3_iden, init_transse3_iden=pmargs.init_transse3_iden,
+                        use_wt_sharpening=pmargs.use_wt_sharpening, sharpen_start_iter=pmargs.sharpen_start_iter,
+                        sharpen_rate=pmargs.sharpen_rate, pre_conv=pmargs.pre_conv, decomp_model=pmargs.decomp_model,
+                        use_sigmoid_mask=pmargs.use_sigmoid_mask, local_delta_se3=pmargs.local_delta_se3,
+                        wide=pmargs.wide_model, use_jt_angles=pmargs.use_jt_angles,
+                        use_jt_angles_trans=pmargs.use_jt_angles_trans, num_state=pmargs.num_state_net,
+                        full_res=pmargs.full_res, noise_stop_iter=pmargs.noise_stop_iter) # noise_stop_iter not available for SE2 models
+    if pmargs.cuda:
+        posemodel.cuda() # Convert to CUDA if enabled
+    try:
+        posemodel.load_state_dict(pose_checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
+    except:
+        posemodel.load_state_dict(pose_checkpoint['model_state_dict'])
+
+    ######
     # Setup transition model
     model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                                      se3_type=args.se3_type, use_kinchain=False,
@@ -449,29 +466,38 @@ def main():
     optimizer = load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                momentum=args.momentum, weight_decay=args.weight_decay)
 
-    # Resume from a checkpoint
-    assert(args.resume)
-    # TODO: Save path to TB log dir, save new log there again
-    # TODO: Reuse options in args (see what all to use and what not)
-    # TODO: Use same num train iters as the saved checkpoint
-    # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
-    if os.path.isfile(args.resume):
-        print("=> loading checkpoint '{}'".format(args.resume))
-        checkpoint       = torch.load(args.resume)
-        num_train_pm_iter   = checkpoint['train_iter']
-        try:
-            posemodel.load_state_dict(checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
-        except:
-            posemodel.load_state_dict(checkpoint['model_state_dict'])
-        print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
-              .format(args.resume, checkpoint['epoch'], num_train_pm_iter))
-        best_pm_loss    = checkpoint['best_loss'] if 'best_loss' in checkpoint else float("inf")
-        best_pm_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
-        print('==== Best validation loss: {} was from epoch: {} ===='.format(best_pm_loss, best_pm_epoch))
+    #### Resume from a checkpoint for transition model
+    # optionally resume from a checkpoint
+    if args.resume:
+        # TODO: Save path to TB log dir, save new log there again
+        # TODO: Reuse options in args (see what all to use and what not)
+        # TODO: Use same num train iters as the saved checkpoint
+        # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
+        if os.path.isfile(args.resume):
+            print("=> loading transition model checkpoint '{}'".format(args.resume))
+            checkpoint       = torch.load(args.resume)
+            loadargs         = checkpoint['args']
+            args.start_epoch = checkpoint['epoch']
+            if args.reset_train_iter:
+                num_train_iter   = 0 # Reset to 0
+            else:
+                num_train_iter   = checkpoint['train_iter']
+            try:
+                model.load_state_dict(checkpoint['state_dict']) # BWDs compatibility (TODO: remove)
+            except:
+                model.load_state_dict(checkpoint['model_state_dict'])
+            assert (loadargs.optimization == args.optimization), "Optimizer in saved checkpoint ({}) does not match current argument ({})".format(
+                    loadargs.optimization, args.optimization)
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
+                  .format(args.resume, checkpoint['epoch'], num_train_iter))
+            best_loss    = checkpoint['best_loss'] if 'best_loss' in checkpoint else float("inf")
+            best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
+            print('==== Best validation loss: {} was from epoch: {} ===='.format(best_loss, best_epoch))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
     else:
-        print("=> no checkpoint found at '{}'".format(args.resume))
-
-    best_loss, best_epoch    = float("inf"), 0
+        best_loss, best_epoch = float("inf"), 0
 
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)

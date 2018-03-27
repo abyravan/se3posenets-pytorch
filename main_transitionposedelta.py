@@ -439,7 +439,7 @@ def main():
     # Setup transition model
     model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                                      se3_type=args.se3_type, use_kinchain=False,
-                                     nonlinearity=args.nonlinearity, init_se3_iden = args.init_transse3_iden,
+                                     nonlinearity=args.nonlin, init_se3_iden = args.init_transse3_iden,
                                      local_delta_se3=args.local_delta_se3,
                                      use_jt_angles=args.use_jt_angles_trans, num_state=args.num_state_net)
     if args.cuda:
@@ -522,7 +522,7 @@ def main():
         val_ids += val_stats.data_ids
 
         # Find best losses
-        val_loss = val_stats.loss.avg,
+        val_loss = val_stats.loss.avg
         is_best = (val_loss < best_loss)
         prev_best_loss  = best_loss
         prev_best_epoch = best_epoch

@@ -254,7 +254,7 @@ def main():
     #### Trans model
     transmodel = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
                                           se3_type=args.se3_type, use_kinchain=False,
-                                          nonlinearity=args.nonlinearity, init_se3_iden=args.init_transse3_iden,
+                                          nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
                                           local_delta_se3=args.local_delta_se3,
                                           use_jt_angles=args.use_jt_angles_trans, num_state=args.num_state_net)
     if pargs.cuda:

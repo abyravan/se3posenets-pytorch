@@ -718,20 +718,20 @@ def main():
                 print("*****************************************")
                 break
 
-            # Check loss increase
-            if (loss > prev_loss):
-                inc_ctr += 1
-                if inc_ctr == max_ctr:
-                    print("************* FAILED *****************")
-                    print('Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(it + 1, pargs.max_iter,
-                                                                                     loss, pargs.loss_threshold))
-                    status = -1
-                    conv_iter = it + 1
-                    print("*****************************************")
-                    break
-            else:
-                inc_ctr = max(inc_ctr-1, 0) # Reset
-            prev_loss = loss
+            # # Check loss increase
+            # if (loss > prev_loss):
+            #     inc_ctr += 1
+            #     if inc_ctr == max_ctr:
+            #         print("************* FAILED *****************")
+            #         print('Control Iter: {}/{}, Loss: {} increased by more than 5 times in a window of the last 10 states'.format(it + 1, pargs.max_iter,
+            #                                                                          loss, pargs.loss_threshold))
+            #         status = -1
+            #         conv_iter = it + 1
+            #         print("*****************************************")
+            #         break
+            # else:
+            #     inc_ctr = max(inc_ctr-1, 0) # Reset
+            # prev_loss = loss
 
         # Print final stats
         print('=========== FINISHED ============')

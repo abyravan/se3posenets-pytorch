@@ -185,31 +185,37 @@ def main():
 
     ##########
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
-                                              num_workers=args.num_workers, pin_memory=args.use_pin_memory,
-                                              collate_fn=train_dataset.collate_batch,
-                                              sampler=train_sampler))
+    train_loader = util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+                                   num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                   collate_fn=train_dataset.collate_batch,
+                                   sampler=train_sampler)
     train_stats = iterate(train_loader, posemodel, 'train')
     del train_loader
+    print('Saving train stats to {}'.format(pargs.save_dir + "/transmodeldata_train.tar.gz"))
+    torch.save(train_stats, pargs.save_dir + "/transmodeldata_train.tar.gz")
 
-    val_loader   = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                                num_workers=args.num_workers, pin_memory=args.use_pin_memory,
-                                                collate_fn=val_dataset.collate_batch,
-                                                sampler=val_sampler))
+    val_loader   = util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
+                                   num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                   collate_fn=val_dataset.collate_batch,
+                                   sampler=val_sampler)
     val_stats = iterate(val_loader, posemodel, 'val')
     del val_loader
+    print('Saving val stats to {}'.format(pargs.save_dir + "/transmodeldata_val.tar.gz"))
+    torch.save(val_stats, pargs.save_dir + "/transmodeldata_val.tar.gz")
 
-    test_loader  = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                                 num_workers=args.num_workers, pin_memory=args.use_pin_memory,
-                                                 collate_fn=test_dataset.collate_batch,
-                                                 sampler=test_sampler))
+    test_loader  = util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+                                   num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                   collate_fn=test_dataset.collate_batch,
+                                   sampler=test_sampler)
     test_stats = iterate(test_loader, posemodel, 'test')
     del test_loader
+    print('Saving test stats to {}'.format(pargs.save_dir + "/transmodeldata_test.tar.gz"))
+    torch.save(test_stats, pargs.save_dir + "/transmodeldata_test.tar.gz")
 
     ########
-    print('Saving stats to {}'.format(pargs.save_dir + "/transmodeldata.tar.gz"))
-    torch.save({'train': train_stats, 'test': test_stats, 'val': val_stats},
-               pargs.save_dir + "/transmodeldata.tar.gz")
+    # print('Saving stats to {}'.format(pargs.save_dir + "/transmodeldata.tar.gz"))
+    # torch.save({'train': train_stats, 'test': test_stats, 'val': val_stats},
+    #            pargs.save_dir + "/transmodeldata.tar.gz")
 
 def iterate(data_loader, posemodel, mode):
     # Setup avg time & stats:

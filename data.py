@@ -1157,6 +1157,10 @@ class BaxterSeqDataset(Dataset):
                 if sample['poses'].eq(sample['poses']).all():
                     filtered_batch.append(sample)
 
+            ### In case all these samples have NaN poses, the batch is bad!
+            if len(filtered_batch) == 0:
+                return None
+
         # Collate the other samples together using the default collate function
         collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
 

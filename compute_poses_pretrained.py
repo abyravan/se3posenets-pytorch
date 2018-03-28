@@ -231,13 +231,16 @@ def iterate(data_loader, posemodel, mode):
     # Run an epoch
     print('========== Mode: {}, Num iters: {} =========='.format(mode, len(data_loader)))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor'  # Default tensor type
-    for i in xrange(len(data_loader)):
+    # Start timer
+    start = time.time()
+    for i, sample in enumerate(data_loader):
         # ============ Load data ============#
-        # Start timer
-        start = time.time()
+        if sample is None:
+            print("All poses in the batch are NaNs. Discarding batch....")
+            continue
 
         # Get a sample
-        j, sample = data_loader.next()
+        #j, sample = data_loader.next()
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
@@ -285,6 +288,9 @@ def iterate(data_loader, posemodel, mode):
             print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
                   'Fwd: {fwd.val:.3f} ({fwd.avg:.3f})'.format(
                 data=data_time, fwd=fwd_time))
+
+        # Reset timer
+        start = time.time()
 
     ###
     return stats

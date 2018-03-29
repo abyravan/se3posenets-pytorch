@@ -348,11 +348,12 @@ def setup_model(pose_checkpoint, trans_checkpoint, args, use_cuda=False):
     posemodel.eval()
 
     #### Trans model
-    transmodel = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
-                                          se3_type=args.se3_type, use_kinchain=False,
-                                          nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
-                                          local_delta_se3=args.local_delta_se3,
-                                          use_jt_angles=args.use_jt_angles_trans, num_state=args.num_state_net)
+    targs = trans_checkpoint['args']
+    transmodel = ctrlnets.TransitionModel(num_ctrl=targs.num_ctrl, num_se3=targs.num_se3, delta_pivot='',
+                                          se3_type=targs.se3_type, use_kinchain=False,
+                                          nonlinearity=targs.nonlin, init_se3_iden=targs.init_transse3_iden,
+                                          local_delta_se3=False,
+                                          use_jt_angles=False, num_state=0)
     if use_cuda:
         transmodel.cuda()  # Convert to CUDA if enabled
 
@@ -512,7 +513,7 @@ class SE3PoseSpaceOptimizer(object):
         ########################
         # Load pre-trained network
         self.pose_checkpoint, self.num_train_iter = load_checkpoint(pargs.pose_checkpoint)
-        self.trans_checkpoint, _ = load_checkpoint(pargs.trans_checkpoint)
+        self.trans_checkpoint = torch.load(pargs.trans_checkpoint)
         self.args = self.pose_checkpoint['args']
 
         # BWDs compatibility
@@ -1027,9 +1028,9 @@ def main():
             print('Setting targets only for joints: {}. All other joints have zero error'
                   ' but can be controlled'.format(pargs.ctrl_specific_jts))
             ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-            for k in xrange(7):
-                if k not in ctrl_jts:
-                    goal_angles[k] = start_angles[k]
+            for kk in xrange(7):
+                if kk not in ctrl_jts:
+                    goal_angles[kk] = start_angles[kk]
 
         # Print error
         print('Initial jt angle error:')
@@ -1198,9 +1199,9 @@ def main():
                 ctrl_grad[6:] = 0
             elif pargs.ctrl_specific_jts:
                 ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-                for k in xrange(7):
-                    if k not in ctrl_jts:
-                        ctrl_grad[k] = 0
+                for kk in xrange(7):
+                    if kk not in ctrl_jts:
+                        ctrl_grad[kk] = 0
 
             # Decay controls if loss is small
             if loss < 1:
@@ -1230,9 +1231,9 @@ def main():
                 next_angles[6:] = start_angles[6:] # Lock these angles
             elif pargs.ctrl_specific_jts:
                 ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-                for k in xrange(7):
-                    if k not in ctrl_jts:
-                        next_angles[k] = start_angles[k]  # Lock these angles
+                for kk in xrange(7):
+                    if kk not in ctrl_jts:
+                        next_angles[kk] = start_angles[kk]  # Lock these angles
 
             # Send commands to the robot
             if pargs.ctrlr_type == 'blockpos':

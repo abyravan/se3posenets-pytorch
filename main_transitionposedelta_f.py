@@ -262,10 +262,12 @@ def main():
                                     epoch+1, s, prev_best_loss, prev_best_epoch, best_loss, best_epoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
-                                               train_stats.consiserr.avg, train_stats.consiserrmax.avg))
-        statsvfile.write("{}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
-                                               val_stats.consiserr.avg, val_stats.consiserrmax.avg))
+        statstfile.write("{}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
+                                                   train_stats.consiserr.avg,
+                                                   train_stats.consiserrmax.avg))
+        statsvfile.write("{}, {}, {}, {}\n".format(epoch+1, val_stats.loss.avg,
+                                                   val_stats.consiserr.avg,
+                                                   val_stats.consiserrmax.avg))
 
         # Save checkpoint
         save_checkpoint({
@@ -310,8 +312,9 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}\n".format(epoch+1, test_stats.loss.avg, test_stats.consiserr.avg,
-                                           train_stats.consiserrmax.avg))
+    statsvfile.write("{}, {}, {}, {}\n".format(epoch+1, test_stats.loss.avg,
+                                               test_stats.consiserr.avg,
+                                               test_stats.consiserrmax.avg))
     statsvfile.close(); statstfile.close()
 
     # Close log file
@@ -330,8 +333,7 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
 
     # Save all stats into a namespace
     stats = argparse.Namespace()
-    stats.loss, stats.consiserrmax              = AverageMeter(), AverageMeter()
-    stats.consiserr, stats.consisloss           = AverageMeter(), AverageMeter()
+    stats.loss, stats.consiserrmax, stats.consiserr = AverageMeter(), AverageMeter(), AverageMeter()
     stats.data_ids = []
 
     # Switch model modes
@@ -352,22 +354,125 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
     model.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Create random sequence for the training/validation, test can be sequential
+    nexamples = ctrls.size(0)-2
     if mode == 'train' or mode == 'val':
-        ids = np.random.shuffle(ra)
+        stats.data_ids = np.random.permutation(nexamples) # shuffled list of integers from 0 -> ctrls.size(0)-2
     else:
-
+        stats.data_ids = np.array([k for k in range(nexamples)]) # just normal list from 0 -> ctrls.size(0)-2
+    nbatches = (nexamples + args.batch_size - 1) // args.batch_size
 
     # Run an epoch
-    print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
-        mode, epoch, ctrls.size(0) // args.batch_size))
-    for i in xrange(num_iters):
+    print('========== Mode: {}, Starting epoch: {}, Num batches: {} =========='.format(mode, epoch, nbatches))
+    for i in xrange(nbatches):
         # ============ Load data ============#
         # Start timer
         start = time.time()
 
-        # Get a sample
-        j, sample = data_loader.next()
-        stats.data_ids.append(sample['id'].clone())
+        # Get the ids of the data samples
+        idvs = stats.data_ids[i*args.batch_size:min((i+1)*args.batch_size, nexamples)]
+        pose_i = util.to_var(predposes[idvs], requires_grad=train) # input poses
+        ctrl_i = util.to_var(ctrls[idvs], requires_grad=train)     # input ctrls
+        pose_t = util.to_var(predposes[idvs+1], requires_grad=False) # target poses
+
+        # Measure data loading time
+        data_time.update(time.time() - start)
+
+        # ============ FWD pass + Compute loss ============#
+        # Start timer
+        start = time.time()
+
+        # Run a fwd pass through the net
+        pose_p = model([pose_i, ctrl_i])
+
+        # Compute loss
+        if args.loss_type == 'mse':
+            loss = args.loss_scale * ctrlnets.BiMSELoss(pose_p, pose_t)
+        elif args.loss_type == 'abs':
+            loss = args.loss_scale * ctrlnets.BiAbsLoss(pose_p, pose_t)
+        else:
+            assert False, "Unknown loss type: {}".format(args.loss_type)
+        stats.loss.update(loss.data[0])
+
+        # Measure FWD time
+        fwd_time.update(time.time() - start)
+
+        # ============ Gradient backpass + Optimizer step ============#
+        # Compute gradient and do optimizer update step (if in training mode)
+        if (train):
+            # Start timer
+            start = time.time()
+
+            # Backward pass & optimize
+            optimizer.zero_grad()  # Zero gradients
+            loss.backward()  # Compute gradients - BWD pass
+            optimizer.step()  # Run update step
+
+            # Increment number of training iterations by 1
+            num_train_iter += 1
+
+            # Measure BWD time
+            bwd_time.update(time.time() - start)
+
+        # ============ Visualization ============#
+        # Start timer
+        start = time.time()
+
+        ### Pose consistency error
+        # Compute consistency error for display
+        consiserr    = ctrlnets.BiAbsLoss(pose_p.data, pose_t.data)
+        consiserrmax = (pose_p.data - pose_t.data).abs().max()
+        stats.consiserr.update(consiserr)
+        stats.consiserrmax.update(consiserrmax)
+
+        # Display/Print frequency
+        if i % args.disp_freq == 0:
+            ### Print statistics
+            print_stats(mode, epoch=epoch, curr=i+1, total=nbatches, stats=stats)
+
+            ### Print time taken
+            print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
+                        'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
+                        'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
+                        'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
+                    data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
+
+            ### TensorBoard logging
+            # (1) Log the scalar values
+            iterct = epoch*nbatches + i # Get total number of iterations so far
+            info = {
+                mode+'-loss': loss.data[0],
+                mode+'-consiserr': consiserr,
+                mode+'-consiserrmax': consiserrmax,
+            }
+            if mode == 'train':
+                info[mode+'-lr'] = args.curr_lr # Plot current learning rate
+            for tag, value in info.items():
+                tblogger.scalar_summary(tag, value, iterct)
+
+            ## Print the predicted delta-SE3s
+            deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
+            print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+
+        # Measure viz time
+        viz_time.update(time.time() - start)
+
+    ### Print stats at the end
+    print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
+    print_stats(mode, epoch=epoch, curr=nbatches, total=nbatches, stats=stats)
+    print('========================================================')
+
+    # Return the stats
+    return stats
+
+### Print statistics
+def print_stats(mode, epoch, curr, total, stats):
+    # Print loss
+    bsz = args.batch_size if bsz is None else bsz
+    print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Batch size: {}, '
+          'Loss: {loss.val: 7.4f} ({loss.avg: 7.4f}),'
+          'Consis: {cerr.val: 6.4f}/{cerrm.val: 6.4f} ({cerr.avg: 6.4f}/{cerrm.avg: 6.4f})'.format(
+        mode, epoch, args.epochs, curr, total, bsz, loss=stats.loss,
+        cerr=stats.consiserr, cerrm=stats.consiserrmax))
 
 ### Load optimizer
 def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1e-4):

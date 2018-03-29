@@ -313,7 +313,7 @@ def main():
 ################# HELPER FUNCTIONS
 
 ### Main iterate function (train/test/val)
-def iterate(predposes, gtposes, ctrls, model, tblogger,
+def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblogger,
             mode='test', optimizer=None, epoch=0):
     # Get global stuff?
     global num_train_iter
@@ -344,7 +344,7 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
     model.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Create random sequence for the training/validation, test can be sequential
-    nexamples = ctrls.size(0)-2
+    nexamples = ctrls_1.size(0)-2
     deftype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor' # Default tensor type
     if mode == 'train' or mode == 'val':
         stats.data_ids = torch.from_numpy(np.random.permutation(nexamples)).type(deftype) # shuffled list of integers from 0 -> ctrls.size(0)-2
@@ -361,9 +361,9 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
 
         # Get the ids of the data samples
         idvs = stats.data_ids[i*args.batch_size:min((i+1)*args.batch_size, nexamples)]
-        pose_i = util.to_var(predposes[idvs], requires_grad=train) # input poses
-        ctrl_i = util.to_var(ctrls[idvs], requires_grad=train)     # input ctrls
-        pose_t = util.to_var(predposes[idvs+1], requires_grad=False) # target poses
+        pose_i = util.to_var(predposes_1[idvs], requires_grad=train) # input poses
+        ctrl_i = util.to_var(ctrls_1[idvs], requires_grad=train)     # input ctrls
+        pose_t = util.to_var(predposes_2[idvs], requires_grad=False) # target poses
 
         # Measure data loading time
         data_time.update(time.time() - start)

@@ -1048,8 +1048,7 @@ class LinearTransitionModel(nn.Module):
         # Create pose decoder (convert to r/t)
         self.se3_type = se3_type
         self.delta_pivot = delta_pivot
-        self.inp_pivot = (self.delta_pivot != '') and (
-        self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
+        self.inp_pivot = (self.delta_pivot != '') and (self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
         self.deltaposedecoder = nn.Sequential()
         self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
         if (self.delta_pivot != ''):

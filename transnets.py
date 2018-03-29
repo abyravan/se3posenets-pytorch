@@ -182,6 +182,9 @@ class SimpleTransitionModel(nn.Module):
         )
 
         # Initialize the SE3 decoder to predict identity SE3
+        self.se3_type = se3_type
+        self.delta_pivot = delta_pivot
+        self.inp_pivot = (self.delta_pivot != '') and (self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
             ctrlnets.init_se3layer_identity(self.deltase3decoder[-1], num_se3, se3_type) # Init to identity

@@ -496,3 +496,7 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     args.curr_lr = lr
+
+################ RUN MAIN
+if __name__ == '__main__':
+    main()

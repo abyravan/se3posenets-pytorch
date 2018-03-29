@@ -21,7 +21,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 import se3layers as se3nn
 import data
 import ctrlnets
-import se2nets
+import transnets
 import util
 from util import AverageMeter, Tee, DataEnumerator
 
@@ -55,6 +55,8 @@ def setup_comon_options():
                         help='Number of SE3s to predict (default: 8)')
     parser.add_argument('--init-transse3-iden', action='store_true', default=False,
                         help='Initialize the weights for the SE3 prediction layer of the transition model to predict identity')
+    parser.add_argument('--model-type', default='default', type=str,
+                        help='Model type: [default] | simple | simplewide | dense | deep')
 
     # Loss options
     parser.add_argument('--loss-type', default='mse', type=str,
@@ -171,10 +173,24 @@ def main():
     ######
     # Setup transition model
     num_train_iter = 0
-    model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                     delta_pivot='', se3_type=args.se3_type, use_kinchain=False,
-                                     nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
-                                     local_delta_se3=False, use_jt_angles=False, num_state=0)
+    if args.model_type == 'default':
+        modelfn = ctrlnets.TransitionModel
+    elif args.model_type == 'simplewide':
+        modelfn = lambda **v: transnets.SimpleTransitionModel(wide=True, **v)
+    elif args.model_type == 'simple':
+        modelfn = lambda **v: transnets.SimpleTransitionModel(wide=False, **v)
+    elif args.model_type == 'deep':
+        modelfn = transnets.DeepTransitionModel
+    elif args.model_type == 'dense':
+        modelfn = transnets.SimpleDenseNetTransitionModel
+    else:
+        assert False, "Unknown model type input: {}".format(args.model_type)
+
+    # Load model
+    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                    delta_pivot='', se3_type=args.se3_type, use_kinchain=False,
+                    nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
+                    local_delta_se3=False, use_jt_angles=False, num_state=0)
     if args.cuda:
         model.cuda()
 

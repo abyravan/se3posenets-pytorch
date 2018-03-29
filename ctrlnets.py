@@ -1027,6 +1027,55 @@ class TransitionModel(nn.Module):
         return [y, z] # Return both the deltas (in global frame) and the composed next pose
 
 ####################################
+### Transition model (predicts change in poses based on the applied control)
+# Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
+class LinearTransitionModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
+                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
+                 local_delta_se3=False, use_jt_angles=False, num_state=7):
+        super(LinearTransitionModel, self).__init__()
+        self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred'))  # Only if we are predicting directly
+        self.num_se3 = num_se3
+
+        # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
+        self.deltase3decoder = nn.Linear(self.num_se3*12 + num_ctrl, self.num_se3*self.se3_dim)
+
+        # Initialize the SE3 decoder to predict identity SE3
+        if init_se3_iden:
+            print("Initializing SE3 prediction layer of the transition model to predict identity transform")
+            init_se3layer_identity(self.deltase3decoder, num_se3, se3_type)  # Init to identity
+
+        # Create pose decoder (convert to r/t)
+        self.se3_type = se3_type
+        self.delta_pivot = delta_pivot
+        self.inp_pivot = (self.delta_pivot != '') and (
+        self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
+        self.deltaposedecoder = nn.Sequential()
+        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        if (self.delta_pivot != ''):
+            self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
+
+        # Compose deltas with prev pose to get next pose
+        # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
+        # So, the full transform is: p_t2 = p_t1 * p_t2_to_t1 (or: p_t2 (t2 to cam) = p_t1 (t1 to cam) * p_t2_to_t1 (t2 to t1))
+        self.posedecoder = se3nn.ComposeRtPair()
+
+    def forward(self, x):
+        # Run the forward pass
+        p, c = x  # Pose, Control
+        x = torch.cat([p.view(-1, self.num_se3 * 12), c], 1)  # Concatenate inputs
+        x = self.deltase3decoder(x)  # Predict delta-SE3
+        x = x.view(-1, self.num_se3, self.se3_dim)
+        x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
+
+        # Predicted delta is already in the global frame of reference, use it directly (from global to global)
+        z = self.posedecoder(x, p)  # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
+        y = x  # D = SE3_2 * SE3_1^-1 (global to global)
+
+        # Return
+        return [y, z]  # Return both the deltas (in global frame) and the composed next pose
+
+####################################
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### [pose_t, mask_t], [pose_t+1, mask_t+1], [delta-pose, poset_t+1]
 class SE3PoseModel(nn.Module):
@@ -1242,7 +1291,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False, noise_stop_iter=1e6):
+                 full_res=False, noise_stop_iter=1e6, trans_type='default'):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1273,11 +1322,27 @@ class MultiStepSE3PoseModel(nn.Module):
                                                  full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Initialize the transition model
-        self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
-                                               se3_type=se3_type, use_kinchain=use_kinchain,
-                                               nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
-                                               local_delta_se3=local_delta_se3,
-                                               use_jt_angles=use_jt_angles_trans, num_state=num_state)
+        if trans_type == 'default':
+            print('Using default transition model')
+            transfn = TransitionModel
+        elif trans_type == 'linear':
+            print('Using linear transition model')
+            transfn = LinearTransitionModel
+        elif trans_type == 'simple':
+            print('Using simple transition model')
+            import transnets
+            transfn = lambda **v: transnets.SimpleTransitionModel(wide=False, **v)
+        elif trans_type == 'simplewide':
+            print('Using simple-wide transition model')
+            import transnets
+            transfn = lambda **v: transnets.SimpleTransitionModel(wide=True, **v)
+        else:
+            assert False, "Unknown transition model type input: {}".format(trans_type)
+        self.transitionmodel = transfn(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,
+                                       se3_type=se3_type, use_kinchain=use_kinchain,
+                                       nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
+                                       local_delta_se3=local_delta_se3,
+                                       use_jt_angles=use_jt_angles_trans, num_state=num_state)
 
         # Options
         self.use_jt_angles = use_jt_angles

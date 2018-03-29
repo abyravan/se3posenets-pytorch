@@ -1,0 +1,36 @@
+---
+# Dataset options
+data-dir:     /home/barun/Projects/se3nets-pytorch/trained_nets/posedelta/realdata/def_rmsprop/compposes/
+batch-size:   64
+num-ctrl:     7
+
+# Model options
+no-batch-norm:      False
+nonlin:             prelu
+se3-type:           se3aa
+num-se3:            8
+init-transse3-iden: True
+
+# Loss options
+loss-type:        mse
+loss-scale:       10000.0
+
+# Training options
+no-cuda:        False
+epochs:         20
+start-epoch:    0
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-4
+momentum:     0
+weight-decay: 1e-4
+lr-decay:     0.1
+decay-epochs: 15
+min-lr:       1e-5
+
+# Display/Save options
+disp-freq: 100
+save-dir:  trained_nets/posedelta/realdata/def_rmsprop/transmodel_f

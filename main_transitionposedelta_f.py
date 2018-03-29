@@ -41,12 +41,6 @@ def setup_comon_options():
                         metavar='DIR', help='path to folder containing train/test/val datasets')
     parser.add_argument('-b', '--batch-size', default=32, type=int,
                         metavar='N', help='mini-batch size (default: 32)')
-    parser.add_argument('-j', '--num-workers', default=4, type=int, metavar='N',
-                        help='number of data loading workers (default: 4)')
-    parser.add_argument('--train-per', default=0.6, type=float,
-                        metavar='FRAC', help='fraction of data for the training set (default: 0.6)')
-    parser.add_argument('--val-per', default=0.15, type=float,
-                        metavar='FRAC', help='fraction of data for the validation set (default: 0.15)')
     parser.add_argument('--num-ctrl', default=7, type=int, metavar='N',
                         help='dimensionality of the control space (default: 7)')
 
@@ -75,10 +69,6 @@ def setup_comon_options():
                         help='number of total epochs to run (default: 100)')
     parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                         help='manual epoch number (useful on restarts) (default: 0)')
-    parser.add_argument('--train-ipe', default=2000, type=int, metavar='N',
-                        help='number of training iterations per epoch (default: 2000)')
-    parser.add_argument('--val-ipe', default=500, type=int, metavar='N',
-                        help='number of validation iterations per epoch (default: 500)')
     parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                         help='evaluate model on test set (default: False)')
     parser.add_argument('--seed', type=int, default=1, metavar='S',

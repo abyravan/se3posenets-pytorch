@@ -373,7 +373,7 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
         start = time.time()
 
         # Run a fwd pass through the net
-        pose_p = model([pose_i, ctrl_i])
+        delta_p, pose_p = model([pose_i, ctrl_i])
 
         # Compute loss
         if args.loss_type == 'mse':
@@ -441,8 +441,10 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
                 tblogger.scalar_summary(tag, value, iterct)
 
             ## Print the predicted delta-SE3s
-            deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-            print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+            if (i % (5*args.disp_freq)) == 0:
+                id = np.random.randint(ctrl_i.size(0))
+                deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
+                print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
         # Measure viz time
         viz_time.update(time.time() - start)
@@ -459,11 +461,10 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
 ### Print statistics
 def print_stats(mode, epoch, curr, total, stats):
     # Print loss
-    bsz = args.batch_size if bsz is None else bsz
-    print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Batch size: {}, '
+    print('Mode: {}, Epoch: [{:3}/{:3}], Iter: [{:5}/{:5}], '
           'Loss: {loss.val: 7.4f} ({loss.avg: 7.4f}),'
           'Consis: {cerr.val: 6.4f}/{cerrm.val: 6.4f} ({cerr.avg: 6.4f}/{cerrm.avg: 6.4f})'.format(
-        mode, epoch, args.epochs, curr, total, bsz, loss=stats.loss,
+        mode, epoch, args.epochs, curr, total, loss=stats.loss,
         cerr=stats.consiserr, cerrm=stats.consiserrmax))
 
 ### Load optimizer

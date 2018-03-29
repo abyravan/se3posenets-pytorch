@@ -345,10 +345,11 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
 
     # Create random sequence for the training/validation, test can be sequential
     nexamples = ctrls.size(0)-2
+    deftype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor' # Default tensor type
     if mode == 'train' or mode == 'val':
-        stats.data_ids = np.random.permutation(nexamples) # shuffled list of integers from 0 -> ctrls.size(0)-2
+        stats.data_ids = torch.from_numpy(np.random.permutation(nexamples)).type(deftype) # shuffled list of integers from 0 -> ctrls.size(0)-2
     else:
-        stats.data_ids = np.array([k for k in range(nexamples)]) # just normal list from 0 -> ctrls.size(0)-2
+        stats.data_ids = torch.Tensor([k for k in range(nexamples)]).type(deftype) # just normal list from 0 -> ctrls.size(0)-2
     nbatches = (nexamples + args.batch_size - 1) // args.batch_size
 
     # Run an epoch
@@ -452,6 +453,7 @@ def iterate(predposes, gtposes, ctrls, model, tblogger,
     print('========================================================')
 
     # Return the stats
+    stats.data_ids = stats.data_ids.cpu()
     return stats
 
 ### Print statistics

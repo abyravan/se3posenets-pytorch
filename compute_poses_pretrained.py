@@ -223,7 +223,7 @@ def iterate(data_loader, posemodel, mode):
 
     # Save all stats into a namespace
     stats = argparse.Namespace()
-    stats.gtposes, stats.predposes, stats.ctrls = [], [], []
+    stats.gtposes_1, stats.gtposes_2, stats.predposes_1, stats.predposes_2, stats.ctrls_1 = [], [], [], [], []
 
     # Switch model modes
     posemodel.eval()
@@ -274,10 +274,13 @@ def iterate(data_loader, posemodel, mode):
         ### Run a FWD pass through the network (multi-step)
         # Predict the poses and masks
         ### TODO: Make it more general with pivots etc
-        predpose = posemodel.forward_only_pose([netinput[:,0], jtangles[:,0]])
-        stats.predposes.append(predpose.data.clone().view(-1,args.num_se3,3,4).cpu())
-        stats.gtposes.append(sample['poses'][:,0].clone().cpu())
-        stats.ctrls.append(sample['controls'][:,0].clone().cpu())
+        predpose_1 = posemodel.forward_only_pose([netinput[:,0], jtangles[:,0]])
+        predpose_2 = posemodel.forward_only_pose([netinput[:,1], jtangles[:,1]])
+        stats.predposes_1.append(predpose_1.data.clone().view(-1,args.num_se3,3,4).cpu())
+        stats.predposes_2.append(predpose_2.data.clone().view(-1,args.num_se3,3,4).cpu())
+        stats.gtposes_1.append(sample['poses'][:,0].clone().cpu())
+        stats.gtposes_2.append(sample['poses'][:,1].clone().cpu())
+        stats.ctrls_1.append(sample['controls'][:,0].clone().cpu())
 
         # Measure data loading time
         fwd_time.update(time.time() - start)

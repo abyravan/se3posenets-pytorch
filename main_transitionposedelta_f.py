@@ -141,23 +141,32 @@ def main():
     ### Load data from disk
     print("Loading training data from: {}".format(args.data_dir + "/transmodeldata_train.tar.gz"))
     data_tr = torch.load(args.data_dir + "/transmodeldata_train.tar.gz")
-    predposes_tr, gtposes_tr, ctrls_tr = torch.cat(data_tr.predposes, 0).type(deftype), \
-                                         torch.cat(data_tr.gtposes, 0).type(deftype), \
-                                         torch.cat(data_tr.ctrls, 0).type(deftype)
+    predposes_1_tr, predposes_2_tr, gtposes_1_tr, gtposes_2_tr, ctrls_1_tr = \
+        torch.cat(data_tr.predposes_1, 0).type(deftype), \
+        torch.cat(data_tr.predposes_2, 0).type(deftype), \
+        torch.cat(data_tr.gtposes_1, 0).type(deftype), \
+        torch.cat(data_tr.gtposes_2, 0).type(deftype), \
+        torch.cat(data_tr.ctrls, 0).type(deftype)
 
     print("Loading validation data from: {}".format(args.data_dir + "/transmodeldata_val.tar.gz"))
     data_vl = torch.load(args.data_dir + "/transmodeldata_val.tar.gz")
-    predposes_vl, gtposes_vl, ctrls_vl = torch.cat(data_vl.predposes, 0).type(deftype),\
-                                         torch.cat(data_vl.gtposes, 0).type(deftype), \
-                                         torch.cat(data_vl.ctrls, 0).type(deftype)
+    predposes_1_vl, predposes_2_vl, gtposes_1_vl, gtposes_2_vl, ctrls_1_vl = \
+        torch.cat(data_vl.predposes_1, 0).type(deftype), \
+        torch.cat(data_vl.predposes_2, 0).type(deftype), \
+        torch.cat(data_vl.gtposes_1, 0).type(deftype), \
+        torch.cat(data_vl.gtposes_2, 0).type(deftype), \
+        torch.cat(data_vl.ctrls, 0).type(deftype)
 
     print("Loading testing data from: {}".format(args.data_dir + "/transmodeldata_test.tar.gz"))
     data_te = torch.load(args.data_dir + "/transmodeldata_test.tar.gz")
-    predposes_te, gtposes_te, ctrls_te = torch.cat(data_te.predposes, 0).type(deftype),\
-                                         torch.cat(data_te.gtposes, 0).type(deftype), \
-                                         torch.cat(data_te.ctrls, 0).type(deftype)
+    predposes_1_te, predposes_2_te, gtposes_1_te, gtposes_2_te, ctrls_1_te = \
+        torch.cat(data_te.predposes_1, 0).type(deftype), \
+        torch.cat(data_te.predposes_2, 0).type(deftype), \
+        torch.cat(data_te.gtposes_1, 0).type(deftype), \
+        torch.cat(data_te.gtposes_2, 0).type(deftype), \
+        torch.cat(data_te.ctrls, 0).type(deftype)
 
-    print("Num examples => train/val/test: {}/{}/{}".format(ctrls_tr.size(0)-1, ctrls_vl.size(0)-1, ctrls_te.size(0)-1))
+    print("Num examples => train/val/test: {}/{}/{}".format(ctrls_1_tr.size(0)-1, ctrls_1_vl.size(0)-1, ctrls_1_te.size(0)-1))
 
     ######
     # Setup transition model
@@ -207,7 +216,7 @@ def main():
 
         # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')
-        test_stats = iterate(predposes_te, gtposes_te, ctrls_te, model,
+        test_stats = iterate(predposes_1_te, predposes_2_te, gtposes_1_te, gtposes_2_te, ctrls_1_te, model,
                              tblogger, mode='test', epoch=args.start_epoch+1)
 
         # Save final test error
@@ -233,11 +242,11 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
 
         # Train for one epoch
-        train_stats = iterate(predposes_tr, gtposes_tr, ctrls_tr, model,
+        train_stats = iterate(predposes_1_tr, predposes_2_tr, gtposes_1_tr, gtposes_2_tr, ctrls_1_tr, model,
                               tblogger, mode='train', optimizer=optimizer, epoch=epoch+1)
 
         # Evaluate on validation set
-        val_stats   = iterate(predposes_vl, gtposes_vl, ctrls_vl, model,
+        val_stats   = iterate(predposes_1_vl, predposes_2_vl, gtposes_1_vl, gtposes_2_vl, ctrls_1_vl, model,
                               tblogger, mode='val', epoch=epoch+1)
 
         # Find best losses
@@ -290,7 +299,7 @@ def main():
     # Do final testing (if not asked to evaluate)
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
-    test_stats = iterate(predposes_te, gtposes_te, ctrls_te, model,
+    test_stats = iterate(predposes_1_te, predposes_2_te, gtposes_1_te, gtposes_2_te, ctrls_1_te, model,
                          tblogger, mode='test', epoch=checkpoint['epoch'] + 1)
     print('==== Best validation loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                              best_epoch))

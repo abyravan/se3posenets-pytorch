@@ -146,7 +146,7 @@ def main():
         torch.cat(data_tr.predposes_2, 0).type(deftype), \
         torch.cat(data_tr.gtposes_1, 0).type(deftype), \
         torch.cat(data_tr.gtposes_2, 0).type(deftype), \
-        torch.cat(data_tr.ctrls, 0).type(deftype)
+        torch.cat(data_tr.ctrls_1, 0).type(deftype)
 
     print("Loading validation data from: {}".format(args.data_dir + "/transmodeldata_val.tar.gz"))
     data_vl = torch.load(args.data_dir + "/transmodeldata_val.tar.gz")
@@ -155,7 +155,7 @@ def main():
         torch.cat(data_vl.predposes_2, 0).type(deftype), \
         torch.cat(data_vl.gtposes_1, 0).type(deftype), \
         torch.cat(data_vl.gtposes_2, 0).type(deftype), \
-        torch.cat(data_vl.ctrls, 0).type(deftype)
+        torch.cat(data_vl.ctrls_1, 0).type(deftype)
 
     print("Loading testing data from: {}".format(args.data_dir + "/transmodeldata_test.tar.gz"))
     data_te = torch.load(args.data_dir + "/transmodeldata_test.tar.gz")
@@ -164,7 +164,7 @@ def main():
         torch.cat(data_te.predposes_2, 0).type(deftype), \
         torch.cat(data_te.gtposes_1, 0).type(deftype), \
         torch.cat(data_te.gtposes_2, 0).type(deftype), \
-        torch.cat(data_te.ctrls, 0).type(deftype)
+        torch.cat(data_te.ctrls_1, 0).type(deftype)
 
     print("Num examples => train/val/test: {}/{}/{}".format(ctrls_1_tr.size(0)-1, ctrls_1_vl.size(0)-1, ctrls_1_te.size(0)-1))
 

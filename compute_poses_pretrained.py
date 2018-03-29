@@ -184,6 +184,9 @@ def main():
         posemodel.load_state_dict(pose_checkpoint['model_state_dict'])
 
     ##########
+    
+    args.num_workers = 12
+    
     # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
     train_loader = util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
                                    num_workers=args.num_workers, pin_memory=args.use_pin_memory,

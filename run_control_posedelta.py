@@ -157,6 +157,7 @@ def main():
         pose_checkpoint   = torch.load(pargs.pose_checkpoint)
         trans_checkpoint  = torch.load(pargs.trans_checkpoint)
         args              = pose_checkpoint['args']
+        targs             = trans_checkpoint['args']
         try:
             num_train_iter = pose_checkpoint['num_train_iter']
         except:
@@ -252,11 +253,11 @@ def main():
     posemodel.eval()
 
     #### Trans model
-    transmodel = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
-                                          se3_type=args.se3_type, use_kinchain=False,
-                                          nonlinearity=args.nonlin, init_se3_iden=args.init_transse3_iden,
-                                          local_delta_se3=args.local_delta_se3,
-                                          use_jt_angles=args.use_jt_angles_trans, num_state=args.num_state_net)
+    transmodel = ctrlnets.TransitionModel(num_ctrl=targs.num_ctrl, num_se3=targs.num_se3, delta_pivot='',
+                                          se3_type=targs.se3_type, use_kinchain=False,
+                                          nonlinearity=targs.nonlin, init_se3_iden=targs.init_transse3_iden,
+                                          local_delta_se3=False,
+                                          use_jt_angles=False, num_state=0)
     if pargs.cuda:
         transmodel.cuda() # Convert to CUDA if enabled
 

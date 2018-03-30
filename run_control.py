@@ -187,6 +187,8 @@ def main():
         args.num_state_net = args.num_state
     else:
         args.num_state_net = args.num_ctrl
+    if not hasattr(args, "trans_type"):
+        args.trans_type = 'default'
 
     ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
     ## TODO: Or allow pangolin to change the args later
@@ -234,7 +236,7 @@ def main():
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
                     decomp_model=args.decomp_model, wide=args.wide_model,
                     use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                    num_state=args.num_state_net)
+                    num_state=args.num_state_net, trans_type=args.trans_type)
     posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
@@ -346,21 +348,21 @@ def main():
         )
 
     # ### More test configs
-    # start_angles_all = torch.FloatTensor(
-    #     [
-    #         [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
-    #         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-    #         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-    #     ]
-    # )
-    #
-    # goal_angles_all = torch.FloatTensor(
-    #     [
-    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
-    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
-    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
-    #     ]
-    # )
+    start_angles_all = torch.FloatTensor(
+        [
+            [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+            [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+            [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+        ]
+    )
+
+    goal_angles_all = torch.FloatTensor(
+        [
+            [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+            [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+            [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+        ]
+    )
 
     # # ###
     # start_angles_all = torch.FloatTensor(
@@ -531,7 +533,7 @@ def main():
         # Run the controller for max_iter iterations
         gen_time, posemask_time, optim_time, viz_time, rest_time = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
         conv_iter = pargs.max_iter
-        inc_ctr, max_ctr = 0, 10 # Num consecutive times we've seen an increase in loss
+        inc_ctr, max_ctr = 0, 100 # Num consecutive times we've seen an increase in loss
         status, prev_loss = 0, np.float("inf")
         for it in xrange(pargs.max_iter):
             # Print

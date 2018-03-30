@@ -1,0 +1,36 @@
+---
+# Dataset options
+data-dir:     /home/barun/Projects/se3nets-pytorch/trained_nets/posedelta/simdata/def_rmsprop/compposes/
+batch-size:   16
+num-ctrl:     7
+
+# Model options
+use-batch-norm:     False
+nonlin:             prelu
+num-se3:            8
+init-ctrl-zero:     False
+model-type:         default
+
+# Loss options
+loss-type:        cosine
+loss-scale:       10000.0
+
+# Training options
+no-cuda:        False
+epochs:         10
+start-epoch:    0
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-4
+momentum:     0
+weight-decay: 1e-4
+lr-decay:     0.1
+decay-epochs: 15
+min-lr:       1e-5
+
+# Display/Save options
+disp-freq: 100
+save-dir:  trained_nets/posedelta/simdata/def_rmsprop/invmodel_cosine

@@ -84,6 +84,8 @@ parser.add_argument('--inverse-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for an inverse loss (given poses at t & t+1, predict control between them)')
 parser.add_argument('--init-ctrl-zero', action='store_true', default=False,
                         help='Initialize the weights for the ctrl prediction layer of the inverse model to predict zero')
+parser.add_argument('--inverse-loss-type', default='mse', type=str,
+                        metavar='STR', help='Type of inverse loss: [mse] | abs | cosine')
 
 # Define xrange
 try:
@@ -259,6 +261,7 @@ def main():
     # Loss parameters
     print('Loss scale: {}, Loss weights => PT: {}, INVERSE: {}'.format(
         args.loss_scale, args.pt_wt, args.inverse_wt))
+    print('Inverse loss type: {}'.format(args.inverse_loss_type))
 
     # Weight sharpening stuff
     if args.use_wt_sharpening:
@@ -920,7 +923,14 @@ def iterate(data_loader, model, inv_model, tblogger, num_iters,
 
             ### Inverse loss
             if (args.inverse_wt > 0):
-                currinvloss = inverse_wt * ctrlnets.BiMSELoss(predctrls[k], ctrls[:,k])
+                if args.inverse_loss_type == 'mse':
+                    currinvloss = inverse_wt * ctrlnets.BiMSELoss(predctrls[k], ctrls[:,k])
+                elif args.inverse_loss_type == 'abs':
+                    currinvloss = inverse_wt * ctrlnets.BiAbsLoss(predctrls[k], ctrls[:,k])
+                elif args.inverse_loss_type == 'cosine':
+                    currinvloss = inverse_wt * (1.0 - F.cosine_similarity(predctrls[k], ctrls[:,k], dim=1)).mean() # Penalize only the direction difference between the controls
+                else:
+                    assert False, "Unknown inverse loss type input: {}".format(args.inverse_loss_type)
                 loss += currinvloss
                 invloss[k] = currinvloss.data[0]
 

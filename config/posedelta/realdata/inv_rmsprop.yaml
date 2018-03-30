@@ -13,22 +13,22 @@ model-type:         default
 
 # Loss options
 loss-type:        cosine
-loss-scale:       10000.0
+loss-scale:       1.0
 
 # Training options
 no-cuda:        False
-epochs:         10
+epochs:         15
 start-epoch:    0
 evaluate:       False
 seed:           100
 
 # Optimization options
 optimization: rmsprop
-lr:           1e-4
+lr:           1e-3
 momentum:     0
 weight-decay: 1e-4
 lr-decay:     0.1
-decay-epochs: 15
+decay-epochs: 5
 min-lr:       1e-5
 
 # Display/Save options

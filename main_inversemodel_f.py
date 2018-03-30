@@ -59,7 +59,7 @@ def setup_comon_options():
     # Loss options
     parser.add_argument('--loss-type', default='mse', type=str,
                         metavar='STR', help='Type of loss to use (default: mse | abs | cosine)')
-    parser.add_argument('--loss-scale', default=10000, type=float,
+    parser.add_argument('--loss-scale', default=1.0, type=float,
                         metavar='WT', help='Default scale factor for all the losses (default: 10000)')
 
     # Training options
@@ -115,7 +115,6 @@ def main():
     parser = setup_comon_options()
     args = parser.parse_args()
     args.cuda = not args.no_cuda and torch.cuda.is_available()
-    args.batch_norm = not args.no_batch_norm
 
     ### Create save directory and start tensorboard logger
     util.create_dir(args.save_dir)  # Create directory
@@ -361,14 +360,6 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
         assert (mode == 'test' or mode == 'val'), "Mode can be train/test/val. Input: {}"+mode
         model.eval()
 
-    # Create a closure to get the outputs of the delta-se3 prediction layers
-    predictions = {}
-    def get_output(name):
-        def hook(self, input, result):
-            predictions[name] = result
-        return hook
-    model.deltase3decoder.register_forward_hook(get_output('deltase3'))
-
     # Create random sequence for the training/validation, test can be sequential
     nexamples = ctrls_1.size(0)-2
     deftype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor' # Default tensor type
@@ -406,7 +397,7 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
             loss = args.loss_scale * ctrlnets.BiMSELoss(ctrl_p, ctrl_i)
         elif args.loss_type == 'abs':
             loss = args.loss_scale * ctrlnets.BiAbsLoss(ctrl_p, ctrl_i)
-        elif args.inverse_loss_type == 'cosine':
+        elif args.loss_type == 'cosine':
             loss = args.loss_scale * (1.0 - F.cosine_similarity(ctrl_p, ctrl_i, dim=1)).mean()  # Penalize only the direction difference between the controls
         else:
             assert False, "Unknown loss type: {}".format(args.loss_type)
@@ -468,11 +459,10 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
             for tag, value in info.items():
                 tblogger.scalar_summary(tag, value, iterct)
 
-            ## Print the predicted delta-SE3s
-            if (i % (5*args.disp_freq)) == 0:
+            ## Print the predicted ctrls
+            if (i % (10*args.disp_freq)) == 0:
                 id = np.random.randint(ctrl_i.size(0))
-                deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+                print('\tPredicted ctrls:', ctrl_p.data[id].view(1,-1).clone().cpu())
 
         # Measure viz time
         viz_time.update(time.time() - start)
@@ -490,7 +480,7 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
 def print_stats(mode, epoch, curr, total, stats):
     # Print loss
     print('Mode: {}, Epoch: [{:3}/{:3}], Iter: [{:5}/{:5}], '
-          'Loss: {loss.val: 7.4f} ({loss.avg: 7.4f}),'
+          'Loss: {loss.val: 7.4f} ({loss.avg: 7.4f}), '
           'Inv: {cerr.val: 6.4f}/{cerrm.val: 6.4f} ({cerr.avg: 6.4f}/{cerrm.avg: 6.4f})'.format(
         mode, epoch, args.epochs, curr, total, loss=stats.loss,
         cerr=stats.inverr, cerrm=stats.inverrmax))

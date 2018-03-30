@@ -1653,3 +1653,124 @@ class MultiStepSE3NoTransModel(nn.Module):
     def forward(self, x):
         print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
         raise NotImplementedError
+
+####################################
+### Multi-step version of the SE3-Pose-Model - No transition model, Has inverse model
+### Currently, this has a separate pose & mask predictor as well as a transition model
+### NOTE: The forward pass is not currently implemented, this needs to be done outside
+class MultiStepSE3NoTransWithInvModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, se3_type='se3aa', use_pivot=False, delta_pivot='',
+                 use_kinchain=False, input_channels=3, use_bn=True, pre_conv=False, decomp_model=False,
+                 nonlinearity='prelu', init_posese3_iden= False, init_transse3_iden = False,
+                 use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
+                 use_sigmoid_mask=False, local_delta_se3=False, wide=False,
+                 use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
+                 full_res=False, noise_stop_iter=1e6, init_ctrl_zero=False, inv_use_bn=False):
+        super(MultiStepSE3NoTransWithInvModel, self).__init__()
+
+        # Initialize the pose & mask model
+        self.decomp_model = decomp_model
+        if self.decomp_model:
+            print('Using separate networks for pose and mask prediction')
+            self.posemodel = PoseEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                         use_kinchain=use_kinchain, input_channels=input_channels,
+                                         init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                         nonlinearity=nonlinearity, wide=wide,
+                                         use_jt_angles=use_jt_angles, num_state=num_state,
+                                         full_res=full_res)
+            self.maskmodel = MaskEncoder(num_se3=num_se3, input_channels=input_channels,
+                                         use_bn=use_bn, pre_conv=pre_conv,
+                                         nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                         full_res=full_res, noise_stop_iter=noise_stop_iter)
+        else:
+            print('Using single network for pose & mask prediction')
+            self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                                 use_kinchain=use_kinchain, input_channels=input_channels,
+                                                 init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                                 nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                                 sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                                 use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                                 use_jt_angles=use_jt_angles, num_state=num_state,
+                                                 full_res=full_res, noise_stop_iter=noise_stop_iter)
+
+        # Inverse model
+        self.inversemodel = InverseModel(num_ctrl=num_ctrl, num_se3=num_se3,
+                                         nonlinearity=nonlinearity, init_ctrl_zero=init_ctrl_zero,
+                                         use_bn=inv_use_bn)
+
+        # Options
+        self.use_jt_angles = use_jt_angles
+
+    # Predict pose only
+    def forward_only_pose(self, x):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
+        if self.decomp_model:
+            return self.posemodel(inp)
+        else:
+            return self.posemaskmodel(inp, predict_masks=False) # returns only pose
+
+    # Predict both pose and mask
+    def forward_pose_mask(self, x, train_iter=0):
+        ptcloud, jtangles = x
+        inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
+        if self.decomp_model:
+            pose = self.posemodel(inp)
+            mask = self.maskmodel(ptcloud, train_iter=train_iter)
+            return pose, mask
+        else:
+            return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
+
+    # Predict next pose based on current pose and control
+    def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):
+        raise NotImplementedError
+
+    # Forward pass through the model
+    def forward(self, x):
+        print('Forward pass for Multi-Step SE3-Pose-Model is not yet implemented')
+        raise NotImplementedError
+
+### Inverse model
+####################################
+### Transition model (predicts change in poses based on the applied control)
+# Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
+class InverseModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, nonlinearity='prelu', init_ctrl_zero=False, use_bn=False):
+        super(InverseModel, self).__init__()
+        self.se3_dim = 12
+        self.num_se3 = num_se3
+
+        # Type of linear layer
+        linlayer = lambda in_dim, out_dim: BasicLinear(in_dim, out_dim, use_bn=use_bn, nonlinearity=nonlinearity)
+
+        # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
+        pdim = [64, 32]
+        self.poseencoder = nn.Sequential(
+            linlayer(self.num_se3*self.se3_dim, pdim[0]),
+            linlayer(pdim[0], pdim[1]),
+        )
+
+        cdim = [32, 16]
+        self.ctrldecoder = nn.Sequential(
+            linlayer(2*pdim[1], cdim[0]),
+            linlayer(cdim[0], cdim[1]),
+            nn.Linear(cdim[1], num_ctrl)
+        )
+
+        ## Initialization
+        if init_ctrl_zero:
+            print("Initializing ctrl prediction layer of the inverse model to predict zero")
+            layer = self.ctrldecoder[-1]
+            layer.weight.data.uniform_(-0.0001, 0.0001)  # Initialize weights to near identity
+            layer.bias.data.uniform_(-0.001, 0.001)  # Initialize biases to near identity
+
+    def forward(self, x):
+        # Run the forward pass
+        p1, p2 = x # pose @ t, t+1
+        p1_e = self.poseencoder(p1.view(-1, self.num_se3*self.se3_dim))
+        p2_e = self.poseencoder(p2.view(-1, self.num_se3*self.se3_dim))
+        pe   = torch.cat([p1_e, p2_e], 1) # Concatenate features
+        u    = self.ctrldecoder(pe)
+        return u # Predict control

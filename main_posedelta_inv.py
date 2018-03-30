@@ -431,7 +431,7 @@ def main():
     elif args.use_gt_poses:
         assert False
     else:
-        modelfn = ctrlnets.MultiStepSE3NoTransModel
+        modelfn = ctrlnets.MultiStepSE3NoTransWithInvModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
@@ -441,26 +441,14 @@ def main():
                     use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
-                    full_res=args.full_res, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models
+                    full_res=args.full_res, noise_stop_iter=args.noise_stop_iter,
+                    init_ctrl_zero=args.init_ctrl_zero) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
     ### Load optimizer
     optimizer = load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                momentum=args.momentum, weight_decay=args.weight_decay)
-
-    ### Inverse model
-    inv_model, inv_optimizer = None, None
-    if args.inverse_wt > 0:
-        # Setup model
-        inv_model = InverseModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                 nonlinearity=args.nonlin, init_ctrl_zero=args.init_ctrl_zero)
-        if args.cuda:
-            inv_model.cuda()  # Convert to CUDA if enabled
-
-        # Setup optimizer
-        inv_optimizer = load_optimizer(args.optimization, inv_model.parameters(), lr=args.lr,
-                                       momentum=args.momentum, weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -485,13 +473,6 @@ def main():
             assert (loadargs.optimization == args.optimization), "Optimizer in saved checkpoint ({}) does not match current argument ({})".format(
                     loadargs.optimization, args.optimization)
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            ### Load inv model
-            if args.inverse_wt > 0:
-                try:
-                    inv_model.load_state_dict(checkpoint['inv_state_dict'])  # BWDs compatibility (TODO: remove)
-                except:
-                    inv_model.load_state_dict(checkpoint['inv_model_state_dict'])
-                inv_optimizer.load_state_dict(checkpoint['inv_optimizer_state_dict'])
             print("=> loaded checkpoint '{}' (epoch {}, train iter {})"
                   .format(args.resume, checkpoint['epoch'], num_train_iter))
             best_loss    = checkpoint['best_loss'] if 'best_loss' in checkpoint else float("inf")
@@ -515,7 +496,7 @@ def main():
 
         # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')
-        test_stats = iterate(test_loader, model, inv_model, tblogger, len(test_loader), mode='test')
+        test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
         # Save final test error
         save_checkpoint({
@@ -546,12 +527,12 @@ def main():
         adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
 
         # Train for one epoch
-        train_stats = iterate(train_loader, model, inv_model, tblogger, args.train_ipe,
-                           mode='train', optimizer=optimizer, inv_optimizer=inv_optimizer, epoch=epoch+1)
+        train_stats = iterate(train_loader, model, tblogger, args.train_ipe,
+                           mode='train', optimizer=optimizer, epoch=epoch+1)
         train_ids += train_stats.data_ids
 
         # Evaluate on validation set
-        val_stats = iterate(val_loader, model, inv_model, tblogger, args.val_ipe,
+        val_stats = iterate(val_loader, model, tblogger, args.val_ipe,
                             mode='val', epoch=epoch+1)
         val_ids += val_stats.data_ids
 
@@ -619,8 +600,6 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-            'inv_model_state_dict': inv_model.state_dict() if inv_model is not None else None,
-            'inv_optimizer_state_dict': inv_optimizer.state_dict() if inv_model is not None else None,
         }, is_best, is_fbest, is_fibest, savedir=args.save_dir, filename='checkpoint.pth.tar') #_{}.pth.tar'.format(epoch+1))
         print('\n')
 
@@ -635,11 +614,6 @@ def main():
         model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)
     except:
         model.load_state_dict(checkpoint['model_state_dict'])
-    if inv_model is not None:
-        try:
-            inv_model.load_state_dict(checkpoint['inv_state_dict'])  # BWDs compatibility (TODO: remove)
-        except:
-            inv_model.load_state_dict(checkpoint['inv_model_state_dict'])
     print("=> loaded best checkpoint (epoch {}, train iter {})"
           .format(checkpoint['epoch'], num_train_iter))
     best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
@@ -660,7 +634,7 @@ def main():
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                     num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
                                     collate_fn=test_dataset.collate_batch))
-    test_stats = iterate(test_loader, model, inv_model, tblogger, len(test_loader),
+    test_stats = iterate(test_loader, model, tblogger, len(test_loader),
                          mode='test', epoch=args.epochs)
     print('==== Best validation loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                          best_epoch))
@@ -697,8 +671,8 @@ def main():
 ################# HELPER FUNCTIONS
 
 ### Main iterate function (train/test/val)
-def iterate(data_loader, model, inv_model, tblogger, num_iters,
-            mode='test', optimizer=None, inv_optimizer=None, epoch=0):
+def iterate(data_loader, model, tblogger, num_iters,
+            mode='test', optimizer=None, epoch=0):
     # Get global stuff?
     global num_train_iter
 
@@ -844,7 +818,7 @@ def iterate(data_loader, model, inv_model, tblogger, num_iters,
         if (args.inverse_wt > 0):
             # Use an inverse model to predict the controls and penalize it
             for k in xrange(args.seq_len):
-                predctrl = inv_model([poses[k], poses[k+1]]) # Take poses @ t & t+1, predict ctrls
+                predctrl = model.inversemodel([poses[k], poses[k+1]]) # Take poses @ t & t+1, predict ctrls
                 predctrls.append(predctrl)
 
         # Now compute the losses across the sequence
@@ -959,11 +933,7 @@ def iterate(data_loader, model, inv_model, tblogger, num_iters,
 
             # Backward pass & optimize
             optimizer.zero_grad() # Zero gradients
-            if inv_optimizer:
-                inv_optimizer.zero_grad()
             loss.backward()       # Compute gradients - BWD pass
-            if inv_optimizer:
-                inv_optimizer.step()
             optimizer.step()      # Run update step
 
             # Increment number of training iterations by 1
@@ -1285,50 +1255,6 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_
 def clip_grad(v, min, max):
     v.register_hook(lambda g: g.clamp(min, max))
     return v
-
-### Inverse model
-####################################
-### Transition model (predicts change in poses based on the applied control)
-# Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
-class InverseModel(nn.Module):
-    def __init__(self, num_ctrl, num_se3, nonlinearity='prelu', init_ctrl_zero=False, use_bn=False):
-        super(InverseModel, self).__init__()
-        self.se3_dim = 12
-        self.num_se3 = num_se3
-
-        # Type of linear layer
-        linlayer = lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
-                                                                use_bn=use_bn, nonlinearity=nonlinearity)
-
-        # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
-        pdim = [64, 32]
-        self.poseencoder = nn.Sequential(
-            linlayer(self.num_se3*self.se3_dim, pdim[0]),
-            linlayer(pdim[0], pdim[1]),
-        )
-
-        cdim = [32, 16]
-        self.ctrldecoder = nn.Sequential(
-            linlayer(2*pdim[1], cdim[0]),
-            linlayer(cdim[0], cdim[1]),
-            nn.Linear(cdim[1], num_ctrl)
-        )
-
-        ## Initialization
-        if init_ctrl_zero:
-            print("Initializing ctrl prediction layer of the inverse model to predict zero")
-            layer = self.ctrldecoder[-1]
-            layer.weight.data.uniform_(-0.0001, 0.0001)  # Initialize weights to near identity
-            layer.bias.data.uniform_(-0.001, 0.001)  # Initialize biases to near identity
-
-    def forward(self, x):
-        # Run the forward pass
-        p1, p2 = x # pose @ t, t+1
-        p1_e = self.poseencoder(p1.view(-1, self.num_se3*self.se3_dim))
-        p2_e = self.poseencoder(p2.view(-1, self.num_se3*self.se3_dim))
-        pe   = torch.cat([p1_e, p2_e], 1) # Concatenate features
-        u    = self.ctrldecoder(pe)
-        return u # Predict control
 
 ################ RUN MAIN
 if __name__ == '__main__':

@@ -316,7 +316,7 @@ def main():
     # (don't create the data loader unless needed, creates 4 extra threads)
     print('==== Evaluating trained network on test data ====')
     test_stats = iterate(predposes_1_te, predposes_2_te, gtposes_1_te, gtposes_2_te, ctrls_1_te, model,
-                         tblogger, mode='test', epoch=checkpoint['epoch'] + 1)
+                         tblogger, mode='test', epoch=checkpoint['epoch'])
     print('==== Best validation loss: {:.5f} was from epoch: {} ===='.format(checkpoint['best_loss'],
                                                                              best_epoch))
 
@@ -327,7 +327,7 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}\n".format(epoch+1, test_stats.loss.avg,
+    statsvfile.write("{}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
                                                test_stats.consiserr.avg,
                                                test_stats.consiserrmax.avg))
     statsvfile.close(); statstfile.close()

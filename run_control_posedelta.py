@@ -253,7 +253,21 @@ def main():
     posemodel.eval()
 
     #### Trans model
-    transmodel = ctrlnets.TransitionModel(num_ctrl=targs.num_ctrl, num_se3=targs.num_se3, delta_pivot='',
+    # Setup transition model
+    import transnets
+    if targs.model_type == 'default':
+        transmodelfn = ctrlnets.TransitionModel
+    elif targs.model_type == 'simplewide':
+        transmodelfn = lambda **v: transnets.SimpleTransitionModel(wide=True, **v)
+    elif targs.model_type == 'simple':
+        transmodelfn = lambda **v: transnets.SimpleTransitionModel(wide=False, **v)
+    elif targs.model_type == 'deep':
+        transmodelfn = transnets.DeepTransitionModel
+    elif targs.model_type == 'dense':
+        transmodelfn = transnets.SimpleDenseNetTransitionModel
+    else:
+        assert False, "Unknown model type input: {}".format(args.model_type)
+    transmodel = transmodelfn(num_ctrl=targs.num_ctrl, num_se3=targs.num_se3, delta_pivot='',
                                           se3_type=targs.se3_type, use_kinchain=False,
                                           nonlinearity=targs.nonlin, init_se3_iden=targs.init_transse3_iden,
                                           local_delta_se3=False,

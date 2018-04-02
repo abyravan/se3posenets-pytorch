@@ -101,6 +101,8 @@ def setup_comon_options():
     # GT poses
     parser.add_argument('--use-gt-poses', action='store_true', default=False,
                         help='Use GT poses as inputs to the network (default: False)')
+    parser.add_argument('--use-gt-local-poses', action='store_true', default=False,
+                        help='Use GT local poses as inputs to the network (default: False)')
 
     # Return
     return parser
@@ -390,6 +392,13 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
         if args.use_gt_poses:
             pose_i = util.to_var(gtposes_1[idvs], requires_grad=train)  # input poses
             pose_t = util.to_var(gtposes_2[idvs], requires_grad=train)  # target poses
+        elif args.use_gt_local_poses:
+            gtpose_i, gtpose_t = gtposes_1[idvs], gtposes_2[idvs]
+            local_i = data.ComposeRtPair(data.RtInverse(gtpose_i[:,:-1].clone()), gtpose_i[:,1:].clone())
+            local_t = data.ComposeRtPair(data.RtInverse(gtpose_t[:,:-1].clone()), gtpose_t[:,1:].clone())
+            gtpose_i[:,1:], gtpose_t[:,1:] = local_i, local_t
+            pose_i = util.to_var(gtpose_i, requires_grad=train)  # input poses
+            pose_t = util.to_var(gtpose_t, requires_grad=train)  # target poses
         else:
             pose_i = util.to_var(predposes_1[idvs], requires_grad=train) # input poses
             pose_t = util.to_var(predposes_2[idvs], requires_grad=train) # target poses

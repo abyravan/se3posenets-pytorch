@@ -98,6 +98,10 @@ def setup_comon_options():
     parser.add_argument('-s', '--save-dir', default='results', type=str,
                         metavar='PATH', help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
 
+    # GT poses
+    parser.add_argument('--use-gt-poses', action='store_true', default=False,
+                        help='Use GT poses as inputs to the network (default: False)')
+
     # Return
     return parser
 
@@ -136,6 +140,10 @@ def main():
     # Loss parameters
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     print('Loss scale: {}'.format(args.loss_scale))
+
+    # GT poses
+    if args.use_gt_poses:
+        print("Using GT poses as inputs to the inverse model")
 
     ### Load data from disk
     print("Loading training data from: {}".format(args.data_dir + "/transmodeldata_train.tar.gz"))
@@ -378,9 +386,13 @@ def iterate(predposes_1, predposes_2, gtposes_1, gtposes_2, ctrls_1, model, tblo
 
         # Get the ids of the data samples
         idvs = stats.data_ids[i*args.batch_size:min((i+1)*args.batch_size, nexamples)]
-        pose_i = util.to_var(predposes_1[idvs], requires_grad=train) # input poses
         ctrl_i = util.to_var(ctrls_1[idvs], requires_grad=False)     # input ctrls (gt output)
-        pose_t = util.to_var(predposes_2[idvs], requires_grad=train) # target poses
+        if args.use_gt_poses:
+            pose_i = util.to_var(gtposes_1[idvs], requires_grad=train)  # input poses
+            pose_t = util.to_var(gtposes_2[idvs], requires_grad=train)  # target poses
+        else:
+            pose_i = util.to_var(predposes_1[idvs], requires_grad=train) # input poses
+            pose_t = util.to_var(predposes_2[idvs], requires_grad=train) # target poses
 
         # Measure data loading time
         data_time.update(time.time() - start)

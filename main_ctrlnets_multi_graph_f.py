@@ -85,7 +85,7 @@ parser.add_argument('--trans-type', default='default', type=str,
 
 # Graph configs
 parser.add_argument('--graph-type', default='default', type=str,
-                    metavar='GRAPH', help='type of graph cut: [default] | none | posedeltafull | posedeltapart')
+                    metavar='GRAPH', help='type of graph cut: [default] | defaultposecut | none | posedelta | posedeltaposecut')
 
 
 # Define xrange
@@ -846,8 +846,8 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Get current pose (backwards graph only connects to encoder through poses[0])
             # No gradient feedback within multiple steps of the transition model
             if (k == 0):
-                if args.graph_type == 'posedeltafull':
-                    pose = util.to_var(poses[0].data.clone()) # Use initial pose (NOTE: We want to backprop to the pose model here)
+                if args.graph_type == 'posedeltaposecut':
+                    pose = util.to_var(poses[0].data.clone(), requires_grad=True) # Use initial pose (NOTE: We want to backprop to the pose model here)
                 else:
                     pose = poses[0]
             else:
@@ -899,7 +899,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             # else:
 
             # Get pose deltas
-            if args.graph_type == 'posedeltafull' or args.graph_type == 'posedeltapart':
+            if args.graph_type == 'posedeltaposecut' or args.graph_type == 'posedelta':
                 deltap = data.ComposeRtPair(poses[k+1], data.RtInverse(poses[k])) # Compute delta based on the poses
             else:
                 deltap = deltaposes[k]
@@ -978,12 +978,18 @@ def iterate(data_loader, model, tblogger, num_iters,
                 currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
             elif args.graph_type =='defaultposecut':
                 delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
-                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
+                pose0  = util.to_var(poses[k].data.clone(), requires_grad=False) # No gradients pass back to pose @ t
+                nextpose_trans = se3nn.ComposeRtPair()(delta, pose0)
                 currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
             elif args.graph_type == 'none':
-                delta = deltaposes[k] # Don't break the graph anywhere, consistency affects both the poses and the deltas
-                nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
-                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k + 1])
+                nextpose_trans = transposes[k] # Don't cut graph anywhere
+                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
+            elif args.graph_type == 'posedeltaposecut' or args.graph_type == 'posedelta':
+                nextpose_trans = transposes[k] # Don't cut graph anywhere
+                pose1 =  util.to_var(poses[k+1].data.clone(), requires_grad=False) # No gradients pass back to pose @ t+1
+                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
+            else:
+                assert False, "Unknown graph type input: {}".format(args.graph_type)
 
             # # Add a loss for pose dis-similarity & delta dis-similarity
             # dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale

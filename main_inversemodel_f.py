@@ -186,8 +186,7 @@ def main():
         assert False
         #modelfn = lambda **v: transnets.SimpleTransitionModel(wide=True, **v)
     elif args.model_type == 'simple':
-        assert False
-        #modelfn = lambda **v: transnets.SimpleTransitionModel(wide=False, **v)
+        modelfn = SimpleInverseModel
     elif args.model_type == 'deep':
         assert False
         #modelfn = transnets.DeepTransitionModel
@@ -581,6 +580,43 @@ class InverseModel(nn.Module):
         pe   = torch.cat([p1_e, p2_e], 1) # Concatenate features
         u    = self.ctrldecoder(pe)
         return u # Predict control
+
+####################################
+### Inverse model (predicts controls given pair of poses)
+# Takes in [pose_i, pose_t] and generates ctrl between i & t
+class SimpleInverseModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, nonlinearity='prelu', init_ctrl_zero=False, use_bn=False):
+        super(SimpleInverseModel, self).__init__()
+        self.se3_dim = 12
+        self.num_se3 = num_se3
+
+        # Type of linear layer
+        linlayer = lambda in_dim, out_dim: ctrlnets.BasicLinear(in_dim, out_dim,
+                                                                use_bn=use_bn, nonlinearity=nonlinearity)
+
+        # Simple linear network (concat the two, run 2 layers with 1 nonlinearity)
+        pdim = [128, 64, 32, num_ctrl]
+        self.ctrldecoder = nn.Sequential(
+            linlayer(2 * self.num_se3 * self.se3_dim, pdim[0]),
+            linlayer(pdim[0], pdim[1]),
+            linlayer(pdim[1], pdim[2]),
+            nn.Linear(pdim[2], pdim[3]),
+        )
+
+        ## Initialization
+        if init_ctrl_zero:
+            print("Initializing ctrl prediction layer of the inverse model to predict zero")
+            layer = self.ctrldecoder[-1]
+            layer.weight.data.uniform_(-0.0001, 0.0001)  # Initialize weights to near identity
+            layer.bias.data.uniform_(-0.001, 0.001)  # Initialize biases to near identity
+
+    def forward(self, x):
+        # Run the forward pass
+        p1, p2 = x  # pose @ t, t+1
+        inp = torch.cat([p1.view(-1, self.num_se3 * self.se3_dim),
+                         p2.view(-1, self.num_se3 * self.se3_dim)], 1)
+        u = self.ctrldecoder(inp)
+        return u  # Predict control
 
 ################ RUN MAIN
 if __name__ == '__main__':

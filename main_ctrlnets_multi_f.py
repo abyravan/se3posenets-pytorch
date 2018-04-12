@@ -81,7 +81,7 @@ parser.add_argument('--seg-wt', default=0.0, type=float,
 
 # Transition model type
 parser.add_argument('--trans-type', default='default', type=str,
-                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide')
+                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | locallinear')
 
 # Define xrange
 try:
@@ -786,6 +786,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         poses, initmask = [], None
         masks, pivots = [], []
         maskcenters, posecenters = [], []
+        se3poses = []
         for k in xrange(pts.size(1)):
             if ((args.delta_pivot == '') or (args.delta_pivot == 'pred')) and args.pose_center == 'pred':
                 # Predict the pose and mask at time t = 0
@@ -805,6 +806,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                     else:
                         p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])
                 poses.append(p)
+                if args.trans_type == 'locallinear':
+                    se3poses.append(model.posemaskmodel.se3output.clone()) # SE3 poses (TODO: only works for not GT stuff, no pivots)
             else:
                 # Predict the poses and masks for all timesteps
                 if args.use_gt_masks:
@@ -843,8 +846,11 @@ def iterate(data_loader, model, tblogger, num_iters,
                 pose = util.to_var(transposes[k-1].data.clone(), requires_grad=False) # Use previous predicted pose (NOTE: This is a copy with the graph cut)
 
             # Predict next pose based on curr pose, control
-            delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k],
-                                                   pivots[k] if (len(pivots) > 0) else None)
+            if args.trans_type == 'locallinear':
+                delta, trans = model.transitionmodel.forward([se3poses[k], pose, ctrls[:,k]]) # TODO: Only works for 1-step
+            else:
+                delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k],
+                                                       pivots[k] if (len(pivots) > 0) else None)
             deltaposes.append(delta)
             transposes.append(trans)
 

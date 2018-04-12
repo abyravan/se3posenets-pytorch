@@ -1,0 +1,71 @@
+---
+# Dataset options
+data:         [/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions_f,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_wfixjts_5hrs_Feb10_17/postprocessmotionshalf_f,/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint0/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint1/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint2/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint3/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint4/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint5/postprocessmotions_f, /home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/singlejtdata/data2k/joint6/postprocessmotions_f]
+batch-size:   16
+num-workers:  8
+train-per:    0.6
+val-per:      0.15
+img-scale:    1e-4
+step-len:     2
+seq-len:      1
+ctrl-type:    actdiffvel
+da-threshold: 0.01
+da-winsize:   5
+
+# Model options
+no-batch-norm:      False
+pre-conv:           False
+nonlin:             prelu
+se3-type:           se3aa
+pred-pivot:         False
+num-se3:            8
+init-transse3-iden: True
+init-posese3-iden:  True
+#decomp-model:       False
+local-delta-se3:    False
+use-ntfm-delta:     False
+wide-model:         True
+use-gt-poses:		  False
+use-gt-masks:		  False
+use-jt-angles:		  False
+use-jt-angles-trans: False
+trans-type: locallinear
+
+# Mask options
+use-wt-sharpening: True
+sharpen-start-iter: 0
+sharpen-rate: 1.0
+use-sigmoid-mask:  False
+
+# Loss options
+loss-type:        normmsesqrt
+motion-norm-loss: True
+pt-wt:            1.0
+consis-wt:        10.0
+pose-dissim-wt:   0.0
+delta-dissim-wt:  0.0
+loss-scale:       10000.0
+backprop-only-first-delta: False
+
+# Training options
+no-cuda:        False
+use-pin-memory: False
+epochs:         20
+start-epoch:    0
+train-ipe:      5000
+val-ipe:        2000
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-4
+momentum:     0
+weight-decay: 1e-4
+lr-decay:     0.1
+decay-epochs: 15
+
+# Display/Save options
+disp-freq: 50
+save-dir:  trained_nets/locallinear/simdata/se3pose/def_rmsprop
+disp-err-per-mask: False

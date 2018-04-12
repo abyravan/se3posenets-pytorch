@@ -704,12 +704,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         model.eval()
 
     # Create a closure to get the outputs of the delta-se3 prediction layers
-    predictions = {}
-    def get_output(name):
-        def hook(self, input, result):
-            predictions[name] = result
-        return hook
-    model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
+    #predictions = {}
+    #def get_output(name):
+    #    def hook(self, input, result):
+    #        predictions[name] = result
+    #    return hook
+    #model.transitionmodel.deltase3decoder.register_forward_hook(get_output('deltase3'))
 
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
@@ -1181,10 +1181,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.image_summary(tag, images, iterct)
 
                 ## Print the predicted delta-SE3s
-                deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                if len(pivots) > 0:
-                    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
-                print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+                #deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
+                #if len(pivots) > 0:
+                #    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
+                #print('\tPredicted delta-SE3s @ t=2:', deltase3s)
 
                 ## Details on the centers
                 if len(posecenters) > 0:

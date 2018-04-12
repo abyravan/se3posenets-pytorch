@@ -45,8 +45,8 @@ def variable_hook(grad, txt):
 
 ### Initialize the SE3 prediction layer to identity
 def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
-    layer.weight.data.uniform_(-0.001, 0.001)  # Initialize weights to near identity
-    layer.bias.data.uniform_(-0.01, 0.01)  # Initialize biases to near identity
+    layer.weight.data.uniform_(-0.0001, 0.0001)  # Initialize weights to near identity
+    layer.bias.data.uniform_(-0.0001, 0.0001)  # Initialize biases to near identity
     # Special initialization for specific SE3 types
     if se3_type == 'affine':
         bs = layer.bias.data.view(num_se3, 3, 4)
@@ -1087,7 +1087,7 @@ class LocalLinearTransitionModel(nn.Module):
                                          use_pivot=(delta_pivot == 'pred'))  # Only if we are predicting directly
         self.num_se3 = num_se3
         self.nstate = self.num_se3 * self.se3_dim
-        self.nctrl  = self.num_ctrl
+        self.nctrl  = num_ctrl
         self.odim   = 4*self.nstate + self.nctrl
 
         # Predict matrix A, B and c (rank 1 estimates: nstate x nstate matrix)
@@ -1105,7 +1105,7 @@ class LocalLinearTransitionModel(nn.Module):
         # Initialize the SE3 decoder to predict identity SE3
         if init_se3_iden:
             print("Initializing SE3 prediction layer of the transition model to predict identity transform")
-            init_se3layer_identity(self.deltase3decoder, num_se3, se3_type)  # Init to identity
+            init_se3layer_identity(self.transnet[-1], num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
         self.se3_type = se3_type
@@ -1129,7 +1129,7 @@ class LocalLinearTransitionModel(nn.Module):
 
         # Init identity mat
         if self.I is None:
-            self.I = util.to_var(torch.eye(self.nstate).view(1,self.nstate,self.nstate).type_as(se3), requires_grad=False)
+            self.I = util.to_var(torch.eye(self.nstate).view(1,self.nstate,self.nstate).type_as(se3.data), requires_grad=False)
 
         # TODO: We can have multiplicative interactions instead of additive for the controls
         # Get matrix A (nstate x nstate)
@@ -1139,7 +1139,7 @@ class LocalLinearTransitionModel(nn.Module):
 
         # Get matrix B (nstate x nctrl)
         B1 = mat.view(-1,self.odim,1).narrow(1,2*self.nstate,self.nstate) # B x S x 1
-        B2 = mat.view(-1,1,self.odim).narrow(1,3*self.nstate,self.nctrl)  # B x 1 x C
+        B2 = mat.view(-1,1,self.odim).narrow(2,3*self.nstate,self.nctrl)  # B x 1 x C
         B  = torch.bmm(B1, B2) # a^T*b
 
         # Get vector C (nstate)
@@ -1155,7 +1155,7 @@ class LocalLinearTransitionModel(nn.Module):
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
 
         # Predicted delta is already in the global frame of reference, use it directly (from global to global)
-        z = self.posedecoder(x, p)  # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
+        z = self.posedecoder(x, rt)  # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
         y = x  # D = SE3_2 * SE3_1^-1 (global to global)
 
         # Return

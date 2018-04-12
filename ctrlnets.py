@@ -1425,7 +1425,7 @@ class MultiStepSE3PoseModel(nn.Module):
         elif trans_type == 'locallinear':
             print('Using local linear transition model')
             import transnets
-            transfn = transnets.LocalLinearTransitionModel
+            transfn = LocalLinearTransitionModel
         else:
             assert False, "Unknown transition model type input: {}".format(trans_type)
         self.transitionmodel = transfn(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,

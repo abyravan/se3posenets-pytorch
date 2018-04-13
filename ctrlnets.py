@@ -1383,7 +1383,8 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
-                 full_res=False, noise_stop_iter=1e6, trans_type='default'):
+                 full_res=False, noise_stop_iter=1e6, trans_type='default',
+                 posemask_type='default'):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -1403,15 +1404,23 @@ class MultiStepSE3PoseModel(nn.Module):
                                          use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                          full_res=full_res, noise_stop_iter=noise_stop_iter)
         else:
-            print('Using single network for pose & mask prediction')
-            self.posemaskmodel = PoseMaskEncoder(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
-                                                 use_kinchain=use_kinchain, input_channels=input_channels,
-                                                 init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
-                                                 nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
-                                                 sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
-                                                 use_sigmoid_mask=use_sigmoid_mask, wide=wide,
-                                                 use_jt_angles=use_jt_angles, num_state=num_state,
-                                                 full_res=full_res, noise_stop_iter=noise_stop_iter)
+            if trans_type == 'default':
+                print('Using default network for pose & mask prediction')
+                posemaskfn = PoseMaskEncoder
+            elif posemask_type == 'unet':
+                import unet
+                print('Using U-Net for pose & mask prediction')
+                posemaskfn = unet.UNetPoseMaskEncoder
+            else:
+                assert False, "Unknown pose mask model type input: {}".format(posemask_type)
+            self.posemaskmodel = posemaskfn(num_se3=num_se3, se3_type=se3_type, use_pivot=use_pivot,
+                                            use_kinchain=use_kinchain, input_channels=input_channels,
+                                            init_se3_iden=init_posese3_iden, use_bn=use_bn, pre_conv=pre_conv,
+                                            nonlinearity=nonlinearity, use_wt_sharpening=use_wt_sharpening,
+                                            sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
+                                            use_sigmoid_mask=use_sigmoid_mask, wide=wide,
+                                            use_jt_angles=use_jt_angles, num_state=num_state,
+                                            full_res=full_res, noise_stop_iter=noise_stop_iter)
 
         # Initialize the transition model
         if trans_type == 'default':

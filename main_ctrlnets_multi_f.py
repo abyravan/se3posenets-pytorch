@@ -83,6 +83,11 @@ parser.add_argument('--seg-wt', default=0.0, type=float,
 parser.add_argument('--trans-type', default='default', type=str,
                     metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | locallinear')
 
+# Pose-Mask model type
+parser.add_argument('--posemask-type', default='default', type=str,
+                    metavar='POSEMASK', help='type of pose-mask model: [default] | unet')
+
+
 # Define xrange
 try:
     a = xrange(1)
@@ -441,7 +446,7 @@ def main():
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
                     full_res=args.full_res, noise_stop_iter=args.noise_stop_iter,
-                    trans_type=args.trans_type) # noise_stop_iter not available for SE2 models
+                    trans_type=args.trans_type, posemask_type=args.posemask_type) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

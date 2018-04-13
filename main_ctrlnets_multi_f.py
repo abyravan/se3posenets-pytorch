@@ -812,7 +812,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     else:
                         p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])
                 poses.append(p)
-                if args.trans_type == 'locallinear':
+                if args.trans_type == 'locallinear' or args.trans_type == 'locallineardelta':
                     se3poses.append(model.posemaskmodel.se3output.clone()) # SE3 poses (TODO: only works for not GT stuff, no pivots)
             else:
                 # Predict the poses and masks for all timesteps
@@ -852,7 +852,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 pose = util.to_var(transposes[k-1].data.clone(), requires_grad=False) # Use previous predicted pose (NOTE: This is a copy with the graph cut)
 
             # Predict next pose based on curr pose, control
-            if args.trans_type == 'locallinear':
+            if args.trans_type == 'locallinear' or args.trans_type == 'locallineardelta':
                 delta, trans = model.transitionmodel.forward([se3poses[k], pose, ctrls[:,k]]) # TODO: Only works for 1-step
             else:
                 delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k],

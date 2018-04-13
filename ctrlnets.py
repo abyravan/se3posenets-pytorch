@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from  torch.autograd import Variable
 import se3layers as se3nn
 import util
+import data
 
 ################################################################################
 '''
@@ -1108,19 +1109,23 @@ class LocalLinearTransitionModel(nn.Module):
             init_se3layer_identity(self.transnet[-1], num_se3, se3_type)  # Init to identity
 
         # Create pose decoder (convert to r/t)
-        self.se3_type = se3_type
-        self.delta_pivot = delta_pivot
-        self.inp_pivot = (self.delta_pivot != '') and (
-        self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
-        self.deltaposedecoder = nn.Sequential()
-        self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
-        if (self.delta_pivot != ''):
-            self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
+        #self.se3_type = se3_type
+        #self.delta_pivot = delta_pivot
+        #self.inp_pivot = (self.delta_pivot != '') and (
+        #self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
+        #self.deltaposedecoder = nn.Sequential()
+        #self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        #if (self.delta_pivot != ''):
+        #    self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
+
+        # Create pose decoder (convert to r/t)
+        self.posedecoder = se3nn.SE3ToRt(se3_type) # Convert to Rt
 
         # Compose deltas with prev pose to get next pose
         # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
-        # So, the full transform is: p_t2 = p_t1 * p_t2_to_t1 (or: p_t2 (t2 to cam) = p_t1 (t1 to cam) * p_t2_to_t1 (t2 to t1))
-        self.posedecoder = se3nn.ComposeRtPair()
+        # delta = pose2 * pose1^-1
+        # pose2 = delta * pose1
+        #self.deltaposedecoder = se3nn.ComposeRtPair()
 
     def forward(self, x):
         # Run the forward pass
@@ -1148,18 +1153,19 @@ class LocalLinearTransitionModel(nn.Module):
         # Compute the next state
         se3 = se3.view(-1,self.nstate,1) # B x S x 1
         u   = u.view(-1,self.nctrl,1)    # B x C x 1
-        out = torch.bmm(A, se3) + torch.bmm(B, u) + C # B x S x 1
+        outse3 = torch.bmm(A, se3) + torch.bmm(B, u) + C # B x S x 1
 
-        # Convert to R|t
-        x = out.view(-1, self.num_se3, self.se3_dim)
-        x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
+        # Compute R|t at next step
+        outse3 = outse3.view(-1, self.num_se3, self.se3_dim)
+        outrt  = self.posedecoder(outse3) # Compute R|t
 
-        # Predicted delta is already in the global frame of reference, use it directly (from global to global)
-        z = self.posedecoder(x, rt)  # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)
-        y = x  # D = SE3_2 * SE3_1^-1 (global to global)
+        # Compute delta R|t
+        # delta = pose2 * pose1^-1
+        # pose2 = delta * pose1
+        delta = data.ComposeRtPair(outrt, data.RtInverse(rt))
 
         # Return
-        return [y, z]  # Return both the deltas (in global frame) and the composed next pose
+        return [delta, outrt]  # Return both the deltas (in global frame) and the composed next pose
 
 ####################################
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict

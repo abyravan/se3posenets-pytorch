@@ -81,7 +81,8 @@ parser.add_argument('--seg-wt', default=0.0, type=float,
 
 # Transition model type
 parser.add_argument('--trans-type', default='default', type=str,
-                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | locallinear')
+                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | '
+                                          'locallinear | locallineardelta')
 
 # Pose-Mask model type
 parser.add_argument('--posemask-type', default='default', type=str,

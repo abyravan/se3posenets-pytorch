@@ -1168,6 +1168,91 @@ class LocalLinearTransitionModel(nn.Module):
         return [delta, outrt]  # Return both the deltas (in global frame) and the composed next pose
 
 ####################################
+### Transition model (predicts change in poses based on the applied control)
+# Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
+class LocalLinearDeltaTransitionModel(nn.Module):
+    def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
+                 use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
+                 local_delta_se3=False, use_jt_angles=False, num_state=7):
+        super(LocalLinearDeltaTransitionModel, self).__init__()
+        self.se3_dim = get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred'))  # Only if we are predicting directly
+        self.num_se3 = num_se3
+        self.nstate = self.num_se3 * self.se3_dim
+        self.nctrl = num_ctrl
+        self.odim = 4 * self.nstate + self.nctrl
+
+        # Predict matrix A, B and c (rank 1 estimates: nstate x nstate matrix)
+        self.transnet = nn.Sequential(
+            nn.Linear(self.nstate, 512),
+            get_nonlinearity(nonlinearity),
+            nn.Linear(512, 512),
+            get_nonlinearity(nonlinearity),
+            nn.Linear(512, 512),
+            get_nonlinearity(nonlinearity),
+            nn.Linear(512, self.odim)  # 2*nstate for A, (nstate + nctrl) for B, nstate for c
+        )
+
+        # Initialize the SE3 decoder to predict identity SE3
+        if init_se3_iden:
+            print("Initializing SE3 prediction layer of the transition model to predict identity transform")
+            init_se3layer_identity(self.transnet[-1], num_se3, se3_type)  # Init to identity
+
+        # Create pose decoder (convert to r/t)
+        # self.se3_type = se3_type
+        # self.delta_pivot = delta_pivot
+        # self.inp_pivot = (self.delta_pivot != '') and (
+        # self.delta_pivot != 'pred')  # Only for these 2 cases, no pivot is passed in as input
+        # self.deltaposedecoder = nn.Sequential()
+        # self.deltaposedecoder.add_module('se3rt', se3nn.SE3ToRt(se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        # if (self.delta_pivot != ''):
+        #    self.deltaposedecoder.add_module('pivotrt', se3nn.CollapseRtPivots())  # Collapse pivots
+
+        # Create delta pose decoder (convert to r/t)
+        self.deltaposedecoder = se3nn.SE3ToRt(se3_type)  # Convert to Rt
+
+        # Compose deltas with prev pose to get next pose
+        # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
+        # delta = pose2 * pose1^-1
+        # pose2 = delta * pose1
+        # self.deltaposedecoder = se3nn.ComposeRtPair()
+
+    def forward(self, x):
+        # Run the forward pass
+        se3, rt, u = x  # SE3 pose, Rt pose, Control
+        mat = self.transnet(se3.view(-1, self.nstate))
+
+        # TODO: We can have multiplicative interactions instead of additive for the controls
+        # Get matrix A (nstate x nstate)
+        A1 = mat.view(-1, self.odim, 1).narrow(1, 0, self.nstate)  # B x S x 1
+        A2 = mat.view(-1, 1, self.odim).narrow(2, self.nstate, self.nstate)  # B x 1 x S
+        A = torch.bmm(A1, A2)  # I + a^T*b
+
+        # Get matrix B (nstate x nctrl)
+        B1 = mat.view(-1, self.odim, 1).narrow(1, 2 * self.nstate, self.nstate)  # B x S x 1
+        B2 = mat.view(-1, 1, self.odim).narrow(2, 3 * self.nstate, self.nctrl)  # B x 1 x C
+        B = torch.bmm(B1, B2)  # a^T*b
+
+        # Get vector C (nstate)
+        C = mat.view(-1, self.odim, 1).narrow(1, 3 * self.nstate + self.nctrl, self.nstate)  # B x S
+
+        # Compute the next state
+        se3 = se3.view(-1, self.nstate, 1)  # B x S x 1
+        u = u.view(-1, self.nctrl, 1)  # B x C x 1
+        outdeltase3 = torch.bmm(A, se3) + torch.bmm(B, u) + C  # B x S x 1
+
+        # Compute R|t at next step
+        outdeltase3 = outdeltase3.view(-1, self.num_se3, self.se3_dim)
+        outdeltart = self.deltaposedecoder(outdeltase3)  # Compute R|t
+
+        # Compute next pose R|t
+        # pose2 = delta * pose1
+        outrt = data.ComposeRtPair(outdeltart, rt)
+
+        # Return
+        return [outdeltart, outrt]  # Return both the deltas (in global frame) and the composed next pose
+
+
+####################################
 ### SE3-Pose-Model (single-step model that takes [depth_t, depth_t+1, ctrl-t] to predict
 ### [pose_t, mask_t], [pose_t+1, mask_t+1], [delta-pose, poset_t+1]
 class SE3PoseModel(nn.Module):
@@ -1439,8 +1524,10 @@ class MultiStepSE3PoseModel(nn.Module):
             transfn = lambda **v: transnets.SimpleTransitionModel(wide=True, **v)
         elif trans_type == 'locallinear':
             print('Using local linear transition model')
-            import transnets
             transfn = LocalLinearTransitionModel
+        elif trans_type == 'locallineardelta':
+            print('Using local linear delta transition model')
+            transfn = LocalLinearDeltaTransitionModel
         else:
             assert False, "Unknown transition model type input: {}".format(trans_type)
         self.transitionmodel = transfn(num_ctrl=num_ctrl, num_se3=num_se3, delta_pivot=delta_pivot,

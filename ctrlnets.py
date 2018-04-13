@@ -1404,7 +1404,7 @@ class MultiStepSE3PoseModel(nn.Module):
                                          use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                          full_res=full_res, noise_stop_iter=noise_stop_iter)
         else:
-            if trans_type == 'default':
+            if posemask_type == 'default':
                 print('Using default network for pose & mask prediction')
                 posemaskfn = PoseMaskEncoder
             elif posemask_type == 'unet':

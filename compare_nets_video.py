@@ -112,9 +112,11 @@ def main():
     ########
     ## TODO: Load SE3-Pose-Net
     if cargs.real_data:
-        posemodelfile = "icra18results/networks/realdata/oursbestfixed/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        #posemodelfile = "icra18results/networks/realdata/oursbestfixed/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        posemodelfile = "icra18results/finalsubmission/networks/realdata/se3pose/def_rmsprop/model_flow_best.pth.tar"
     else:
-        posemodelfile = "icra18results/networks/alldata/oursbestfixed/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        #posemodelfile = "icra18results/networks/alldata/oursbestfixed/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        posemodelfile = "icra18results/finalsubmission/networks/simdata/se3pose/def_rmsprop/model_flow_best.pth.tar"
     print("=> loading SE3-Pose-Net")
     checkpoint_pm = torch.load(posemodelfile)
     print("=> loaded checkpoint (epoch: {}, num train iter: {})"
@@ -260,9 +262,11 @@ def main():
     ########
     ## TODO: Load SE3-Net
     if cargs.real_data:
-        se3modelfile = "icra18results/networks/realdata/se3/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        #se3modelfile = "icra18results/networks/realdata/se3/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        se3modelfile = "icra18results/finalsubmission/networks/realdata/se3/def_rate0.25_1/model_best.pth.tar"
     else:
-        se3modelfile = "icra18results/networks/alldata/se3/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        #se3modelfile = "icra18results/networks/alldata/se3/8se3_wtsharpenr1s0_1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        se3modelfile = "icra18results/finalsubmission/networks/simdata/se3/def_1/model_best.pth.tar"
     print("=> loading SE3-Net")
     checkpoint_sm = torch.load(se3modelfile)
     print("=> loaded checkpoint (epoch: {}, num train iter: {})"
@@ -284,11 +288,13 @@ def main():
     models['se3'].eval()  # Set to eval mode
 
     ########
-    ## TODO: Load SE3-Pose-Net
+    ## TODO: Load Flow-Net
     if cargs.real_data:
-        flowmodelfile = "icra18results/networks/realdata/flow/1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        #flowmodelfile = "icra18results/networks/realdata/flow/1seq_normmsesqrt_motionnormloss_rlcheck/model_best.pth.tar"
+        flowmodelfile = "icra18results/finalsubmission/networks/realdata/flow/def/model_best.pth.tar"
     else:
-        flowmodelfile = "icra18results/networks/alldata/flow/1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        #flowmodelfile = "icra18results/networks/alldata/flow/1seq_normmsesqrt_motionnormloss/model_best.pth.tar"
+        flowmodelfile = "icra18results/finalsubmission/networks/simdata/flow/def/model_best.pth.tar"
     print("=> loading Flow-Network")
     checkpoint_fm = torch.load(flowmodelfile)
     print("=> loaded checkpoint (epoch: {}, num train iter: {})"
@@ -559,24 +565,24 @@ def main():
                 flowerr_avg['flow'][k],
             ))
 
-        # ## Display using pangolin
-        # for j in xrange(len(predpts['se3pose'])):
-        #     if (j % 10 == 0):
-        #         print("Displaying frame: {}/{}".format(j, len(predpts['se3pose'])))
-        #     pangolin.update(pts[0,0].data.cpu().numpy(),
-        #                     #pts[0,j+1].data.cpu().numpy(),
-        #                     tarpts[0,j].data.cpu().numpy(),
-        #                     predpts['se3pose'][j][0].data.cpu().numpy(),
-        #                     predpts['se3posepts'][j][0].data.cpu().numpy(),
-        #                     predpts['se3'][j][0].data.cpu().numpy(),
-        #                     predpts['flow'][j][0].data.cpu().numpy(),
-        #                     #sample['masks'].unsqueeze(0)[0,j+1].float().numpy(),
-        #                     sample['masks'].unsqueeze(0)[0,0].float().numpy(),
-        #                     initmask[0].data.cpu().numpy(),
-        #                     masks_se3posepts[j][0].data.cpu().numpy(),
-        #                     masks_se3[j][0].data.cpu().numpy(),
-        #                     cargs.save_frames)  # Save frame
-        #     time.sleep(0.1)
+        ## Display using pangolin
+        for j in xrange(len(predpts['se3pose'])):
+            if (j % 10 == 0):
+                print("Displaying frame: {}/{}".format(j, len(predpts['se3pose'])))
+            pangolin.update(pts[0,0].data.cpu().numpy(),
+                            #pts[0,j+1].data.cpu().numpy(),
+                            tarpts[0,j].data.cpu().numpy(),
+                            predpts['se3pose'][j][0].data.cpu().numpy(),
+                            predpts['se3posepts'][j][0].data.cpu().numpy(),
+                            predpts['se3'][j][0].data.cpu().numpy(),
+                            predpts['flow'][j][0].data.cpu().numpy(),
+                            #sample['masks'].unsqueeze(0)[0,j+1].float().numpy(),
+                            sample['masks'].unsqueeze(0)[0,0].float().numpy(),
+                            initmask[0].data.cpu().numpy(),
+                            masks_se3posepts[j][0].data.cpu().numpy(),
+                            masks_se3[j][0].data.cpu().numpy(),
+                            cargs.save_frames)  # Save frame
+            time.sleep(0.1)
 
         # Stop saving frames
         if cargs.save_frames:

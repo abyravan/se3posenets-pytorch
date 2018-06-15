@@ -170,3 +170,131 @@ def SE3QuatInverse(a, normalize=True):
 
     # Return
     return torch.cat([tinv, qinv], -1)  # [tx, ty, tz, qx, qy, qz, qw]
+
+########### AXIS-ANGLE REPRESENTATION
+## Axis angle to quaternion
+## From: http://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
+def AxisAngleToQuaternion(aa):
+    # Check dimensions
+    assert (aa.size(-1) == 3)
+    aav = aa.contiguous()
+
+    # Get axis and angle
+    s = aav.norm(p=2, dim=-1, keepdim=True) # Angle
+    n = aav / s.clamp(min=1e-12).expand_as(aav) # Axis
+
+    # Compute quaternion
+    ss, cs = torch.sin(s/2), torch.cos(s/2)
+    xyz = n * ss.expand_as(n) # scale axis by sin(th/2)
+
+    # Return
+    return torch.cat([xyz, cs], -1)
+
+## Axis angle product (a1 * a2)
+def AxisAngleProduct(a1, a2):
+    # Check dimensions
+    assert (a1.size(-1) == 3)
+    assert (a1.is_same_size(a2))
+    a1v, a2v = a1.contiguous(), a2.contiguous()
+
+    # Get axis and angle values
+    s1, s2 = a1v.norm(p=2, dim=-1, keepdim=True), \
+             a2v.norm(p=2, dim=-1, keepdim=True) # Angle 1 & 2
+    n1, n2 = a1v / s1.clamp(min=1e-12).expand_as(a1v), \
+             a2v / s2.clamp(min=1e-12).expand_as(a2v) # Axis 1 & 2
+
+    # Compute cos/sin
+    cs1, cs2, ss1, ss2 = torch.cos(s1/2), torch.cos(s2/2), \
+                         torch.sin(s1/2), torch.sin(s2/2)
+
+    # Compute the composition
+    # From: https://math.stackexchange.com/questions/382760/composition-of-two-axis-angle-rotations
+    cos_s   = (cs1 * cs2) - (ss1 * ss2 * (n1 * n2).sum(dim=-1, keepdim=True))
+    sin_s_n = (ss1 * cs2).expand_as(n1) * n1 + \
+              (cs1 * ss2).expand_as(n2) * n2 + \
+              (ss1 * ss2).expand_as(n1) * n1.cross(n2, dim=-1) # n1 x n2
+
+    # Compute the resulting axis and angle
+    sin_s   = sin_s_n.norm(p=2, dim=-1, keepdim=True) # sin(\gamma/2)
+    n       = sin_s_n / sin_s.clamp(min=1e-12).expand_as(sin_s_n) # Get the axis
+    s       = 2 * torch.atan2(sin_s, cos_s) # atan2 gives \gamma/2
+
+    return s.expand_as(n)*n # return angle * axis
+
+## Rotate a 3D point by an axis-angle transform
+## From: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula
+def AxisAnglePointRotation(aa, pt):
+    # Check dimensions
+    assert (aa.size(-1) == 3 and pt.size(-1) == 3)
+    assert (aa.is_same_size(pt))
+    aav, ptv = aa.contiguous(), pt.contiguous()
+
+    # Compute the axis and the angle
+    s = aav.norm(p=2, dim=-1, keepdim=True)  # Angle
+    n = aav / s.clamp(min=1e-12).expand_as(aav)  # Axis
+
+    # Compute the transformed point according to Rodriguez's formula
+    ss, cs = torch.sin(s), torch.cos(s)
+    ptrot = ptv * cs.expand_as(ptv) + \
+            n.cross(ptv, dim=-1) * ss.expand_as(ptv) + \
+            n * ((n * ptv).sum(-1, keepdim=True) * (1. - cs)).expand_as(n) # Rodriguez's formula
+
+    return ptrot
+
+## Axis Angle inverse (simplest thing ever)
+def AxisAngleInverse(aa):
+    # Check dimensions
+    assert (aa.size(-1) == 3)
+    return -aa # Just put a minus sign!
+
+## Compose two SE3-AA transforms: [tx, ty, tz, aax, aay, aaz]
+def ComposeSE3AxisAnglePair(a, b):
+    # Check dimensions
+    assert (a.is_same_size(b))
+    assert (a.size(-1) == 6)
+    av, bv = a.contiguous(), b.contiguous()
+
+    # Init for FWD pass (se3 = [tx, ty, tz, aax, aay, aaz])
+    ta, tb   = av.narrow(-1, 0, 3), bv.narrow(-1, 0, 3)
+    aaa, aab = av.narrow(-1, 3, 3), bv.narrow(-1, 3, 3)
+
+    # Compose axis-angle transforms
+    aa = AxisAngleProduct(aaa, aab)
+
+    # Apply axis-angle rotation to the center
+    t = AxisAnglePointRotation(aaa, tb) + ta  # R1 * t2 + t1
+
+    # Return
+    return torch.cat([t, aa], -1)  # [tx, ty, tz, aax, aay, aaz]
+
+## Invert SE3-AA transform: [tx, ty, tz, aax, aay, aaz]
+def SE3AxisAngleInverse(a):
+    # Check dimensions
+    assert (a.size(-1) == 6)
+    av = a.contiguous()
+
+    # Init for FWD pass (se3 = [tx, ty, tz, aax, aay, aaz])
+    t, aa = av.narrow(-1, 0, 3), av.narrow(-1, 3, 3)
+
+    # Get inverse of axis-angle transform
+    aainv = AxisAngleInverse(aa)
+
+    # Get inverted translation
+    tinv  = AxisAnglePointRotation(aainv, -t)
+
+    # Return
+    return torch.cat([tinv, aainv], -1)  # [tx, ty, tz, aax, aay, aaz]
+
+def SE3AxisAngleToSE3Quat(a):
+    # Check dimensions
+    assert (a.size(-1) == 6)
+    av = a.contiguous()
+
+    # Init for FWD pass (se3 = [tx, ty, tz, aax, aay, aaz])
+    t, aa = av.narrow(-1, 0, 3), av.narrow(-1, 3, 3)
+
+    # Convert aa to quaternion
+    q = AxisAngleToQuaternion(aa)
+
+    # Return
+    return torch.cat([t, q], -1)

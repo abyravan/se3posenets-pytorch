@@ -171,6 +171,17 @@ def SE3QuatInverse(a, normalize=True):
     # Return
     return torch.cat([tinv, qinv], -1)  # [tx, ty, tz, qx, qy, qz, qw]
 
+############## TODO: This doesn't work very well :( Can't make it match quaternion results
+'''
+import torch; import se3
+a1, a2 = torch.rand(2,3,3)-0.5, torch.rand(2,3,3)-0.5
+a1[:,:,0:2] = 0; a2[:,:,1:] = 0
+a, qp = se3.AxisAngleProduct(a1, a2)
+q1, q2 = se3.AxisAngleToQuaternion(a1), se3.AxisAngleToQuaternion(a2)
+q = se3.QuaternionProduct(q1, q2)
+print(q-qp)
+print(qp - se3.AxisAngleToQuaternion(a))
+'''
 ########### AXIS-ANGLE REPRESENTATION
 ## Axis angle to quaternion
 ## From: http://www.euclideanspace.com/maths/geometry/rotations/conversions/angleToQuaternion/index.htm
@@ -210,16 +221,16 @@ def AxisAngleProduct(a1, a2):
     # Compute the composition
     # From: https://math.stackexchange.com/questions/382760/composition-of-two-axis-angle-rotations
     cos_s   = (cs1 * cs2) - (ss1 * ss2 * (n1 * n2).sum(dim=-1, keepdim=True))
-    sin_s_n = (ss1 * cs2).expand_as(n1) * n1 + \
-              (cs1 * ss2).expand_as(n2) * n2 + \
-              (ss1 * ss2).expand_as(n1) * n1.cross(n2, dim=-1) # n1 x n2
+    sin_s_n = ((ss1 * cs2).expand_as(n1) * n1) + \
+              ((cs1 * ss2).expand_as(n2) * n2) + \
+              ((ss1 * ss2).expand_as(n1) * n1.cross(n2, dim=-1)) # n1 x n2
 
     # Compute the resulting axis and angle
     sin_s   = sin_s_n.norm(p=2, dim=-1, keepdim=True) # sin(\gamma/2)
     n       = sin_s_n / sin_s.clamp(min=1e-12).expand_as(sin_s_n) # Get the axis
     s       = 2 * torch.atan2(sin_s, cos_s) # atan2 gives \gamma/2
 
-    return s.expand_as(n)*n # return angle * axis
+    return s.expand_as(n)*n #, torch.cat([sin_s_n, cos_s], dim=-1) # return angle * axis
 
 ## Rotate a 3D point by an axis-angle transform
 ## From: https://en.wikipedia.org/wiki/Rodrigues%27_rotation_formula

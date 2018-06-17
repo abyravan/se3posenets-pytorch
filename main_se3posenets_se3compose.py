@@ -635,9 +635,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.motion_norm_loss:
             motion = targets  # Use either delta-flows or full-flows
             currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                 loss_type=args.loss_type, wts=fwdvis[:,k])
+                                                                 loss_type=args.loss_type, wts=fwdvis[:,0])
         else:
-            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:,k])
+            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:,0])
 
         ### Consistency loss (between t & t+1)
         # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1

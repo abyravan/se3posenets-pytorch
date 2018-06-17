@@ -265,12 +265,12 @@ def main():
         goal_sample  = test_dataset[goal_id]
 
         # Get the joint angles
-        start_angles = start_sample['actconfigs'][0]
-        goal_angles  = goal_sample['actconfigs'][0]
-        if (start_angles - goal_angles).abs().mean() < (pargs.horizon * 0.02):
+        start_angles = start_sample['actctrlconfigs'][0]
+        goal_angles  = goal_sample['actctrlconfigs'][0]
+        if (start_angles - goal_angles).abs().mean() < (pargs.horizon * 0.01):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
-            (start_angles - goal_angles).abs().mean(), pargs.horizon * 0.02))
+            (start_angles - goal_angles).abs().mean(), pargs.horizon * 0.01))
         start_angles_all[k] = start_angles
         goal_angles_all[k]  = goal_angles
         k += 1 # Increment counter

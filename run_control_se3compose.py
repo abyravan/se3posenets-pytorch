@@ -675,7 +675,7 @@ def optimize_ctrl(model, poses, ctrl, angles, goal_poses):
         I = torch.eye(nperturb).type_as(ctrl.data)
 
         # Do perturbation
-        poses_p = util.to_var(poses.data.repeat(nperturb + 1, 1, 1, 1))  # Replicate poses
+        poses_p = util.to_var(poses.data.repeat(nperturb + 1, 1, 1))  # Replicate poses
         ctrl_p = util.to_var(ctrl.data.repeat(nperturb + 1, 1))  # Replicate controls
         ctrl_p.data[1:, :] += I * eps  # Perturb the controls
 

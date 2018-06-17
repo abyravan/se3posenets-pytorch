@@ -35,62 +35,12 @@ import options
 parser = options.setup_comon_options()
 
 # Loss options
-parser.add_argument('--backprop-only-first-delta', action='store_true', default=False,
-                    help='Backprop gradients only to the first delta. Switches from using delta-flow-loss to'
-                         'full-flow-loss with copied composed deltas if this is set (default: False)')
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
-#parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
-#                    help='Use angles of all joints as inputs to the networks (default: False)')
 
-# Pivot options
-parser.add_argument('--pose-center', default='pred', type=str,
-                    metavar='STR', help='Different options for pose center positions: [pred] | predwmaskmean | predwmaskmeannograd')
-parser.add_argument('--delta-pivot', default='', type=str,
-                    metavar='STR', help='Pivot prediction for the delta-tfm: [] | pred | ptmean | maskmean | '
-                                        'maskmeannograd | posecenter')
-#parser.add_argument('--consis-rt-loss', action='store_true', default=False,
-#                    help='Use RT loss for the consistency measure (default: False)')
-
-# Loss between pose center and mask mean
-#parser.add_argument('--pose-anchor-wt', default=0.0, type=float,
-#                    metavar='WT', help='Weight for the loss anchoring pose center to be close to the mean mask value')
-#parser.add_argument('--pose-anchor-maskbprop', action='store_true', default=False,
-#                    help='Backprop gradient from pose anchor loss to mask mean if set to true (default: False)')
-#parser.add_argument('--pose-anchor-grad-clip', default=0.0, type=float,
-#                    metavar='WT', help='Gradient clipping for the pose anchor gradient (to account for outliers) (default: 0.0)')
-
-# Box data
-#parser.add_argument('--box-data', action='store_true', default=False,
-#                    help='Dataset has box/ball data (default: False)')
-
-# Use normal data
-#parser.add_argument('--normal-wt', default=0.0, type=float,
-#                    metavar='WT', help='Weight for the cosine distance of normal loss (default: 1)')
-#parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
-#                    metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
-#parser.add_argument('--motion-norm-normal-loss', action='store_true', default=False,
-#                    help='normalize the normal loss by number of points that actually move instead of all pts (default: False)')
-#parser.add_argument('--bilateral-depth-smoothing', action='store_true', default=False,
-#                    help='do bilateral depth smoothing before computing normals (default: False)')
-#parser.add_argument('--bilateral-window-width', default=9, type=int,
-#                    metavar='K', help='Size of window for bilateral filtering (default: 9x9)')
-#parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
-#                    metavar='WT', help='Standard deviation in depth for bilateral filtering kernel (default: 0.005)')
-
-# Supervised segmentation loss
-#parser.add_argument('--seg-wt', default=0.0, type=float,
-#                    metavar='WT', help='Weight for a supervised mask segmentation loss (both @ t & t+1)')
-
-# Transition model type
-#parser.add_argument('--trans-type', default='default', type=str,
-#                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | '
-#                                          'locallinear | locallineardelta')
-
-# Pose-Mask model type
-#parser.add_argument('--posemask-type', default='default', type=str,
-#                    metavar='POSEMASK', help='type of pose-mask model: [default] | unet')
-
+# Quat compose
+parser.add_argument('--quat-normalize', action='store_true', default=False,
+                    help='Normalize when composing gradients (default: False)')
 
 # Define xrange
 try:
@@ -235,15 +185,6 @@ def main():
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat', 'se3aar']), 'Unknown SE3 type: ' + args.se3_type
-    args.delta_pivot = '' if (args.delta_pivot == 'None') else args.delta_pivot # Workaround since we can't specify empty string in the yaml
-    assert (args.delta_pivot in ['', 'pred', 'ptmean', 'maskmean', 'maskmeannograd', 'posecenter']),\
-        'Unknown delta pivot type: ' + args.delta_pivot
-    delta_pivot_type = ' Delta pivot type: {}'.format(args.delta_pivot) if (args.delta_pivot != '') else ''
-    #args.se3_dim       = ctrlnets.get_se3_dimension(args.se3_type)
-    #args.delta_se3_dim = ctrlnets.get_se3_dimension(args.se3_type, (args.delta_pivot != '')) # Delta SE3 type
-    if args.se3_type == 'se3aar':
-        assert(args.delta_pivot == '')
-    print('Predicting {} SE3s of type: {}.{}'.format(args.num_se3, args.se3_type, delta_pivot_type))
 
     # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
@@ -385,7 +326,8 @@ def main():
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models
+                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
+                    quat_normalize=args.quat_normalize) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

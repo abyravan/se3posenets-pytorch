@@ -154,7 +154,8 @@ class PoseMaskEncoder(nn.Module):
 # Takes in [pose_t, ctrl_t] and generates delta pose between t & t+1
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, se3_type='se3quat',
-                 nonlinearity='prelu', init_se3_iden=False):
+                 nonlinearity='prelu', init_se3_iden=False,
+                 quat_normalize=False):
         super(TransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=False) # Only if we are predicting directly
         self.num_se3 = num_se3
@@ -199,7 +200,7 @@ class TransitionModel(nn.Module):
         # It predicts the delta transform of the object between time "t1" and "t2": p_t2_to_t1: takes a point in t2 and converts it to t1's frame of reference
 	    # So, the full transform is: p_t2 = p_t1 * p_t2_to_t1 (or: p_t2 (t2 to cam) = p_t1 (t1 to cam) * p_t2_to_t1 (t2 to t1))
         if self.se3_type == 'se3quat':
-            self.posedecoder = se3.ComposeSE3QuatPair
+            self.posedecoder = lambda x, y: se3.ComposeSE3QuatPair(x, y, normalize=quat_normalize)
         else:
             assert False, 'Unknown SE3 type input: {}'.format(self.se3_type)
 
@@ -231,7 +232,8 @@ class SE3PoseComposeModel(nn.Module):
                  use_bn=True, nonlinearity='prelu', num_state=7,
                  init_posese3_iden= False, init_transse3_iden = False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
-                 wide=False, use_jt_angles=False, noise_stop_iter=1e6):
+                 wide=False, use_jt_angles=False, noise_stop_iter=1e6,
+                 quat_normalize=False):
         super(SE3PoseComposeModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -243,7 +245,8 @@ class SE3PoseComposeModel(nn.Module):
 
         # Initialize the transition model
         self.transitionmodel = TransitionModel(num_ctrl=num_ctrl, num_se3=num_se3, se3_type=se3_type,
-                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden)
+                                               nonlinearity=nonlinearity, init_se3_iden=init_transse3_iden,
+                                               quat_normalize=quat_normalize)
 
         # Options
         self.use_jt_angles = use_jt_angles

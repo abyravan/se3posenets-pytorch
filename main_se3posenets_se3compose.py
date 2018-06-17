@@ -304,12 +304,8 @@ def main():
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
-    print('Using multi-step Flow-Model')
     if args.se2_data:
         assert(False)
-        print('Using the smaller multi-step SE2-Pose-Model')
-    else:
-        print('Using multi-step SE3-Pose-Model')
 
     ### Load the model
     num_train_iter = 0
@@ -581,7 +577,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    pt_wt, consis_wt, normal_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
+    pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer

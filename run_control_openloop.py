@@ -257,7 +257,7 @@ def main():
     k = 0
     while (k < nexamples):
         # Get examples
-        start_id = pargs.start_id if (pargs.start_id >= 0) else np.random.randint(len(dataset))
+        start_id = np.random.randint(len(dataset))
         goal_id  = start_id + pargs.horizon * args.step_len
         print('Test dataset size: {}, Start ID: {}, Goal ID: {}, Duration: {}'.format(len(dataset),
                                       start_id, goal_id, pargs.horizon * args.step_len * dt))

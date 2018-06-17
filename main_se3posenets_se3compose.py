@@ -776,7 +776,9 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                 # Render the predicted and GT poses onto the depth
                 depths = []
-                poses, transposes = [pose0, pose1], [transpose1]
+                poses, transposes = [se3nn.SE3ToRt(args.se3_type)(pose0),
+                                     se3nn.SE3ToRt(args.se3_type)(pose1)], \
+                                    [se3nn.SE3ToRt(args.se3_type)(transpose1)]
                 for k in xrange(args.seq_len+1):
                     gtpose    = sample['poses'][id, k]
                     predpose  = poses[k].data[id].cpu().float()

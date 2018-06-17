@@ -635,11 +635,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         assert (mode == 'test' or mode == 'val'), "Mode can be train/test/val. Input: {}"+mode
         model.eval()
 
-    # Point predictor
-    # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
-    # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
-    ptpredlayer = se3nn.NTfm3D
-
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
@@ -692,7 +687,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         deltapose01, transpose1 = model.forward_next_pose(pose0, ctrls[:,0])
 
         # Predict transformed 3D points
-        predpts = ptpredlayer()(pts[:, 0], mask0, deltapose01)
+        deltart01 = se3nn.SE3ToRt(args.se3_type)(deltapose01)
+        predpts = se3nn.NTfm3D()(pts[:, 0], mask0, deltart01)
 
         ####### Compute losses - We use point loss in the FWD dirn and Consistency loss between poses
         ### 3D loss

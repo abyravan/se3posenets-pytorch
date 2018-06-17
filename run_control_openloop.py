@@ -102,6 +102,11 @@ parser.add_argument('--step-len', default=0.1, type=float,
 parser.add_argument('--max-iter', default=100, type=int, help='Max number of open loop iterations')
 parser.add_argument('--ctrl-init', default='zero', type=str, help='Method to initialize control inputs: [zero] | random')
 
+# Dataset to use & num examples to sample
+parser.add_argument('--dataset', default='test', type=str,
+                    help='Dataset to sample examples from. [test] | train | val')
+parser.add_argument('--nexamples', default=5, type=int, help='Number of examples to sample')
+
 def main():
     # Parse args
     global pargs, args, num_train_iter
@@ -211,39 +216,98 @@ def main():
     except AttributeError:
         args.cam_intrinsics = cam_intrinsics # In case it doesn't exist
 
+    ########################
+    ############ Get the data
+    # Get datasets (TODO: Make this path variable)
+    data_path = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/'
+    baxter_data = data.read_recurrent_baxter_dataset(data_path, args.img_suffix,
+                                                     step_len = 1, seq_len = 1,
+                                                     train_per = args.train_per, val_per = args.val_per,
+                                                     valid_filter = None,
+                                                     cam_extrinsics=args.cam_extrinsics,
+                                                     cam_intrinsics=args.cam_intrinsics,
+                                                     ctrl_ids=args.ctrl_ids,
+                                                     state_labels=args.state_labels,
+                                                     add_noise=args.add_noise_data)
+    disk_read_func  = lambda d, i: data.read_baxter_sequence_from_disk(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
+                                                 img_scale = args.img_scale, ctrl_type = args.ctrl_type,
+                                                 num_ctrl=args.num_ctrl,
+                                                 mesh_ids = args.mesh_ids,
+                                                 compute_bwdflows=args.use_gt_masks,
+                                                 dathreshold=args.da_threshold, dawinsize=args.da_winsize,
+                                                 use_only_da=args.use_only_da_for_flows) # Need BWD flows / masks if using GT masks
+    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
+    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
+    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
+    print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
+
+    # Get start & goal samples
+    nexamples = pargs.nexamples
+    if pargs.dataset == 'train':
+        dataset = train_dataset
+    elif pargs.dataset == 'val':
+        dataset = val_dataset
+    elif pargs.dataset == 'test':
+        dataset = test_dataset
+    else:
+        assert(False)
+
+    ###### Get a set of examples
+    start_angles_all, goal_angles_all = torch.zeros(nexamples, args.num_ctrl), torch.zeros(nexamples, args.num_ctrl)
+    k = 0
+    while (k < nexamples):
+        # Get examples
+        start_id = pargs.start_id if (pargs.start_id >= 0) else np.random.randint(len(dataset))
+        goal_id  = start_id + pargs.horizon * args.step_len
+        print('Test dataset size: {}, Start ID: {}, Goal ID: {}, Duration: {}'.format(len(dataset),
+                                      start_id, goal_id, pargs.horizon * args.step_len * dt))
+        start_sample = test_dataset[start_id]
+        goal_sample  = test_dataset[goal_id]
+
+        # Get the joint angles
+        start_angles = start_sample['actconfigs'][0]
+        goal_angles  = goal_sample['actconfigs'][0]
+        if (start_angles - goal_angles).abs().mean() < (pargs.horizon * 0.02):
+            continue
+        print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
+            (start_angles - goal_angles).abs().mean(), pargs.horizon * 0.02))
+        start_angles_all[k] = start_angles
+        goal_angles_all[k]  = goal_angles
+        k += 1 # Increment counter
+
     # #########
     # # SOME TEST CONFIGS:
     # # TODO: Get more challenging test configs by moving arm physically
-    start_angles_all = torch.FloatTensor(
-        [
-         [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
-         [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
-         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-         [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
-         [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
-         [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
-         [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
-         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-         [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
-         [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
-         [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
-        ]
-        )
-    goal_angles_all  = torch.FloatTensor(
-        [
-         [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
-         [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
-         [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
-         [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
-         [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
-         [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
-         [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
-         [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
-         [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
-         [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
-         [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
-        ]
-        )
+    # start_angles_all = torch.FloatTensor(
+    #     [
+    #      [6.5207e-01, -2.6608e-01,  8.2490e-01,  1.0400e+00, -2.9203e-01,  2.1293e-01, 1.1197e-06],
+    #      [0.1800, 0.4698, 1.5043, 0.5696, 0.1862, 0.8182, 0.0126],
+    #      [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+    #      [-1.2341e-01, 7.4693e-01, 1.4739e+00, 1.6523e+00, -2.6991e-01, 1.1523e-02, -9.5822e-05],
+    #      [-0.5728, 0.6794, 1.4149, 1.7189, -0.6503, 0.3657, -1.6146],
+    #      [0.5426, 0.4880, 1.4143, 1.2573, -0.4632, -1.0516, 0.1703],
+    #      [0.4412, -0.5150, 0.8153, 1.5142, 0.4762, 0.0438, 0.7105],
+    #      [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+    #      [0.5052, -0.4135, 1.0945, 1.6024, 1.0821, -0.6957, -0.2535],
+    #      [-0.6730, 0.5814, 1.3403, 1.7309, -0.4106, 0.4301, -1.7868],
+    #      [0.3525, -0.1269, 1.1656, 1.3804, 0.1220, 0.3742, -0.1250]
+    #     ]
+    #     )
+    # goal_angles_all  = torch.FloatTensor(
+    #     [
+    #      [0.5793, -0.0749,  0.9222,  1.4660, -0.7369, -0.6797, -0.4747],
+    #      [0.1206, 0.2163, 1.2128, 0.9753, 0.2447, 0.5462, -0.2298],
+    #      [0.0411, -0.4383, 1.1090, 1.9053, 0.7874, -0.1648, -0.3210],
+    #      [8.3634e-01, -3.7185e-01, 5.8938e-01, 1.0404e+00, 3.0321e-01, 1.6204e-01, -1.9278e-05],
+    #      [-0.5702, 0.6332, 1.4110, 1.6701, -0.5085, 0.4071, -1.6792],
+    #      [0.0338, 0.0829, 1.0422, 1.6009, -0.7885, -0.5373, 0.1593],
+    #      [0.2692, -0.4469, 0.6287, 0.8841, 0.2070, 1.3161, 0.4913],
+    #      [4.1391e-01, -4.5127e-01, 8.9605e-01, 1.1968e+00, -4.4754e-05, 8.8374e-01, 6.2656e-02],
+    #      [0.0880, -0.3266, 0.8092, 1.1611, 0.2845, 0.5481, -0.4666],
+    #      [-0.0374, -0.2891, 1.2771, 1.4422, -0.4017, 0.9142, -0.7823],
+    #      [0.4959, -0.2184, 1.2100, 1.8197, 0.3975, -0.7801, 0.2076]
+    #     ]
+    #     )
 
     # Iterate over test configs
     num_configs = start_angles_all.size(0)

@@ -464,7 +464,7 @@ def main():
         pargs.curr_iter = 0
         if pargs.optimizer.find('xalglib') != -1:
             # Setup params
-            ctrlstate = ctrls_t.view(-1).clone().numpy()
+            ctrlstate = list(ctrls_t.view(-1).clone().numpy())
             epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
 
             # Create function handle for optimization
@@ -492,7 +492,7 @@ def main():
 
             # Print results
             # Apply controls (simple velocity integration to start joint angles)
-            ctrls_t[:,:] = torch.from_numpy(ctrlstate).view(pargs.horizon, -1)
+            ctrls_t[:,:] = torch.FloatTensor(ctrlstate).view(pargs.horizon, -1)
             angle_traj = torch.zeros(pargs.horizon + 1, start_angles.nelement())
             angle_traj[0] = start_angles
             for h in xrange(pargs.horizon):

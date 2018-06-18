@@ -38,6 +38,29 @@ Cleanest branch is `ngc-pivot`
 
 # Build
 
+## Prerequisites
+
+```
+sudo apt-get install libglew-dev libmatheval-dev
+```
+
+Install Pangolin from source:
+```
+# Change to some reasonable path for Pangolin
+cd $HOME/src
+
+# Clone
+git clone https://github.com/stevenlovegrove/Pangolin.git
+cd Pangolin
+
+# Build with CMake
+mkdir build
+cd build
+cmake ..
+sudo make install
+```
+
+
 ## SE3 Nets
 ```
 sh make.sh
@@ -57,11 +80,5 @@ se3flownets.py
 
 # open-loop control (experimental)
 run_control_openloop.py
-```
-# Dependencies
-
-Pangolin:
-```
-git clone https://github.com/stevenlovegrove/Pangolin.git
 ```
 

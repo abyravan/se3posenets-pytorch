@@ -885,7 +885,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
 
     # ============ For visualization only ============#
     # Get the control direction and scale it by step length
-    ctrls_t = ctrls_v.data.clone() - ctrl_grad * pargs.step_len
+    ctrls_t = ctrls_v.data.cpu().clone() - ctrl_grad * pargs.step_len
 
     # Apply controls (simple velocity integration to start joint angles)
     angle_traj = torch.zeros(pargs.horizon + 1, start_angles.nelement())

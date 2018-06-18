@@ -468,8 +468,8 @@ def main():
             epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
 
             # Create function handle for optimization
-            func = lambda x, y: optimize_ctrl(x, y, model.transitionmodel, start_poses,
-                                              goal_poses, start_angles, goal_angles)
+            func = lambda x, y, z: optimize_ctrl(x, y, z, model.transitionmodel, start_poses,
+                                                 goal_poses, start_angles, goal_angles)
 
             # Run the optimization
             if pargs.optimizer == 'xalglib_cg':
@@ -843,7 +843,7 @@ def main():
     #     torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
 
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
-def optimize_ctrl(ctrls, ctrlsgrad, model, start_poses, goal_poses,
+def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
                   start_angles, goal_angles):
     # ============ FWD pass + Compute loss ============#
     # Roll out over the horizon

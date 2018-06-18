@@ -480,7 +480,7 @@ def main():
                 ctrlstate, rep = xalglib.mincgresults(state)
             elif pargs.optimizer == 'xalglib_lbfgs':
                 # Setup CG optimizer
-                state = xalglib.minlbfgscreate(ctrlstate)
+                state = xalglib.minlbfgscreate(5, ctrlstate)
                 xalglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits)
                 xalglib.minlbfgsoptimize_g(state, func)
                 ctrlstate, rep = xalglib.minlbfgsresults(state)

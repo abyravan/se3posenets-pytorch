@@ -444,6 +444,10 @@ def main():
             ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl)
         elif pargs.ctrl_init == 'random':
             ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl).uniform_(-0.5,0.5)
+        if pargs.only_top4_jts:
+            ctrls_t[:, 4:] = 0
+        elif pargs.only_top6_jts:
+            ctrls_t[:, 6:] = 0
 
         # Init stuff
         ctrls, losses = [ctrls_t.clone()], []

@@ -468,7 +468,7 @@ def main():
             epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
 
             # Create function handle for optimization
-            func = lambda x, y, z: optimize_ctrl(x, y, z, model.transitionmodel, start_poses,
+            func = lambda x, y, z: optimize_ctrl(x, y, z, model, start_poses,
                                                  goal_poses, start_angles, goal_angles)
 
             # Run the optimization

@@ -98,6 +98,7 @@ parser.add_argument('-s', '--save-dir', default='', type=str,
 
 # Choose time horizon, optimizer, step length etc
 parser.add_argument('--horizon', default=20, type=int, help='Length of the planning horizon')
+parser.add_argument('--goal-horizon', default=10, type=int, help='Length of the target horizon')
 parser.add_argument('--optimizer', default='sgddirn', type=str,
                     help='Type of optimizer. [sgddirn] | sgd | adam | alglib_lbfgs | alglib_cg')
 parser.add_argument('--step-len', default=0.1, type=float,
@@ -262,19 +263,19 @@ def main():
     while (k < nexamples):
         # Get examples
         start_id = np.random.randint(len(dataset))
-        goal_id  = start_id + pargs.horizon * args.step_len
+        goal_id  = start_id + pargs.goal_horizon * args.step_len
         print('Test dataset size: {}, Start ID: {}, Goal ID: {}, Duration: {}'.format(len(dataset),
-                                      start_id, goal_id, pargs.horizon * args.step_len * dt))
+                                      start_id, goal_id, pargs.goal_horizon * args.step_len * dt))
         start_sample = test_dataset[start_id]
         goal_sample  = test_dataset[goal_id]
 
         # Get the joint angles
         start_angles = start_sample['actctrlconfigs'][0]
         goal_angles  = goal_sample['actctrlconfigs'][0]
-        if (start_angles - goal_angles).abs().mean() < (pargs.horizon * 0.01):
+        if (start_angles - goal_angles).abs().mean() < (pargs.goal_horizon * 0.01):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
-            (start_angles - goal_angles).abs().mean(), pargs.horizon * 0.01))
+            (start_angles - goal_angles).abs().mean(), pargs.goal_horizon * 0.01))
         start_angles_all[k] = start_angles
         goal_angles_all[k]  = goal_angles
         k += 1 # Increment counter

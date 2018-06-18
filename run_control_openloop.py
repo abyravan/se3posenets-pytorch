@@ -492,7 +492,7 @@ def main():
                 assert(False)
 
             # Print termination type
-            print('Termination type: {}'.format(rep.TerminationType)) # expected 4
+            #print('Termination type: {}'.format(rep.TerminationType)) # expected 4
 
             # Print results
             # Apply controls (simple velocity integration to start joint angles)
@@ -867,7 +867,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
         pred_poses_v.append(pred_pose)
 
         # Compute loss and add to list of losses
-        if h > 0.25 * pargs.horizon:
+        if h > 0.75 * pargs.horizon:
             loss = pargs.loss_scale * ctrlnets.BiMSELoss(pred_pose, goal_pose_v)
             curr_loss_v += loss
             iter_loss[h] = loss.data[0]

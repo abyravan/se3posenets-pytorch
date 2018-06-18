@@ -849,7 +849,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
     # Roll out over the horizon
     start_pose_v = Variable(start_poses.data.clone(), requires_grad=False)
     goal_pose_v  = Variable(goal_poses.data.clone(), requires_grad=False)
-    ctrls_v      = Variable(ctrls.clone().type(pargs.deftype).view_as(pargs.horizon, -1), requires_grad=True)
+    ctrls_v      = Variable(torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype), requires_grad=True)
     pred_poses_v = []
     iter_loss = torch.zeros(pargs.horizon)
     curr_loss_v = 0

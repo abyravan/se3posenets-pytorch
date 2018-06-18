@@ -492,7 +492,7 @@ def main():
                 assert(False)
 
             # Print termination type
-            print('Termination type: {}'.format(rep.termination_type)) # expected 4
+            print('Termination type: {}'.format(rep.TerminationType)) # expected 4
 
             # Print results
             # Apply controls (simple velocity integration to start joint angles)

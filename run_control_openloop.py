@@ -73,8 +73,10 @@ parser.add_argument('--ctrl-specific-jts', type=str, default='', metavar='JTS',
                          'but the system can move those (default: '' => all joints are controlled)')
 
 # Planner options
-parser.add_argument('--loss-scale', default=1.0, type=float, metavar='EPS',
+parser.add_argument('--loss-wt', default=1.0, type=float, metavar='EPS',
                     help='Loss scale (default: 1)')
+parser.add_argument('--smooth-wt', default=0.0, type=float, metavar='EPS',
+                    help='Control smoothness weight (default: 0)')
 parser.add_argument('--loss-threshold', default=0, type=float, metavar='EPS',
                     help='Threshold for convergence check based on the losses (default: 0)')
 
@@ -104,7 +106,7 @@ parser.add_argument('--optimizer', default='sgddirn', type=str,
 parser.add_argument('--step-len', default=0.1, type=float,
                     help='Step length scaling the update for each step of the optimization')
 parser.add_argument('--max-iter', default=100, type=int, help='Max number of open loop iterations')
-parser.add_argument('--ctrl-init', default='zero', type=str, help='Method to initialize control inputs: [zero] | random')
+parser.add_argument('--ctrl-init', default='zero', type=str, help='Method to initialize control inputs: [zero] | random | gtctrls')
 
 # Dataset to use & num examples to sample
 parser.add_argument('--dataset', default='test', type=str,
@@ -133,6 +135,7 @@ def main():
 
     # Set seed
     torch.manual_seed(pargs.seed)
+    np.random.seed(pargs.seed)
     if pargs.cuda:
         torch.cuda.manual_seed(pargs.seed)
 
@@ -226,7 +229,7 @@ def main():
     # Get datasets (TODO: Make this path variable)
     data_path = '/home/barun/Projects/rgbd/ros-pkg-irs/wamTeach/ros_pkgs/catkin_ws/src/baxter_motion_simulator/data/baxter_babbling_rarm_3.5hrs_Dec14_16/postprocessmotions/'
     baxter_data = data.read_recurrent_baxter_dataset(data_path, args.img_suffix,
-                                                     step_len = 1, seq_len = 1,
+                                                     step_len = args.step_len, seq_len = pargs.goal_horizon,
                                                      train_per = args.train_per, val_per = args.val_per,
                                                      valid_filter = None,
                                                      cam_extrinsics=args.cam_extrinsics,
@@ -259,26 +262,30 @@ def main():
 
     ###### Get a set of examples
     start_angles_all, goal_angles_all = torch.zeros(nexamples, args.num_ctrl), torch.zeros(nexamples, args.num_ctrl)
+    gt_ctrls_all, gt_angles_all = torch.zeros(nexamples, pargs.goal_horizon, args.num_ctrl), \
+                                  torch.zeros(nexamples, pargs.goal_horizon+1, args.num_ctrl)
+    assert(pargs.horizon >= pargs.goal_horizon)
     k = 0
     while (k < nexamples):
         # Get examples
         start_id = np.random.randint(len(dataset))
-        goal_id  = start_id + pargs.goal_horizon * args.step_len
-        print('Test dataset size: {}, Start ID: {}, Goal ID: {}, Duration: {}'.format(len(dataset),
-                                      start_id, goal_id, pargs.goal_horizon * args.step_len * dt))
-        start_sample = test_dataset[start_id]
-        goal_sample  = test_dataset[goal_id]
+        print('Test dataset size: {}, Start ID: {}, Duration: {}'.format(len(dataset),
+                          start_id, pargs.goal_horizon * args.step_len * dt))
+        sample = dataset[start_id]
 
-        # Get the joint angles
-        start_angles = start_sample['actctrlconfigs'][0]
-        goal_angles  = goal_sample['actctrlconfigs'][0]
-        if (start_angles - goal_angles).abs().mean() < (pargs.goal_horizon * 0.01):
+        # Get joint angles and check if there is reasonable motion
+        jtangles, ctrls = sample['actctrlconfigs'], sample['controls']
+        if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
-            (start_angles - goal_angles).abs().mean(), pargs.goal_horizon * 0.01))
-        start_angles_all[k] = start_angles
-        goal_angles_all[k]  = goal_angles
-        k += 1 # Increment counter
+            (jtangles[0] - jtangles[-1]).abs().mean(), pargs.goal_horizon * 0.02))
+
+        # Save stuff
+        start_angles_all[k], goal_angles_all[k] = jtangles[0], jtangles[-1]
+        gt_angles_all[k], gt_ctrls_all[k] = jtangles, ctrls
+
+        # Increment counter
+        k += 1
 
     # #########
     # # SOME TEST CONFIGS:
@@ -315,14 +322,11 @@ def main():
     #     )
 
     # Iterate over test configs
-    num_configs = start_angles_all.size(0)
-    if pargs.num_configs > 0:
-        num_configs = min(start_angles_all.size(0), pargs.num_configs)
-    print("Running tests over {} configs".format(num_configs))
+    print("Running tests over {} configs".format(nexamples))
     iterstats = []
     init_errors, final_errors = [], []
     datastats = []
-    for k in xrange(num_configs):
+    for k in xrange(nexamples):
         # Get start/goal angles
         print("========================================")
         print("========== STARTING TEST: {} ===========".format(k))
@@ -342,9 +346,9 @@ def main():
             print('Setting targets only for joints: {}. All other joints have zero error'
                   ' but can be controlled'.format(pargs.ctrl_specific_jts))
             ctrl_jts = [int(x) for x in pargs.ctrl_specific_jts.split(',')]
-            for k in xrange(7):
-                if k not in ctrl_jts:
-                    goal_angles[k] = start_angles[k]
+            for jj in xrange(7):
+                if jj not in ctrl_jts:
+                    goal_angles[jj] = start_angles[jj]
 
         ########################
         ############ Get start & goal point clouds, predict poses & masks
@@ -381,16 +385,33 @@ def main():
         for tag, images in info.items():
             tblogger.image_summary(tag, images, 0)
 
-        # Print error
-        print('Initial jt angle error:')
-        full_deg_error = (start_angles-goal_angles) * (180.0/np.pi) # Full error in degrees
-        print(full_deg_error.view(7,1))
-        init_errors.append(full_deg_error.view(1,7))
+        # Init controls
+        if pargs.ctrl_init == 'zero':
+            ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl)
+        elif pargs.ctrl_init == 'random':
+            ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl).uniform_(-0.5, 0.5)
+        elif pargs.ctrl_init == 'gtctrls':
+            ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl)
+            ctrls_t[0:pargs.goal_horizon] = gt_ctrls_all[k]
+        else:
+            assert(False)
+
+        # Init stuff
+        ctrls, losses = [ctrls_t.clone()], []
+        angles, deg_errors = [torch.zeros(pargs.horizon + 1, args.num_ctrl)], \
+                             [torch.zeros(pargs.horizon + 1, args.num_ctrl)]
+        angles[0] = integrate_ctrls(start_angles, ctrls_t, dt*args.step_len, pargs)
+        deg_errors[0] = (angles[0] - goal_angles.view(1,7)) * (180.0 / np.pi)
+
+        print("Jt angle error using initial controls: ")
+        init_deg_error = deg_errors[0][-1]  # Full error in degrees
+        total_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)
+        print(torch.cat([init_deg_error.view(7,1), total_deg_error.view(7,1)], 1))
 
         # Compute initial pose loss
-        init_pose_loss = args.loss_scale * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
-        init_pose_err_indiv = args.loss_scale * (start_poses - goal_poses).pow(2).view(args.num_se3,12).mean(1)
-        init_deg_errors = full_deg_error.view(7).numpy()
+        init_pose_loss = pargs.loss_wt * ctrlnets.BiMSELoss(start_poses, goal_poses)  # Get distance from goal
+        init_pose_err_indiv = pargs.loss_wt * (start_poses - goal_poses).pow(2).view(args.num_se3,12).mean(1)
+        init_deg_errors = init_deg_error.view(7).numpy()
 
         # Render the poses
         # NOTE: Data passed into cpp library needs to be assigned to specific vars, not created on the fly (else gc will free it)
@@ -440,27 +461,6 @@ def main():
         #     #curr_rgb_s = []
         #     loss_s, err_indiv_s, curr_deg_errors_s = [], [], []
 
-        # Init vars for all items
-        if pargs.ctrl_init == 'zero':
-            ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl)
-        elif pargs.ctrl_init == 'random':
-            ctrls_t = torch.zeros(pargs.horizon, args.num_ctrl).uniform_(-0.5,0.5)
-        if pargs.only_top4_jts:
-            ctrls_t[:, 4:] = 0
-        elif pargs.only_top6_jts:
-            ctrls_t[:, 6:] = 0
-
-        # Init stuff
-        ctrls, losses = [ctrls_t.clone()], []
-        angles, deg_errors = [torch.zeros(pargs.horizon+1, args.num_ctrl)], \
-                             [torch.zeros(pargs.horizon+1, args.num_ctrl)]
-        angles[0][0] = start_angles
-        for h in xrange(pargs.horizon):
-            angles[0][h+1] = angles[0][h] + ctrls[0][h] * dt * args.step_len
-        deg_errors[0] = (angles[0] - goal_angles.view(1,7)) * (180.0 / np.pi)
-
-        print(deg_errors[0][-1].view(7, 1))
-
         # Model has to be in training mode
         model.train()
 
@@ -474,40 +474,48 @@ def main():
 
             # Create function handle for optimization
             func = lambda x, y, z: optimize_ctrl(x, y, z, model, start_poses,
-                                                 goal_poses, start_angles, goal_angles)
+                                                 goal_poses, start_angles, goal_angles, angles[0])
 
             # Run the optimization
             if pargs.optimizer == 'xalglib_cg':
                 # Setup CG optimizer
                 state = xalglib.mincgcreate(ctrlstate)
+                pargs.xalglib_optim_state = state
                 xalglib.mincgsetcond(state, epsg, epsf, epsx, maxits)
                 xalglib.mincgoptimize_g(state, func)
                 ctrlstate, rep = xalglib.mincgresults(state)
             elif pargs.optimizer == 'xalglib_lbfgs':
                 # Setup CG optimizer
                 state = xalglib.minlbfgscreate(5, ctrlstate)
+                pargs.xalglib_optim_state = state
                 xalglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits)
                 xalglib.minlbfgsoptimize_g(state, func)
                 ctrlstate, rep = xalglib.minlbfgsresults(state)
             else:
                 assert(False)
 
-            # Print termination type
-            #print('Termination type: {}'.format(rep.TerminationType)) # expected 4
-
             # Print results
             # Apply controls (simple velocity integration to start joint angles)
-            ctrls_t[:,:] = torch.FloatTensor(ctrlstate).view(pargs.horizon, -1)
-            angle_traj = torch.zeros(pargs.horizon + 1, start_angles.nelement())
-            angle_traj[0] = start_angles
-            for h in xrange(pargs.horizon):
-                angle_traj[h + 1] = angle_traj[h] + (ctrls_t[h] * dt)
+            ctrls_f = torch.FloatTensor(ctrlstate).view(pargs.horizon, -1).clone()
+            angle_traj = integrate_ctrls(start_angles, ctrls_f, dt*args.step_len, pargs)
+            pargs.xalglib_optim_state = None
 
             ## Print final trajectory errors
-            deg_error = (angle_traj - goal_angles.view(1, 7)) * (180.0 / np.pi)
-            print("Test: {}/{}, Final trajectory errors after {} iterations".format(k + 1, num_configs, pargs.max_iter))
+            deg_error = (angle_traj - goal_angles.view(1,7)) * (180.0 / np.pi)
+            print("Test: {}/{}, Final trajectory errors after {} iterations".format(k + 1, nexamples, pargs.max_iter))
             print(deg_error)
-            print(ctrls_t)
+            print(ctrls_f)
+
+            # Save final errors
+            deg_errors.append((angle_traj - goal_angles.view(1, 7)) * (180.0 / np.pi))
+            angles.append(angle_traj)
+            ctrls.append(ctrls_f.clone())
+
+            # Save stats and exit
+            iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
+                              'angles': angles, 'ctrls': ctrls_f, 'init_ctrls': ctrls_t,
+                              'deg_errors': deg_errors, 'losses': losses})
+
         else:
             # Run open loop planner for a fixed number of iterations
             # This runs only in the pose space!
@@ -534,7 +542,7 @@ def main():
 
                     # Compute loss and add to list of losses
                     if h > 0.75*pargs.horizon:
-                        loss = pargs.loss_scale * ctrlnets.BiMSELoss(pred_pose, goal_pose_v)
+                        loss = pargs.loss_wt * ctrlnets.BiMSELoss(pred_pose, goal_pose_v)
                         curr_loss_v += loss
                         iter_loss[h] = loss.data[0]
 
@@ -547,12 +555,6 @@ def main():
                 ctrl_grad = ctrls_v.grad.data.cpu().float()
 
                 # ============ Update controls ============#
-                # Set last 3 joint's controls to zero
-                if pargs.only_top4_jts:
-                    ctrl_grad[:,4:] = 0
-                elif pargs.only_top6_jts:
-                    ctrl_grad[:,6:] = 0
-
                 # Get the control direction and scale it by step length
                 if pargs.optimizer == 'sgd':
                     ctrls_t = ctrls_t - ctrl_grad * pargs.step_len
@@ -564,10 +566,7 @@ def main():
 
                 # ============ Print loss ============#
                 # Apply controls (simple velocity integration to start joint angles)
-                angle_traj = torch.zeros(pargs.horizon+1, start_angles.nelement())
-                angle_traj[0] = start_angles
-                for h in xrange(pargs.horizon):
-                    angle_traj[h+1] = angle_traj[h] + (ctrls_t[h] * dt)
+                angle_traj = integrate_ctrls(start_angles, ctrls_t, dt*args.step_len, pargs)
 
                 # Save stuff
                 ctrls.append(ctrls_t.clone())
@@ -576,14 +575,14 @@ def main():
                 deg_errors.append((angle_traj - goal_angles.view(1,7)) * (180.0 / np.pi))
 
                 # Print losses and errors
-                print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, num_configs, it+1,
+                print('Test: {}/{}, Control Iter: {}/{}, Loss: {}'.format(k+1, nexamples, it+1,
                                                                           pargs.max_iter, curr_loss_v.data[0]))
-                print('Joint angle errors in degrees: ',
-                      torch.cat([deg_errors[-1][-1].view(7, 1), full_deg_error.unsqueeze(1)], 1))
+                print('Joint angle errors in degrees (curr/init): ',
+                      torch.cat([deg_errors[-1][-1].view(7, 1), init_deg_error.unsqueeze(1), total_deg_error.view(7,1)], 1))
 
 
             ## Print final trajectory errors
-            print("Test: {}/{}, Final trajectory errors after {} iterations".format(k+1, num_configs, pargs.max_iter))
+            print("Test: {}/{}, Final trajectory errors after {} iterations".format(k+1, nexamples, pargs.max_iter))
             print(deg_errors[-1])
             print(ctrls[-1])
 
@@ -591,6 +590,13 @@ def main():
             iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
                               'angles': angles, 'ctrls': ctrls,
                               'deg_errors': deg_errors, 'losses': losses})
+
+    # Print all results
+    final_deg_errors = torch.zeros(len(iterstats), 7)
+    for k in xrange(len(iterstats)):
+        final_deg_errors[k] = iterstats[k]['deg_errors'][-1][-1]
+    print("Final jt angle errors (deg) after integrating the optimized controls: ")
+    print(final_deg_errors)
 
     # Save stats across all iterations
     stats = {'args': args, 'pargs': pargs, 'start_angles_all': start_angles_all,
@@ -847,9 +853,26 @@ def main():
     # if pargs.save_frame_stats:
     #     torch.save(datastats, pargs.save_dir + '/datastats.pth.tar')
 
+def integrate_ctrls(start_angles, ctrls, dt, pargs):
+    # Do forward integration of the ctrls
+    angle_traj = torch.zeros(ctrls.size(0)+1, start_angles.nelement())
+    angle_traj[0] = start_angles
+    for h in xrange(ctrls.size(0)):
+        angle_traj[h+1] = angle_traj[h] + (ctrls[h] * dt)
+
+    # Constrain output traj, not the controls themselves!
+    start_angles_v = start_angles.view(1,-1).expand_as(angle_traj)
+    if pargs.only_top4_jts:
+        angle_traj[:,4:] = start_angles_v[:,4:]
+    elif pargs.only_top6_jts:
+        angle_traj[:,6:] = start_angles_v[:,6:]
+
+    # Return
+    return angle_traj
+
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
 def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
-                  start_angles, goal_angles):
+                  start_angles, goal_angles, init_traj):
     # ============ FWD pass + Compute loss ============#
     # Roll out over the horizon
     start_pose_v = Variable(start_poses.data.clone(), requires_grad=False)
@@ -857,7 +880,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
     ctrls_v      = Variable(torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype), requires_grad=True)
     pred_poses_v = []
     iter_loss = torch.zeros(pargs.horizon)
-    curr_loss_v = 0
+    pose_loss_v = 0
     for h in xrange(pargs.horizon):
         # Get inputs for the current timestep
         pose = start_pose_v if (h == 0) else pred_poses_v[-1]
@@ -869,9 +892,18 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
 
         # Compute loss and add to list of losses
         if h > 0.75 * pargs.horizon:
-            loss = pargs.loss_scale * ctrlnets.BiMSELoss(pred_pose, goal_pose_v)
-            curr_loss_v += loss
+            loss = pargs.loss_wt * ctrlnets.BiMSELoss(pred_pose, goal_pose_v)
+            #loss = pargs.loss_wt * ctrlnets.BiAbsLoss(pred_pose, goal_pose_v) * ((h+1.) / pargs.horizon)
+            pose_loss_v += loss
             iter_loss[h] = loss.data[0]
+
+    # Add a control smoothness cost
+    ctrl_vel = (ctrls_v[1:] - ctrls_v[:-1]) / (dt * args.step_len)
+    ctrl_vel_loss = pargs.smooth_wt * ctrl_vel.pow(2).mean()
+
+    # Add losses together
+    curr_loss_v = pose_loss_v + ctrl_vel_loss
+    pose_loss, smooth_loss, total_loss = pose_loss_v.data[0], ctrl_vel_loss.data[0], curr_loss_v.data[0]
 
     # ============ BWD pass ============#
 
@@ -881,30 +913,27 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
     curr_loss_v.backward()  # Compute gradients - BWD pass
     ctrl_grad = ctrls_v.grad.data.cpu().float()
 
-    # ============ Update controls ============#
-    # Set last 3 joint's controls to zero
-    if pargs.only_top4_jts:
-        ctrl_grad[:, 4:] = 0
-    elif pargs.only_top6_jts:
-        ctrl_grad[:, 6:] = 0
-
     # ============ For visualization only ============#
-    # Get the control direction and scale it by step length
-    ctrls_t = ctrls_v.data.cpu().clone() - ctrl_grad * pargs.step_len
-
-    # Apply controls (simple velocity integration to start joint angles)
-    angle_traj = torch.zeros(pargs.horizon + 1, start_angles.nelement())
-    angle_traj[0] = start_angles
-    for h in xrange(pargs.horizon):
-        angle_traj[h + 1] = angle_traj[h] + (ctrls_t[h] * dt)
+    # Get the controls input and integrate them
+    ctrls_t = ctrls_v.data.cpu().clone()
+    angle_traj = integrate_ctrls(start_angles, ctrls_t, dt*args.step_len, pargs)
 
     # Print losses and errors
     pargs.curr_iter += 1
-    deg_error = (angle_traj - goal_angles.view(1,7)) * (180.0 / np.pi)
-    full_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)
-    print('Iter: {}/{}, Loss: {}'.format(pargs.curr_iter, pargs.max_iter, curr_loss_v.data[0]))
-    print('Joint angle errors in degrees: ',
-          torch.cat([deg_error[-1].view(7, 1), full_deg_error.view(7, 1)], 1))
+    curr_deg_error = (angle_traj[-1] - goal_angles) * (180.0 / np.pi)
+    init_deg_error = (init_traj[-1] - goal_angles) * (180.0 / np.pi)
+    total_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)
+    print('Iter: {}/{}, Loss: {} ({}/{})'.format(pargs.curr_iter, pargs.max_iter, total_loss, pose_loss, smooth_loss))
+    print('Joint angle errors in degrees (curr/init): ',
+          torch.cat([curr_deg_error.view(7,1), init_deg_error.view(7,1), total_deg_error.view(7,1)], 1))
+
+    # Request termination if we have reached a max num of iters
+    if pargs.curr_iter == pargs.max_iter:
+        print("Terminating as optimizer reached max number of function evaluations: {}".format(pargs.curr_iter))
+        if pargs.optimizer == 'xalglib_cg':
+            xalglib.mincgrequesttermination(pargs.xalglib_optim_state)
+        elif pargs.optimizer == 'xalglib_lbfgs':
+            xalglib.minlbfgsrequesttermination(pargs.xalglib_optim_state)
 
     # Return loss and gradients
     for k in xrange(ctrl_grad.view(-1).nelement()):

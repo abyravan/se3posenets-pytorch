@@ -1,6 +1,5 @@
-#conda install opencv -c menpo
-#conda install configargparse
-# Install tensorflow
+
+# Intro
 
 Setting up training:
 1) Install the following packages: 
@@ -21,4 +20,65 @@ Setting up control:
      This will create a window so it can’t be run over ssh
 4) To test the open loop controller (conjugate gradient) on the simulated baxter data (se3compose branch) do:
      python run_control_openloop.py --checkpoint <path-to-pre-trained-se3-pose-net> --only-top4-jts --loss-thresh 2e-3 --num-configs 5 --save-dir temp --ctrl-init zero --optimizer xalglib_cg --max-iter 200 --horizon 10 --goal-horizon 5 --loss-scale 100
+
+# Details
+
+```
+conda install opencv -c menpo
+conda install configargparse
+# Install tensorflow
+```
+
+  - layers are in `layers/`
+  - data loading is in `data.py`
+  - network structures are in `ctrlnets.py`
+  - `main_ctrlnets_multi_f.py` contrains control nets code
+
+Cleanest branch is `ngc-pivot`
+
+# Build
+
+## Prerequisites
+
+```
+sudo apt-get install libglew-dev libmatheval-dev
+```
+
+Install Pangolin from source:
+```
+# Change to some reasonable path for Pangolin
+cd $HOME/src
+
+# Clone
+git clone https://github.com/stevenlovegrove/Pangolin.git
+cd Pangolin
+
+# Build with CMake
+mkdir build
+cd build
+cmake ..
+sudo make install
+```
+
+
+## SE3 Nets
+```
+sh make.sh
+```
+
+## Control Experiments
+```
+mkdir -p build && cd build && cmake ../ && make -j7 && cd ../../ && python setup.py install
+```
+
+# Run Experiments
+Run:
+```
+train_flownets.py # baseline models
+train_se3posenets.py
+se3flownets.py
+
+# open-loop control (experimental)
+run_control_openloop.py
+```
 

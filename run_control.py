@@ -6,7 +6,7 @@ import sys
 import shutil
 import time
 import numpy as np
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import random
 
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
@@ -348,21 +348,21 @@ def main():
         )
 
     # # ### More test configs
-    # start_angles_all = torch.FloatTensor(
-    #     [
-    #         [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
-    #         [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
-    #         [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
-    #     ]
-    # )
-    #
-    # goal_angles_all = torch.FloatTensor(
-    #     [
-    #         [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
-    #         [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
-    #         [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
-    #     ]
-    # )
+    start_angles_all = torch.FloatTensor(
+         [
+             [-0.12341, 0.74693, 1.4739, 1.6523, -0.26991, 0.011523, -0.0009],
+             [0.0619, 0.1619, 1.1609, 0.9808, 0.3923, 0.6253, 0.0328],
+             [1.0549, -0.1554, 1.2620, 1.0577, 1.0449, -1.2097, -0.6803],
+         ]
+    )
+    
+    goal_angles_all = torch.FloatTensor(
+         [
+             [0.83634, -0.37185, 0.58938, 1.0404, 0.50321, 0.67204, 0.0002],
+             [0.8139, -0.6512, 0.596, 1.5968, -4.4754e-05, -1.25, 6.2656e-02],
+             [0.0411, -0.8383, 0.590, 1.9053, 0.1874, -0.1648, -0.3210],
+        ]
+    )
 
     # # ###
     # start_angles_all = torch.FloatTensor(
@@ -597,10 +597,10 @@ def main():
             ctrl_grads.append(ctrl_grad.cpu().float()) # Save this
 
             # Set last 3 joint's controls to zero
-            if pargs.only_top4_jts:
-                ctrl_grad[4:] = 0
-            elif pargs.only_top6_jts:
-                ctrl_grad[6:] = 0
+            #if pargs.only_top4_jts:
+            #    ctrl_grad[4:] = 0
+            #elif pargs.only_top6_jts:
+            #    ctrl_grad[6:] = 0
 
             # Decay controls if loss is small
             if loss < 1:
@@ -619,6 +619,10 @@ def main():
                 curr_ctrl = ctrl_grad.cpu().float()
 
             # Apply control (simple velocity integration)
+            if pargs.only_top4_jts:
+                curr_ctrl[4:] = 0
+            elif pargs.only_top6_jts:
+                curr_ctrl[6:] = 0
             next_angles = curr_angles - (curr_ctrl * dt)
 
             # Save stuff

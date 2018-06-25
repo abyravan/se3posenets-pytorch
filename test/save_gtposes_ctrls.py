@@ -306,9 +306,10 @@ def main():
             if k % 500 == 0:
                 print('Dataset: {}, Example: {}/{}'.format(key, k+1, len(val)))
             sample = val[k] # Get sample
-            poses.append(sample['poses'].unsqueeze(0))
-            ctrls.append(sample['controls'].unsqueeze(0))
-            jtangles.append(sample['actctrlconfigs'].unsqueeze(0))
+            if sample['poses'].eq(sample['poses']).all(): # Only if there are no NaN values
+                poses.append(sample['poses'].unsqueeze(0))
+                ctrls.append(sample['controls'].unsqueeze(0))
+                jtangles.append(sample['actctrlconfigs'].unsqueeze(0))
         # Save data
         posedata[key] = {'gtposes': torch.cat(poses,0),
                          'controls': torch.cat(ctrls,0),

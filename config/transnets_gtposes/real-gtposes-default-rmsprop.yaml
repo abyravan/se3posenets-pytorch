@@ -1,0 +1,38 @@
+---
+# Dataset options
+data: gtposesctrls-real.pth.tar
+batch-size:   16
+
+# Model options
+se3-type:     se3aa
+nonlin:       prelu
+
+# Model options
+model:         default
+init-se3-iden: True
+use-kinchain:  False
+
+# Loss options
+loss-type: mse
+loss-wt: 1000.0
+
+# Training options
+no-cuda:        False
+epochs:         20
+start-epoch:    0
+train-ipe:      5000
+val-ipe:        2000
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-3
+momentum:     0
+weight-decay: 0.0001
+lr-decay:     0.1
+decay-epochs: 15
+
+# Display/Save options
+disp-freq: 100
+save-dir:  trained_nets/transnets_gtposes/real-gtposes-default-rmsprop

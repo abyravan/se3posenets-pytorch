@@ -86,9 +86,9 @@ def read_gtposesctrls_from_disk(dataset, id,
     controls = (actctrlconfigs[1:seq_len + 1] - actctrlconfigs[0:seq_len]) / dt  # state -> ctrl dimension
 
     # Return loaded data
-    data = {'controls': controls, 'poses': poses,
+    dataout = {'controls': controls, 'poses': poses,
             'dt': dt, 'actctrlconfigs': actctrlconfigs}
-    return data
+    return dataout
 
 
 ################ MAIN

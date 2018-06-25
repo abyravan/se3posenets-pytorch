@@ -299,7 +299,7 @@ def main():
     # Get train, test, val dataset elements
     datakeys = {'train': train_dataset, 'test': test_dataset, 'val': val_dataset}
     posedata = {}
-    for key, val in datakeys.iteritems():
+    for key, val in datakeys.items():
         # Read data
         poses, ctrls, jtangles = [], [], []
         for k in xrange(len(val)):

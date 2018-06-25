@@ -375,7 +375,7 @@ def main():
         sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
 
-        if args.use_gt_poses_transnet:
+        if pargs.use_gt_poses_transnet:
             start_poses = start_poses_all[k].clone()
             goal_poses = goal_poses_all[k].clone()
         else:

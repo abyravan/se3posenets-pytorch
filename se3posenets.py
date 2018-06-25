@@ -134,13 +134,15 @@ class PoseMaskEncoder(nn.Module):
 
         # Create pose decoder (convert to r/t)
         self.se3_type = se3_type
-        self.posedecoder = nn.Sequential()
+        self.posedecoder = lambda x: se3.SE3ToRt(x, se3_type, use_pivot) # Convert to Rt
+
+        #self.posedecoder = nn.Sequential()
         #if se3_type != 'se3aar':
-        self.posedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, use_pivot)) # Convert to Rt
-        if use_pivot:
-            self.posedecoder.add_module('pivotrt', se3.CollapseRtPivots) # Collapse pivots
-        if use_kinchain:
-            self.posedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False)) # Kinematic chain
+        #self.posedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, use_pivot)) # Convert to Rt
+        #if use_pivot:
+        #    self.posedecoder.add_module('pivotrt', se3.CollapseRtPivots) # Collapse pivots
+        #if use_kinchain:
+        #    self.posedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False)) # Kinematic chain
 
     def compute_wt_sharpening_stats(self, train_iter=0):
         citer = 1 + (train_iter - self.sharpen_start_iter)
@@ -281,11 +283,12 @@ class TransitionModel(nn.Module):
         self.se3_type    = se3_type
         self.delta_pivot = delta_pivot
         self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
-        self.deltaposedecoder = nn.Sequential()
+        self.deltaposedecoder = lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != ''))
+        #self.deltaposedecoder = nn.Sequential()
         #if se3_type != 'se3aar':
-        self.deltaposedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != '')))  # Convert to Rt
-        if (self.delta_pivot != ''):
-            self.deltaposedecoder.add_module('pivotrt', se3.CollapseRtPivots)  # Collapse pivots
+        #self.deltaposedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != '')))  # Convert to Rt
+        #if (self.delta_pivot != ''):
+        #    self.deltaposedecoder.add_module('pivotrt', se3.CollapseRtPivots)  # Collapse pivots
         #if use_kinchain:
         #    self.deltaposedecoder.add_module('kinchain', se3nn.ComposeRt(rightToLeft=False))  # Kinematic chain
 

@@ -62,6 +62,8 @@ parser = argparse.ArgumentParser(description='Reactive control using SE3-Pose-Ne
 
 parser.add_argument('--checkpoint', default='', type=str, metavar='PATH', required=True,
                     help='path to saved network to use for training (default: none)')
+parser.add_argument('--args-checkpoint', default='', type=str, metavar='PATH', required=True,
+                    help='path to saved network to use for loading arguments (default: none)')
 parser.add_argument('--use-gt-poses-transnet', action='store_true', default=False,
                     help='Use transition model trained directly on GT poses (default: False)')
 
@@ -166,10 +168,15 @@ def main():
 
     # BWDs compatibility
     if pargs.use_gt_poses_transnet:
+        checkpoint1 = torch.load(pargs.args_checkpoint) # For loading arguments
+        args_1 = checkpoint1['args']
         args.step_len, args.img_suffix = 2, 'sub'
         args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
         args.train_per, args.val_per = 0.6, 0.15
         args.ctrl_type = 'actdiffvel'
+        args.cam_intrinsics = args_1.cam_intrinsics
+        args.cam_extrinsics = args_1.cam_extrinsics
+        args.ctrl_ids       = args_1.ctrl_ids
     if not hasattr(args, "use_gt_masks"):
         args.use_gt_masks, args.use_gt_poses = False, False
     if not hasattr(args, "num_state"):

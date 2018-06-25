@@ -177,6 +177,12 @@ def main():
         args.cam_intrinsics = args_1.cam_intrinsics
         args.cam_extrinsics = args_1.cam_extrinsics
         args.ctrl_ids       = args_1.ctrl_ids
+        args.state_labels   = args_1.state_labels
+        args.add_noise_data = args_1.add_noise_data
+        args.mesh_ids = args_1.mesh_ids
+        args.da_winsize = args_1.da_winsize
+        args.da_threshold = args_1.da_threshold
+        args.use_only_da_for_flows = args_1.use_only_da_for_flows
     if not hasattr(args, "use_gt_masks"):
         args.use_gt_masks, args.use_gt_poses = False, False
     if not hasattr(args, "num_state"):

@@ -5,7 +5,8 @@ import torch.utils.data
 torch.multiprocessing.set_sharing_strategy('file_system')
 
 # Local imports
-import sys; sys.path.append("../")
+import os, sys
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 import data
 import util
 
@@ -17,7 +18,7 @@ parser = options.setup_comon_options()
 # Loss options
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
-parser.add_argument('-s', '--save-filename', default='gtposedata-sim.pth.tar', type=str,
+parser.add_argument('--save-filename', default='gtposedata-sim.pth.tar', type=str,
                     metavar='PATH', help='file name to save results in (default: gtposedata-sim.pth.tar)')
 
 # Define xrange
@@ -246,7 +247,7 @@ def main():
     # Get train, test, val dataset elements
     datakeys = {'train': train_dataset, 'test': test_dataset, 'val': val_dataset}
     posedata = {}
-    for key, val in iter(datakeys):
+    for key, val in datakeys.iteritems():
         # Read data
         poses, ctrls, jtangles = [], [], []
         for k in xrange(len(val)):

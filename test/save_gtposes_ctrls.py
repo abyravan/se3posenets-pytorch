@@ -28,6 +28,69 @@ except NameError: # Not defined in Python 3.x
     def xrange(*args):
         return iter(range(*args))
 
+################ Stripped out function to read data from disk
+### Load baxter sequence from disk
+def read_gtposesctrls_from_disk(dataset, id,
+                                ctrl_type='actdiffvel', num_ctrl=7,
+                                mesh_ids=torch.Tensor()):
+    # Setup vars
+    num_meshes = mesh_ids.nelement()  # Num meshes
+    seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
+    camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
+
+    # Setup memory
+    sequence, path = data.generate_baxter_sequence(dataset, id)  # Get the file paths
+    actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Ids in actual data belonging to commanded data
+    poses = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
+
+    # For computing FWD/BWD visibilities and FWD/BWD flows
+    allposes = torch.FloatTensor()
+
+    ## Read camera extrinsics (can be separate per dataset now!)
+    try:
+        camera_extrinsics = data.read_cameradata_file(path + '/cameradata.txt')
+    except:
+        pass  # Can use default cam extrinsics for the entire dataset
+
+    #####
+    # Load sequence
+    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
+    for k in xrange(len(sequence)):
+        # Get data table
+        s = sequence[k]
+
+        # Load configs
+        state = data.read_baxter_state_file(s['state1'])
+        actctrlconfigs[k] = state['actjtpos'][ctrl_ids]  # Get states for control IDs
+        if state['timestamp'] is not None:
+            t[k] = state['timestamp']
+
+        # Load SE3 state & get all poses
+        se3state = data.read_baxter_se3state_file(s['se3state1'])
+        if allposes.nelement() == 0:
+            allposes.resize_(seq_len + 1, len(se3state) + 1, 3, 4).fill_(0)  # Setup size
+        allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        for id, tfm in se3state.items():
+            se3tfm = torch.mm(camera_extrinsics['modelView'],
+                              tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
+            allposes[k][id] = se3tfm[0:3, :]  # 3 x 4 transform (id is 1-indexed already, 0 is BG)
+
+        # Get poses of meshes we are moving
+        poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        for j in xrange(num_meshes):
+            meshid = mesh_ids[j]
+            poses[k][j + 1] = allposes[k][meshid][0:3, :]  # 3 x 4 transform
+
+    # Different control types
+    dt = t[1:] - t[:-1]  # Get proper dt which can vary between consecutive frames
+    controls = (actctrlconfigs[1:seq_len + 1] - actctrlconfigs[0:seq_len]) / dt  # state -> ctrl dimension
+
+    # Return loaded data
+    data = {'controls': controls, 'poses': poses,
+            'dt': dt, 'actctrlconfigs': actctrlconfigs}
+    return data
+
+
 ################ MAIN
 #@profile
 def main():
@@ -213,13 +276,8 @@ def main():
                                                                      mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                      reject_left_motion=args.reject_left_motion,
                                                                      reject_right_still=args.reject_right_still)
-    read_seq_func = data.read_baxter_sequence_from_disk
+    read_seq_func = read_gtposesctrls_from_disk
 
-    ### Noise function
-    #noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
-    #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
-    noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
-                                                     defprob=0.005, noisestd=0.005)
     ### Load functions
     baxter_data     = data.read_recurrent_baxter_dataset(args.data, args.img_suffix,
                                                          step_len = args.step_len, seq_len = args.seq_len,
@@ -230,15 +288,9 @@ def main():
                                                          ctrl_ids=args.ctrl_ids,
                                                          state_labels=args.state_labels,
                                                          add_noise=args.add_noise_data)
-    disk_read_func  = lambda d, i: read_seq_func(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
-                                                 img_scale = args.img_scale, ctrl_type = args.ctrl_type,
+    disk_read_func  = lambda d, i: read_seq_func(d, i, ctrl_type = args.ctrl_type,
                                                  num_ctrl=args.num_ctrl,
-                                                 mesh_ids = args.mesh_ids,
-                                                 compute_bwdflows=args.use_gt_masks,
-                                                 dathreshold=args.da_threshold, dawinsize=args.da_winsize,
-                                                 use_only_da=args.use_only_da_for_flows,
-                                                 noise_func=noise_func,
-                                                 load_color=load_color) # Need BWD flows / masks if using GT masks
+                                                 mesh_ids = args.mesh_ids) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset

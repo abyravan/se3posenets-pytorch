@@ -62,6 +62,8 @@ parser = argparse.ArgumentParser(description='Reactive control using SE3-Pose-Ne
 
 parser.add_argument('--checkpoint', default='', type=str, metavar='PATH', required=True,
                     help='path to saved network to use for training (default: none)')
+parser.add_argument('--use-gt-poses-transnet', action='store_true', default=False,
+                    help='Use transition model trained directly on GT poses (default: False)')
 
 # Problem options
 parser.add_argument('--only-top4-jts', action='store_true', default=False,
@@ -188,20 +190,26 @@ def main():
 
     ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
     ## TODO: Or allow pangolin to change the args later
-
-    modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
-    model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
-                    se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                    input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                    init_posese3_iden=args.init_posese3_iden,
-                    init_transse3_iden=args.init_transse3_iden,
-                    use_wt_sharpening=args.use_wt_sharpening,
-                    sharpen_start_iter=args.sharpen_start_iter,
-                    sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                    decomp_model=args.decomp_model, wide=args.wide_model,
-                    use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                    num_state=args.num_state_net)
-    posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
+    if pargs.use_gt_poses_transnet:
+        model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                         se3_type=args.se3_type, nonlinearity=args.nonlin,
+                                         init_se3_iden=args.init_se3_iden, use_kinchain=args.use_kinchain,
+                                         delta_pivot='', local_delta_se3=False, use_jt_angles=False)
+        posemaskpredfn = None
+    else:
+        modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
+        model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
+                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                        init_posese3_iden=args.init_posese3_iden,
+                        init_transse3_iden=args.init_transse3_iden,
+                        use_wt_sharpening=args.use_wt_sharpening,
+                        sharpen_start_iter=args.sharpen_start_iter,
+                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                        decomp_model=args.decomp_model, wide=args.wide_model,
+                        use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                        num_state=args.num_state_net)
+        posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
     if pargs.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -264,6 +272,9 @@ def main():
     start_angles_all, goal_angles_all = torch.zeros(nexamples, args.num_ctrl), torch.zeros(nexamples, args.num_ctrl)
     gt_ctrls_all, gt_angles_all = torch.zeros(nexamples, pargs.goal_horizon, args.num_ctrl), \
                                   torch.zeros(nexamples, pargs.goal_horizon+1, args.num_ctrl)
+    start_poses_all, goal_poses_all = torch.zeros(nexamples, args.num_se3, 3, 4), \
+                                      torch.zeros(nexamples, args.num_se3, 3, 4)
+    gt_poses_all = torch.zeros(nexamples, pargs.goal_horizon+1, args.num_se3, 3, 4)
     assert(pargs.horizon >= pargs.goal_horizon)
     k = 0
     while (k < nexamples):
@@ -274,7 +285,7 @@ def main():
         sample = dataset[start_id]
 
         # Get joint angles and check if there is reasonable motion
-        jtangles, ctrls = sample['actctrlconfigs'], sample['controls']
+        poses, jtangles, ctrls = sample['poses'], sample['actctrlconfigs'], sample['controls']
         if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
@@ -283,6 +294,8 @@ def main():
         # Save stuff
         start_angles_all[k], goal_angles_all[k] = jtangles[0], jtangles[-1]
         gt_angles_all[k], gt_ctrls_all[k] = jtangles, ctrls
+        start_poses_all[k], goal_poses_all[k] = poses[0], poses[-1]
+        gt_poses_all[k] = poses
 
         # Increment counter
         k += 1
@@ -362,28 +375,33 @@ def main():
         sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
 
-        if args.use_gt_masks: # GT masks are provided!
-            _, start_rlabels = generate_ptcloud(start_angles)
-            _, goal_rlabels  = generate_ptcloud(goal_angles)
-            start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))
-            goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids).type(deftype))
-            start_poses = posemaskpredfn(sinp)
-            goal_poses  = posemaskpredfn(tinp)
+        if args.use_gt_poses_transnet:
+            start_poses = start_poses_all[k].clone()
+            goal_poses = goal_poses_all[k].clone()
         else:
-            start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
-            goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
+            # GT masks or both poses and masks
+            if args.use_gt_masks: # GT masks are provided!
+                _, start_rlabels = generate_ptcloud(start_angles)
+                _, goal_rlabels  = generate_ptcloud(goal_angles)
+                start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))
+                goal_masks  = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids).type(deftype))
+                start_poses = posemaskpredfn(sinp)
+                goal_poses  = posemaskpredfn(tinp)
+            else:
+                start_poses, start_masks = posemaskpredfn(sinp, train_iter=num_train_iter)
+                goal_poses, goal_masks   = posemaskpredfn(tinp, train_iter=num_train_iter)
 
-        # Update poses if there is a center option
-        start_poses, _, _ = ctrlnets.update_pose_centers(sinp[0], start_masks, start_poses, args.pose_center)
-        goal_poses, _, _  = ctrlnets.update_pose_centers(tinp[0], goal_masks, goal_poses, args.pose_center)
+            # Update poses if there is a center option
+            start_poses, _, _ = ctrlnets.update_pose_centers(sinp[0], start_masks, start_poses, args.pose_center)
+            goal_poses, _, _  = ctrlnets.update_pose_centers(tinp[0], goal_masks, goal_poses, args.pose_center)
 
-        # Display the masks as an image summary
-        maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
-                                                         0).cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                               nrow=args.num_se3, normalize=True, range=(0, 1))
-        info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
-        for tag, images in info.items():
-            tblogger.image_summary(tag, images, 0)
+            # Display the masks as an image summary
+            maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
+                                                             0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                                   nrow=args.num_se3, normalize=True, range=(0, 1))
+            info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
+            for tag, images in info.items():
+                tblogger.image_summary(tag, images, 0)
 
         # Init controls
         if pargs.ctrl_init == 'zero':
@@ -463,6 +481,7 @@ def main():
 
         # Model has to be in training mode
         model.train()
+        transmodel = model if pargs.use_gt_poses_transnet else model.transitionmodel
 
         ############
         # Xalglib optimizers
@@ -473,8 +492,8 @@ def main():
             epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
 
             # Create function handle for optimization
-            func = lambda x, y, z: optimize_ctrl(x, y, z, model, start_poses,
-                                                 goal_poses, start_angles, goal_angles, angles[0])
+            func = lambda x, y, z: optimize_ctrl(x, y, z, transmodel, start_poses, goal_poses,
+                                                 start_angles, goal_angles, angles[0])
 
             # Run the optimization
             if pargs.optimizer == 'xalglib_cg':
@@ -513,6 +532,7 @@ def main():
 
             # Save stats and exit
             iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
+                              'start_poses': start_poses, 'goal_poses': goal_poses,
                               'angles': angles, 'ctrls': ctrls_f, 'init_ctrls': ctrls_t,
                               'deg_errors': deg_errors, 'losses': losses})
 
@@ -537,7 +557,7 @@ def main():
                     ctrl = ctrls_v.narrow(0,h,1)
 
                     # Run a forward pass through the network
-                    _, pred_pose = model.transitionmodel([pose, ctrl])
+                    _, pred_pose = transmodel([pose, ctrl])
                     pred_poses_v.append(pred_pose)
 
                     # Compute loss and add to list of losses
@@ -549,7 +569,7 @@ def main():
                 # ============ BWD pass ============#
 
                 # Backward pass & optimize
-                model.zero_grad()  # Zero gradients
+                transmodel.zero_grad()  # Zero gradients
                 zero_gradients(ctrls_v)  # Zero gradients for controls
                 curr_loss_v.backward()  # Compute gradients - BWD pass
                 ctrl_grad = ctrls_v.grad.data.cpu().float()
@@ -588,6 +608,7 @@ def main():
 
             # Save stats and exit
             iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
+                              'start_poses': start_poses, 'goal_poses': goal_poses,
                               'angles': angles, 'ctrls': ctrls,
                               'deg_errors': deg_errors, 'losses': losses})
 
@@ -601,6 +622,9 @@ def main():
     # Save stats across all iterations
     stats = {'args': args, 'pargs': pargs, 'start_angles_all': start_angles_all,
              'goal_angles_all': goal_angles_all, 'iterstats': iterstats, 'finalerrors': final_errors}
+    if pargs.use_gt_poses_transnet:
+        stats['start_poses_all'] = start_poses_all
+        stats['goal_poses_all']  = goal_poses_all
     torch.save(stats, pargs.save_dir + '/planstats.pth.tar')
     sys.stdout = backup
     logfile.close()
@@ -871,7 +895,7 @@ def integrate_ctrls(start_angles, ctrls, dt, pargs):
     return angle_traj
 
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
-def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
+def optimize_ctrl(ctrls, ctrlsgrad, param, transmodel, start_poses, goal_poses,
                   start_angles, goal_angles, init_traj):
     # ============ FWD pass + Compute loss ============#
     # Roll out over the horizon
@@ -887,7 +911,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
         ctrl = ctrls_v.narrow(0, h, 1)
 
         # Run a forward pass through the network
-        _, pred_pose = model.transitionmodel([pose, ctrl])
+        _, pred_pose = transmodel([pose, ctrl])
         pred_poses_v.append(pred_pose)
 
         # Compute loss and add to list of losses
@@ -908,7 +932,7 @@ def optimize_ctrl(ctrls, ctrlsgrad, param, model, start_poses, goal_poses,
     # ============ BWD pass ============#
 
     # Backward pass & optimize
-    model.zero_grad()  # Zero gradients
+    transmodel.zero_grad()  # Zero gradients
     zero_gradients(ctrls_v)  # Zero gradients for controls
     curr_loss_v.backward()  # Compute gradients - BWD pass
     ctrl_grad = ctrls_v.grad.data.cpu().float()

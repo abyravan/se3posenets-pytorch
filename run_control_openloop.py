@@ -166,7 +166,7 @@ def main():
 
     # BWDs compatibility
     if pargs.use_gt_poses_transnet:
-        args.step_len = 2
+        args.step_len, args.img_suffix = 2, 'sub'
         args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
         args.train_per, args.val_per = 0.6, 0.15
         args.ctrl_type = 'actdiffvel'

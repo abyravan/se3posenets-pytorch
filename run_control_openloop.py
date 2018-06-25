@@ -396,6 +396,10 @@ def main():
         if pargs.use_gt_poses_transnet:
             start_poses = start_poses_all[k].clone()
             goal_poses = goal_poses_all[k].clone()
+            _, start_rlabels = generate_ptcloud(start_angles)
+            _, goal_rlabels = generate_ptcloud(goal_angles)
+            start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))
+            goal_masks = util.to_var(compute_masks_from_labels(goal_rlabels, args.mesh_ids).type(deftype))
         else:
             # GT masks or both poses and masks
             if args.use_gt_masks: # GT masks are provided!
@@ -413,13 +417,13 @@ def main():
             start_poses, _, _ = ctrlnets.update_pose_centers(sinp[0], start_masks, start_poses, args.pose_center)
             goal_poses, _, _  = ctrlnets.update_pose_centers(tinp[0], goal_masks, goal_poses, args.pose_center)
 
-            # Display the masks as an image summary
-            maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
-                                                             0).cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                                   nrow=args.num_se3, normalize=True, range=(0, 1))
-            info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
-            for tag, images in info.items():
-                tblogger.image_summary(tag, images, 0)
+        # Display the masks as an image summary
+        maskdisp = torchvision.utils.make_grid(torch.cat([start_masks.data, goal_masks.data],
+                                                         0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                               nrow=args.num_se3, normalize=True, range=(0, 1))
+        info = {'start/goal masks': util.to_np(maskdisp.narrow(0, 0, 1))}
+        for tag, images in info.items():
+            tblogger.image_summary(tag, images, 0)
 
         # Init controls
         if pargs.ctrl_init == 'zero':

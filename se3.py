@@ -1,6 +1,47 @@
 import torch
 
-## COMPOSE SE2RT Pair
+########### SE3ToRt
+# Takes in B x N x ndim and returns a B x N x 3 x (4 or 5) tensor (R|t|[optional pivot]).
+# Allowed SE3 types are se3affine, se3aa, se3quat
+def SE3ToRt(se3, se3type, use_pivot):
+    # Check dimensions
+    assert(se3type in ['se3affine', 'se3aa', 'se3quat'])
+    npivot = 3 if (use_pivot) else 0
+    if (se3type == 'se3affine'):
+        assert (se3.size(-1) == 12 + npivot)
+    elif se3type == 'se3aa':
+        assert (se3.size(-1) == 6 + npivot)
+    elif se3type == 'se3quat':
+        assert (se3.size(-1) == 7 + npivot)
+
+    # Shape data
+    bsz, nse3, ndim = se3.size() # 3D
+    N = bsz * nse3
+    se3v = se3.view(-1, ndim)
+
+    # Switch based on type
+    if se3type == 'se3affine':
+        ncols = 4 if use_pivot else 5
+        return se3.view(bsz, nse3, 3, ncols).contiguous()
+    else:
+        # Get translation & quaternion (convert AA to quat)
+        if se3type == 'se3aa':
+            se3q = SE3AxisAngleToSE3Quat(se3v.narrow(-1, 0, 6))# First 6 dims
+            trans, quat = se3q.narrow(1, 0, 3).view(N, 3, 1), se3q.narrow(1, 3, 4) # N x 3 x 1, N x 4
+        else:
+            trans, quat = se3v.narrow(1, 0, 3).view(N, 3, 1), se3v.narrow(1, 3, 4) # N x 3 x 1, N x 4
+        # Convert quat to rotation matrix
+        unitquat = QuaternionNormalize(quat) # N x 4
+        rot      = UnitQuaternionToRotationMatrix(unitquat) # N x 3 x 3
+        # Concat trans & optional pivot and return
+        if use_pivot:
+            pivot = se3v.narrow(1, ndim-3, 3).view(N, 3, 1) # N x 3 x 1
+            return torch.cat([rot, trans, pivot], 2).view(bsz, nse3, 3, 5).contiguous()
+        else:
+            return torch.cat([rot, trans], 2).view(bsz, nse3, 3, 4).contiguous()
+
+########### R|t REPRESENTATION
+## COMPOSE SE3RT Pair
 def ComposeRtPair(A, B):
     # Check dimensions
     _, _, num_rows, num_cols = A.size()
@@ -18,7 +59,7 @@ def ComposeRtPair(A, B):
     t = torch.baddbmm(tA, rA, tB)
     return torch.cat([r, t], 2).view_as(A).contiguous()
 
-## SE2RT INVERSE
+## SE3RT INVERSE
 def RtInverse(input):
     # Check dimensions
     bsz, nse3, nrows, ncols = input.size()
@@ -32,7 +73,7 @@ def RtInverse(input):
     t_o = torch.bmm(r_o, t).mul(-1)
     return torch.cat([r_o, t_o], 2).view_as(input).contiguous()
 
-## COMPOSE SE2RT Pair
+## COMPOSE SE3RT Pair
 def CollapseRtPivots(input):
     # Check dimensions
     bsz, nse3, nrows, ncols = input.size()
@@ -57,6 +98,39 @@ def CollapseRtPivots(input):
 #     return torch.cat([row1, row2], 1).view(N,2,2).contiguous()
 
 ########### QUATERNION REPRESENTATION
+## Quaternion to rotation matrix
+# Compute the rotation matrix R from a set of unit-quaternions (N x 4):
+# From: http://www.tech.plymouth.ac.uk/sme/springerusv/2011/publications_files/Terzakis%20et%20al%202012,%20A%20Recipe%20on%20the%20Parameterization%20of%20Rotation%20Matrices...MIDAS.SME.2012.TR.004.pdf (Eqn 9)
+def UnitQuaternionToRotationMatrix(unitquat):
+    # Init memory
+    N = unitquat.size(0)
+    assert(unitquat.size(1) == 4 and unitquat.dim() == 2)
+
+    # Get quaternion elements. Quat = [qx,qy,qz,qw] with the scalar at the rear
+    x, y, z, w = unitquat.view(N,4,1).split(1,1) # N x 1 x 1
+    x2, y2, z2, w2 = x * x, y * y, z * z, w * w
+
+    # Row 0
+    r00 = w2 + x2 - y2 - z2  # rot(0,0) = w^2 + x^2 - y^2 - z^2
+    r01 = 2 * (x * y - w * z)  # rot(0,1) = 2*x*y - 2*w*z
+    r02 = 2 * (x * z + w * y)  # rot(0,2) = 2*x*z + 2*w*y
+    row0 = torch.cat([r00, r01, r02], 2) # N x 1 x 3
+
+    # Row 1
+    r10 = 2 * (x * y + w * z)  # rot(1,0) = 2*x*y + 2*w*z
+    r11 = w2 - x2 + y2 - z2  # rot(1,1) = w^2 - x^2 + y^2 - z^2
+    r12 = 2 * (y * z - w * x)  # rot(1,2) = 2*y*z - 2*w*x
+    row1 = torch.cat([r10, r11, r12], 2) # N x 1 x 3
+
+    # Row 2
+    r20 = 2 * (x * z - w * y)  # rot(2,0) = 2*x*z - 2*w*y
+    r21 = 2 * (y * z + w * x)  # rot(2,1) = 2*y*z + 2*w*x
+    r22 = w2 - x2 - y2 + z2  # rot(2,2) = w^2 - x^2 - y^2 + z^2
+    row2 = torch.cat([r20, r21, r22], 2) # N x 1 x 3
+
+    # Return
+    return torch.cat([row0, row1, row2], 1) # N x 3 x 3
+
 ## Quaternion product (q1 * q2)
 def QuaternionProduct(q1, q2):
     # Check dimensions

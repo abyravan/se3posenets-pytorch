@@ -434,21 +434,21 @@ class MultiStepSE3PoseModel(nn.Module):
     def forward_only_pose(self, x):
         ptcloud, jtangles = x
         inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
-        if self.decomp_model:
-            return self.posemodel(inp)
-        else:
-            return self.posemaskmodel(inp, predict_masks=False) # returns only pose
+        #if self.decomp_model:
+        #    return self.posemodel(inp)
+        #else:
+        return self.posemaskmodel(inp, predict_masks=False) # returns only pose
 
     # Predict both pose and mask
     def forward_pose_mask(self, x, train_iter=0):
         ptcloud, jtangles = x
         inp = [ptcloud, jtangles] if self.use_jt_angles else ptcloud
-        if self.decomp_model:
-            pose = self.posemodel(inp)
-            mask = self.maskmodel(ptcloud, train_iter=train_iter)
-            return pose, mask
-        else:
-            return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
+        #if self.decomp_model:
+        #    pose = self.posemodel(inp)
+        #    mask = self.maskmodel(ptcloud, train_iter=train_iter)
+        #    return pose, mask
+        #else:
+        return self.posemaskmodel(inp, train_iter=train_iter, predict_masks=True) # Predict both
 
     # Predict next pose based on current pose and control
     def forward_next_pose(self, pose, ctrl, jtangles=None, pivots=None):

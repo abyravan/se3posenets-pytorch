@@ -394,8 +394,8 @@ def main():
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
 
         if pargs.use_gt_poses_transnet:
-            start_poses = start_poses_all[k].clone()
-            goal_poses = goal_poses_all[k].clone()
+            start_poses = util.to_var(start_poses_all[k].clone().type(deftype))
+            goal_poses = util.to_var(goal_poses_all[k].clone().type(deftype))
             _, start_rlabels = generate_ptcloud(start_angles)
             _, goal_rlabels = generate_ptcloud(goal_angles)
             start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))
@@ -554,7 +554,7 @@ def main():
 
             # Save stats and exit
             iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
-                              'start_poses': start_poses, 'goal_poses': goal_poses,
+                              'start_poses': start_poses.data.cpu(), 'goal_poses': goal_poses.data.cpu(),
                               'angles': angles, 'ctrls': ctrls_f, 'init_ctrls': ctrls_t,
                               'deg_errors': deg_errors, 'losses': losses})
 
@@ -630,7 +630,7 @@ def main():
 
             # Save stats and exit
             iterstats.append({'start_angles': start_angles, 'goal_angles': goal_angles,
-                              'start_poses': start_poses, 'goal_poses': goal_poses,
+                              'start_poses': start_poses.data.cpu(), 'goal_poses': goal_poses.data.cpu(),
                               'angles': angles, 'ctrls': ctrls,
                               'deg_errors': deg_errors, 'losses': losses})
 

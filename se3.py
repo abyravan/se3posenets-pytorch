@@ -27,15 +27,15 @@ def SE3ToRt(se3, se3type, use_pivot):
         # Get translation & quaternion (convert AA to quat)
         if se3type == 'se3aa':
             se3q = SE3AxisAngleToSE3Quat(se3v.narrow(-1, 0, 6))# First 6 dims
-            trans, quat = se3q.narrow(1, 0, 3).view(N, 3, 1), se3q.narrow(1, 3, 4) # N x 3 x 1, N x 4
+            trans, quat = se3q.unsqueeze(-1).narrow(1, 0, 3), se3q.narrow(1, 3, 4) # N x 3 x 1, N x 4
         else:
-            trans, quat = se3v.narrow(1, 0, 3).view(N, 3, 1), se3v.narrow(1, 3, 4) # N x 3 x 1, N x 4
+            trans, quat = se3v.unsqueeze(-1).narrow(1, 0, 3), se3v.narrow(1, 3, 4) # N x 3 x 1, N x 4
         # Convert quat to rotation matrix
         unitquat = QuaternionNormalize(quat) # N x 4
         rot      = UnitQuaternionToRotationMatrix(unitquat) # N x 3 x 3
         # Concat trans & optional pivot and return
         if use_pivot:
-            pivot = se3v.narrow(1, ndim-3, 3).view(N, 3, 1) # N x 3 x 1
+            pivot = se3v.unsqueeze(-1).narrow(1, ndim-3, 3) # N x 3 x 1
             return torch.cat([rot, trans, pivot], 2).view(bsz, nse3, 3, 5).contiguous()
         else:
             return torch.cat([rot, trans], 2).view(bsz, nse3, 3, 4).contiguous()

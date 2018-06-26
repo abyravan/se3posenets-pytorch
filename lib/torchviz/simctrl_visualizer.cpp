@@ -1658,22 +1658,22 @@ void SimCtrlViz::render_pose(const float *config,
 
         // === Save the SE3
         // Save r0
-        currpose[k*12 + 0] = se3.r0.w;
-        currpose[k*12 + 1] = se3.r0.x;
-        currpose[k*12 + 2] = se3.r0.y;
-        currpose[k*12 + 3] = se3.r0.z;
+        currpose[0] = se3.r0.x;
+        currpose[1] = se3.r0.y;
+        currpose[2] = se3.r0.z;
+        currpose[3] = se3.r0.w;
 
         // Save r1
-        currpose[k*12 + 4] = se3.r1.w;
-        currpose[k*12 + 5] = se3.r1.x;
-        currpose[k*12 + 6] = se3.r1.y;
-        currpose[k*12 + 7] = se3.r1.z;
+        currpose[4] = se3.r1.x;
+        currpose[5] = se3.r1.y;
+        currpose[6] = se3.r1.z;
+        currpose[7] = se3.r1.w;
 
         // Save r2
-        currpose[k*12 + 8]  = se3.r2.w;
-        currpose[k*12 + 9]  = se3.r2.x;
-        currpose[k*12 + 10] = se3.r2.y;
-        currpose[k*12 + 11] = se3.r2.z;
+        currpose[8]  = se3.r2.x;
+        currpose[9]  = se3.r2.y;
+        currpose[10] = se3.r2.z;
+        currpose[11] = se3.r2.w;
     }
 
     // Unlock

@@ -310,7 +310,6 @@ def main():
         gl_poses = generate_poses(jtangles[-1], args.mesh_ids, args.cam_extrinsics[0]['modelView'])
         print('ST', (st_poses[0] - poses[0]).abs().mean(), (st_poses[0] - poses[0]).abs().max())
         print('GL', (gl_poses[0] - poses[-1]).abs().mean(), (gl_poses[0] - poses[-1]).abs().max())
-
         if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
@@ -1013,8 +1012,7 @@ def generate_poses(config, mesh_ids, model_view, nposes=50):
     allposes = torch.FloatTensor(1, nposes, 3, 4).zero_()
     nposes_i = torch.IntTensor(1)
     pangolin.render_pose(config_f.numpy(), allposes[0].numpy(), nposes_i.numpy())
-    print(nposes_i)
-    
+
     # Get the correct poses (based on mesh ids)
     num_meshes = mesh_ids.nelement()  # Num meshes
     poses    = torch.FloatTensor(1, num_meshes+1, 3, 4).zero_()
@@ -1023,7 +1021,7 @@ def generate_poses(config, mesh_ids, model_view, nposes=50):
         meshid = mesh_ids[j]
         # Transform using modelview matrix
         tfm = torch.eye(4)
-        tfm[0:3,:] = allposes[0][meshid][0:3,:]
+        tfm[0:3,:] = allposes[0][meshid-1][0:3,:] # meshid is 1-indexed, assumes that 0 is BG
         se3tfm = torch.mm(model_view, tfm)  # NOTE: Do matrix multiply, not * (cmul) here
         poses[0,j+1] = se3tfm[0:3,:]  # 3 x 4 transform
     return poses.type_as(config)

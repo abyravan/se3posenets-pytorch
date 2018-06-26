@@ -527,7 +527,7 @@ def main():
         if pargs.optimizer.find('xalglib') != -1:
             # Setup params
             ctrlstate = list(ctrls_t.view(-1).clone().numpy())
-            epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
+            epsg, epsf, epsx, maxits = 1e-4, 1e-4, 0, pargs.max_iter
 
             # Create function handle for optimization
             if pargs.use_gt_dynamics:

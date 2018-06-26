@@ -950,12 +950,12 @@ def optimize_gtpose_ctrl(ctrls, ctrlgrad, param, start_angles, goal_angles,
     ##### Do finite differencing across the controls to get gradients
     for j in xrange(len(ctrls)):
         # Get loss and gradient: (f(x+eps) - f(x-eps)) / 2*eps
-        ctrls[j] += pargs.pd_eps
+        ctrls[j] += pargs.fd_eps
         loss_a, _, _ = compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view)
-        ctrls[j] -= 2*pargs.pd_eps
+        ctrls[j] -= 2*pargs.fd_eps
         loss_b, _, _ = compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view)
-        ctrlgrad[j] = (loss_a - loss_b) / (2*pargs.pd_eps)
-        ctrls[j] += pargs.pd_eps
+        ctrlgrad[j] = (loss_a - loss_b) / (2*pargs.fd_eps)
+        ctrls[j] += pargs.fd_eps
 
     ##### Get the loss for the input ctrls
     total_loss, pose_loss, ctrl_loss, angle_traj = \

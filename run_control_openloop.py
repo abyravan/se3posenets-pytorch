@@ -962,12 +962,8 @@ def optimize_gtpose_ctrl(ctrls, param, start_angles, goal_angles,
     # Do forward integration of the ctrls
     pose_loss, pose_iter_loss = 0, torch.zeros(pargs.horizon)
     ctrls_v = torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype)
-    angle_traj = torch.zeros(pargs.horizon+1, start_angles.nelement())
-    angle_traj[0] = start_angles
+    angle_traj = integrate_ctrls(start_angles, ctrls_v, dt*args.step_len, pargs)
     for h in xrange(pargs.horizon):
-        # Get joint angles @ t
-        angle_traj[h+1] = angle_traj[h] + (ctrls_v[h] * dt)
-
         # Get poses
         pred_poses = generate_poses(angle_traj[h+1], mesh_ids, model_view)
 

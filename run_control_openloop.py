@@ -544,7 +544,10 @@ def main():
                     state = xalglib.mincgcreate(ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.mincgsetcond(state, epsg, epsf, epsx, maxits)
-                xalglib.mincgoptimize_g(state, func)
+                if pargs.use_gt_dynamics:
+                    xalglib.mincgoptimize_f(state, func)
+                else:
+                    xalglib.mincgoptimize_g(state, func)
                 ctrlstate, rep = xalglib.mincgresults(state)
             elif pargs.optimizer == 'xalglib_lbfgs':
                 # Setup CG optimizer
@@ -554,7 +557,10 @@ def main():
                     state = xalglib.minlbfgscreate(5, ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits)
-                xalglib.minlbfgsoptimize_g(state, func)
+                if pargs.use_gt_dynamics:
+                    xalglib.minlbfgsoptimize_f(state, func)
+                else:
+                    xalglib.minlbfgsoptimize_g(state, func)
                 ctrlstate, rep = xalglib.minlbfgsresults(state)
             else:
                 assert(False)

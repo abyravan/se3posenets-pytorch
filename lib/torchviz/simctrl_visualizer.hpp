@@ -210,6 +210,9 @@ class SimCtrlViz
         void render_arm(const float *config,
                         float *rendered_ptcloud,
                         float *rendered_labels);
+        void render_pose(const float *config,
+                         float *poses,
+                         int *nposes);
         void compute_gt_da(const float *input_jts,
                            const float *target_jts,
                            const int winsize,

@@ -1622,6 +1622,64 @@ void SimCtrlViz::render_arm(const float *config,
     update_lock.unlock();
 }
 
+void SimCtrlViz::render_pose(const float *config,
+                             float *poses,
+                             int *nposes)
+{
+    // Copy over the data and render
+    boost::mutex::scoped_lock render_lock(data->renderMutex);
+
+    // Set the render params
+    memcpy(data->render_jts, config, 7 * sizeof(float));
+    data->render = true;
+
+    // Finished setting data
+    render_lock.unlock();
+
+    // Wait till the image is rendered
+    while(data->render)
+    {
+        usleep(1000);
+    }
+
+    // Update lock
+    boost::mutex::scoped_lock update_lock(data->dataMutex);
+
+    // Update curr jt angles
+    memcpy(data->curr_jts, config, 7*sizeof(float));
+
+    // Copy to output
+    nposes[0] = data->mesh_transforms.size(); // Save num poses
+    for(int k = 0; k < data->mesh_transforms.size(); k++)
+    {
+        // Get current pose
+        float *currpose = &(poses[k*12]); // 12 values per pose
+        const dart::SE3 se3 = data->mesh_transforms[k];
+
+        // === Save the SE3
+        // Save r0
+        currpose[k*12 + 0] = se3.r0.w;
+        currpose[k*12 + 1] = se3.r0.x;
+        currpose[k*12 + 2] = se3.r0.y;
+        currpose[k*12 + 3] = se3.r0.z;
+
+        // Save r1
+        currpose[k*12 + 4] = se3.r1.w;
+        currpose[k*12 + 5] = se3.r1.x;
+        currpose[k*12 + 6] = se3.r1.y;
+        currpose[k*12 + 7] = se3.r1.z;
+
+        // Save r2
+        currpose[k*12 + 8]  = se3.r2.w;
+        currpose[k*12 + 9]  = se3.r2.x;
+        currpose[k*12 + 10] = se3.r2.y;
+        currpose[k*12 + 11] = se3.r2.z;
+    }
+
+    // Unlock
+    update_lock.unlock();
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////
 /// === SHOW PREDICTIONS VS GRADIENTS
 

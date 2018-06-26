@@ -19,6 +19,9 @@ cdef extern from "simctrlviz.hpp":
         void render_arm(const float *config,
                         float *rendered_ptcloud,
                         float *rendered_labels);
+        void render_pose(const float *config,
+                         float *poses,
+                         int *nposes);
         void compute_gt_da(const float *input_jts,
                            const float *target_jts,
                            const int winsize,
@@ -74,6 +77,14 @@ cdef class PySimCtrlViz:
         self.simctrlviz.render_arm(&config[0],
                                  &ptcloud[0,0,0],
                                  &labels[0,0,0])
+
+    def render_pose(self, np.ndarray[np.float32_t, ndim=1] config,
+                          np.ndarray[np.float32_t, ndim=3] poses,
+                          np.ndarray[np.int64_t, ndim=1] nposes):
+        # Run CPP code
+        self.simctrlviz.render_pose(&config[0],
+                                  &poses[0,0,0],
+                                  &nposes[0])
 
     def compute_gt_da(self, np.ndarray[np.float32_t, ndim=1] config1,
                             np.ndarray[np.float32_t, ndim=1] config2,

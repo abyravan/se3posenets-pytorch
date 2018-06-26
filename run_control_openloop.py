@@ -394,8 +394,8 @@ def main():
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
 
         if pargs.use_gt_poses_transnet:
-            start_poses = util.to_var(start_poses_all[k].clone().type(deftype))
-            goal_poses = util.to_var(goal_poses_all[k].clone().type(deftype))
+            start_poses = util.to_var(start_poses_all[k:k+1].clone().type(deftype))
+            goal_poses = util.to_var(goal_poses_all[k:k+1].clone().type(deftype))
             _, start_rlabels = generate_ptcloud(start_angles)
             _, goal_rlabels = generate_ptcloud(goal_angles)
             start_masks = util.to_var(compute_masks_from_labels(start_rlabels, args.mesh_ids).type(deftype))

@@ -531,9 +531,9 @@ def main():
 
             # Create function handle for optimization
             if pargs.use_gt_dynamics:
-                func = lambda x, z: optimize_gtpose_ctrl(x, z, start_angles, goal_angles,
-                                                         angles[0], args.mesh_ids,
-                                                         args.cam_extrinsics[0]['modelView'])
+                func = lambda x, y, z: optimize_gtpose_ctrl(x, y, z, start_angles, goal_angles,
+                                                            angles[0], args.mesh_ids,
+                                                            args.cam_extrinsics[0]['modelView'])
             else:
                 func = lambda x, y, z: optimize_ctrl(x, y, z, transmodel, start_poses, goal_poses,
                                                      start_angles, goal_angles, angles[0])
@@ -541,29 +541,17 @@ def main():
             # Run the optimization
             if pargs.optimizer == 'xalglib_cg':
                 # Setup CG optimizer
-                if pargs.use_gt_dynamics:
-                    state = xalglib.mincreatef(ctrlstate, pargs.fd_eps)
-                else:
-                    state = xalglib.mincgcreate(ctrlstate)
+                state = xalglib.mincgcreate(ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.mincgsetcond(state, epsg, epsf, epsx, maxits)
-                if pargs.use_gt_dynamics:
-                    xalglib.mincgoptimize_f(state, func)
-                else:
-                    xalglib.mincgoptimize_g(state, func)
+                xalglib.mincgoptimize_g(state, func)
                 ctrlstate, rep = xalglib.mincgresults(state)
             elif pargs.optimizer == 'xalglib_lbfgs':
                 # Setup CG optimizer
-                if pargs.use_gt_dynamics:
-                    state = xalglib.minlbfgscreatef(5, ctrlstate, pargs.fd_eps)
-                else:
-                    state = xalglib.minlbfgscreate(5, ctrlstate)
+                state = xalglib.minlbfgscreate(5, ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits)
-                if pargs.use_gt_dynamics:
-                    xalglib.minlbfgsoptimize_f(state, func)
-                else:
-                    xalglib.minlbfgsoptimize_g(state, func)
+                xalglib.minlbfgsoptimize_g(state, func)
                 ctrlstate, rep = xalglib.minlbfgsresults(state)
             else:
                 assert(False)
@@ -952,34 +940,26 @@ def integrate_ctrls(start_angles, ctrls, dt, pargs):
 
 ############
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
-def optimize_gtpose_ctrl(ctrls, param, start_angles, goal_angles,
+def optimize_gtpose_ctrl(ctrls, ctrlgrad, param, start_angles, goal_angles,
                          init_traj, mesh_ids, model_view):
     # ============ Rollout control trajectory to get jt angles, do FK ============#
     # Generate start and goal poses
     start_poses = generate_poses(start_angles, mesh_ids, model_view)
     goal_poses  = generate_poses(goal_angles, mesh_ids, model_view)
 
-    # Do forward integration of the ctrls
-    pose_loss, pose_iter_loss = 0, torch.zeros(pargs.horizon)
-    ctrls_v = torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype)
-    angle_traj = integrate_ctrls(start_angles, ctrls_v, dt*args.step_len, pargs)
-    for h in xrange(pargs.horizon):
-        # Get poses
-        pred_poses = generate_poses(angle_traj[h+1], mesh_ids, model_view)
+    ##### Do finite differencing across the controls to get gradients
+    for j in xrange(len(ctrls)):
+        # Get loss and gradient: (f(x+eps) - f(x-eps)) / 2*eps
+        ctrls[j] += pargs.pd_eps
+        loss_a, _, _ = compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view)
+        ctrls[j] -= 2*pargs.pd_eps
+        loss_b, _, _ = compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view)
+        ctrlgrad[j] = (loss_a - loss_b) / (2*pargs.pd_eps)
+        ctrls[j] += pargs.pd_eps
 
-        # Compute loss and add to list of losses
-        if h > 0.75 * pargs.horizon:
-            loss = pargs.loss_wt * ctrlnets.BiMSELoss(pred_poses, goal_poses)
-            # loss = pargs.loss_wt * ctrlnets.BiAbsLoss(pred_pose, goal_pose_v) * ((h+1.) / pargs.horizon)
-            pose_loss += loss
-            pose_iter_loss[h] = loss
-
-    # Add a control smoothness cost
-    ctrl_vel = (ctrls_v[1:] - ctrls_v[:-1]) / (dt * args.step_len)
-    ctrl_loss = pargs.smooth_wt * ctrl_vel.pow(2).mean()
-
-    # Add losses together
-    total_loss = pose_loss + ctrl_loss
+    ##### Get the loss for the input ctrls
+    total_loss, pose_loss, ctrl_loss, angle_traj = \
+        compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view)
 
     # ============ For visualization only ============#
     # Print losses and errors
@@ -1001,6 +981,30 @@ def optimize_gtpose_ctrl(ctrls, param, start_angles, goal_angles,
 
     # Return loss and gradients
     return total_loss
+
+def compute_gtpose_loss(ctrls, start_angles, goal_poses, mesh_ids, model_view):
+    # Do forward integration of the ctrls
+    pose_loss, pose_iter_loss = 0, torch.zeros(pargs.horizon)
+    ctrls_v = torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype)
+    angle_traj = integrate_ctrls(start_angles, ctrls_v, dt * args.step_len, pargs)
+    for h in xrange(pargs.horizon):
+        # Get poses
+        pred_poses = generate_poses(angle_traj[h + 1], mesh_ids, model_view)
+
+        # Compute loss and add to list of losses
+        if h > 0.75 * pargs.horizon:
+            loss = pargs.loss_wt * ctrlnets.BiMSELoss(pred_poses, goal_poses)
+            # loss = pargs.loss_wt * ctrlnets.BiAbsLoss(pred_pose, goal_pose_v) * ((h+1.) / pargs.horizon)
+            pose_loss += loss
+            pose_iter_loss[h] = loss
+
+    # Add a control smoothness cost
+    ctrl_vel = (ctrls_v[1:] - ctrls_v[:-1]) / (dt * args.step_len)
+    ctrl_loss = pargs.smooth_wt * ctrl_vel.pow(2).mean()
+
+    # Add losses together
+    total_loss = pose_loss + ctrl_loss
+    return total_loss, pose_loss, ctrl_loss, angle_traj
 
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
 def optimize_ctrl(ctrls, ctrlsgrad, param, transmodel, start_poses, goal_poses,

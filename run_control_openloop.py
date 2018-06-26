@@ -148,7 +148,10 @@ def main():
         torch.cuda.manual_seed(pargs.seed)
 
     # Default tensor type
-    deftype = 'torch.cuda.FloatTensor' if pargs.cuda else 'torch.FloatTensor' # Default tensor type
+    if pargs.use_gt_dynamics:
+        deftype = 'torch.FloatTensor'
+    else:
+        deftype = 'torch.cuda.FloatTensor' if pargs.cuda else 'torch.FloatTensor' # Default tensor type
     pargs.deftype = deftype
 
     ########################

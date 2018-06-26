@@ -82,10 +82,9 @@ cdef class PySimCtrlViz:
                           np.ndarray[np.float32_t, ndim=3] poses,
                           np.ndarray[int, ndim=1, mode="c"] nposes):
         # Run CPP code
-        nposes_c = np.ascontiguousarray(nposes, dtype=ctypes.c_int)
         self.simctrlviz.render_pose(&config[0],
                                   &poses[0,0,0],
-                                  &nposes_c[0])
+                                  &nposes[0])
 
     def compute_gt_da(self, np.ndarray[np.float32_t, ndim=1] config1,
                             np.ndarray[np.float32_t, ndim=1] config2,

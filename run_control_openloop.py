@@ -1010,10 +1010,11 @@ def generate_poses(config, mesh_ids, model_view, nposes=50):
     # Render the config & get the poses
     assert(not util.is_var(config))
     config_f = config.view(-1).clone().float()
-    allposes = torch.FloatTensor(1, nposes, 3, 4)
+    allposes = torch.FloatTensor(1, nposes, 3, 4).zero_()
     nposes_i = torch.IntTensor(1)
     pangolin.render_pose(config_f.numpy(), allposes[0].numpy(), nposes_i.numpy())
-
+    print(nposes_i)
+    
     # Get the correct poses (based on mesh ids)
     num_meshes = mesh_ids.nelement()  # Num meshes
     poses    = torch.FloatTensor(1, num_meshes+1, 3, 4).zero_()

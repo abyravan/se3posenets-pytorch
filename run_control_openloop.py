@@ -66,6 +66,10 @@ parser.add_argument('--args-checkpoint', default='', type=str, metavar='PATH', r
                     help='path to saved network to use for loading arguments (default: none)')
 parser.add_argument('--use-gt-poses-transnet', action='store_true', default=False,
                     help='Use transition model trained directly on GT poses (default: False)')
+parser.add_argument('--use-gt-dynamics', action='store_true', default=False,
+                    help='Use GT dynamics for control (default: False)')
+parser.add_argument('--fd-eps', default=1e-4, type=float, metavar='EPS',
+                    help='Finite difference epsilon (default: 1e-4)')
 
 # Problem options
 parser.add_argument('--only-top4-jts', action='store_true', default=False,
@@ -149,96 +153,104 @@ def main():
 
     ########################
     ############ Load pre-trained network
-
-    # Load data from checkpoint
-    # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
-    if os.path.isfile(pargs.checkpoint):
-        print("=> loading checkpoint '{}'".format(pargs.checkpoint))
-        checkpoint   = torch.load(pargs.checkpoint)
-        args         = checkpoint['args']
-        try:
-            num_train_iter = checkpoint['num_train_iter']
-        except:
-            num_train_iter = checkpoint['epoch'] * args.train_ipe
-        print("=> loaded checkpoint (epoch: {}, num train iter: {})"
-              .format(checkpoint['epoch'], num_train_iter))
-    else:
-        print("=> no checkpoint found at '{}'".format(pargs.checkpoint))
-        raise RuntimeError
-
-    # BWDs compatibility
-    if pargs.use_gt_poses_transnet:
-        checkpoint1 = torch.load(pargs.args_checkpoint) # For loading arguments
-        args_1 = checkpoint1['args']
-        args.step_len, args.img_suffix = 2, 'sub'
-        args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
-        args.train_per, args.val_per = 0.6, 0.15
-        args.ctrl_type = 'actdiffvel'
-        args.cam_intrinsics = args_1.cam_intrinsics
-        args.cam_extrinsics = args_1.cam_extrinsics
-        args.ctrl_ids       = args_1.ctrl_ids
-        args.state_labels   = args_1.state_labels
-        args.add_noise_data = args_1.add_noise_data
-        args.mesh_ids = args_1.mesh_ids
-        args.da_winsize = args_1.da_winsize
-        args.da_threshold = args_1.da_threshold
-        args.use_only_da_for_flows = args_1.use_only_da_for_flows
-    if not hasattr(args, "use_gt_masks"):
-        args.use_gt_masks, args.use_gt_poses = False, False
-    if not hasattr(args, "num_state"):
-        args.num_state = args.num_ctrl
-    if not hasattr(args, "use_gt_angles"):
-        args.use_gt_angles, args.use_gt_angles_trans = False, False
-    if not hasattr(args, "num_state"):
-        args.num_state = 7
-    if not hasattr(args, "mean_dt"):
-        args.mean_dt = args.step_len * (1.0/30.0)
-        args.std_dt  = 0.005 # Default params
-    if not hasattr(args, "delta_pivot"):
-        args.delta_pivot = ''
-    if not hasattr(args, "pose_center"):
-        args.pose_center = 'pred'
-
-    if not hasattr(args, "use_full_jt_angles"):
-        args.use_full_jt_angles = True
-    if args.use_full_jt_angles:
-        args.num_state_net = args.num_state
-    else:
-        args.num_state_net = args.num_ctrl
-
-    ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
-    ## TODO: Or allow pangolin to change the args later
-    if pargs.use_gt_poses_transnet:
-        model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                                         se3_type=args.se3_type, nonlinearity=args.nonlin,
-                                         init_se3_iden=args.init_se3_iden, use_kinchain=args.use_kinchain,
-                                         delta_pivot='', local_delta_se3=False, use_jt_angles=False)
+    if pargs.use_gt_dynamics:
+        assert(not pargs.use_gt_poses_transnet)
+        if os.path.isfile(pargs.args_checkpoint):
+            checkpoint = torch.load(pargs.args_checkpoint)  # For loading arguments
+            args = checkpoint['args']
+        else:
+            assert(False)
         posemaskpredfn = None
     else:
-        modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
-        model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
-                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                        input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                        init_posese3_iden=args.init_posese3_iden,
-                        init_transse3_iden=args.init_transse3_iden,
-                        use_wt_sharpening=args.use_wt_sharpening,
-                        sharpen_start_iter=args.sharpen_start_iter,
-                        sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                        decomp_model=args.decomp_model, wide=args.wide_model,
-                        use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                        num_state=args.num_state_net)
-        posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
-    if pargs.cuda:
-        model.cuda() # Convert to CUDA if enabled
+        # Load data from checkpoint
+        # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
+        if os.path.isfile(pargs.checkpoint):
+            print("=> loading checkpoint '{}'".format(pargs.checkpoint))
+            checkpoint   = torch.load(pargs.checkpoint)
+            args         = checkpoint['args']
+            try:
+                num_train_iter = checkpoint['num_train_iter']
+            except:
+                num_train_iter = checkpoint['epoch'] * args.train_ipe
+            print("=> loaded checkpoint (epoch: {}, num train iter: {})"
+                  .format(checkpoint['epoch'], num_train_iter))
+        else:
+            print("=> no checkpoint found at '{}'".format(pargs.checkpoint))
+            raise RuntimeError
 
-    # Update parameters from trained network
-    try:
-        model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)
-    except:
-        model.load_state_dict(checkpoint['model_state_dict'])
+        # BWDs compatibility
+        if pargs.use_gt_poses_transnet:
+            checkpoint1 = torch.load(pargs.args_checkpoint) # For loading arguments
+            args_1 = checkpoint1['args']
+            args.step_len, args.img_suffix = 2, 'sub'
+            args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
+            args.train_per, args.val_per = 0.6, 0.15
+            args.ctrl_type = 'actdiffvel'
+            args.cam_intrinsics = args_1.cam_intrinsics
+            args.cam_extrinsics = args_1.cam_extrinsics
+            args.ctrl_ids       = args_1.ctrl_ids
+            args.state_labels   = args_1.state_labels
+            args.add_noise_data = args_1.add_noise_data
+            args.mesh_ids = args_1.mesh_ids
+            args.da_winsize = args_1.da_winsize
+            args.da_threshold = args_1.da_threshold
+            args.use_only_da_for_flows = args_1.use_only_da_for_flows
+        if not hasattr(args, "use_gt_masks"):
+            args.use_gt_masks, args.use_gt_poses = False, False
+        if not hasattr(args, "num_state"):
+            args.num_state = args.num_ctrl
+        if not hasattr(args, "use_gt_angles"):
+            args.use_gt_angles, args.use_gt_angles_trans = False, False
+        if not hasattr(args, "num_state"):
+            args.num_state = 7
+        if not hasattr(args, "mean_dt"):
+            args.mean_dt = args.step_len * (1.0/30.0)
+            args.std_dt  = 0.005 # Default params
+        if not hasattr(args, "delta_pivot"):
+            args.delta_pivot = ''
+        if not hasattr(args, "pose_center"):
+            args.pose_center = 'pred'
 
-    # Set model to evaluate mode
-    model.eval()
+        if not hasattr(args, "use_full_jt_angles"):
+            args.use_full_jt_angles = True
+        if args.use_full_jt_angles:
+            args.num_state_net = args.num_state
+        else:
+            args.num_state_net = args.num_ctrl
+
+        ## TODO: Either read the args right at the top before calling pangolin - might be easier, somewhat tricky to do BWDs compatibility
+        ## TODO: Or allow pangolin to change the args later
+        if pargs.use_gt_poses_transnet:
+            model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                             se3_type=args.se3_type, nonlinearity=args.nonlin,
+                                             init_se3_iden=args.init_se3_iden, use_kinchain=args.use_kinchain,
+                                             delta_pivot='', local_delta_se3=False, use_jt_angles=False)
+            posemaskpredfn = None
+        else:
+            modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
+            model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
+                            se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                            input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                            init_posese3_iden=args.init_posese3_iden,
+                            init_transse3_iden=args.init_transse3_iden,
+                            use_wt_sharpening=args.use_wt_sharpening,
+                            sharpen_start_iter=args.sharpen_start_iter,
+                            sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                            decomp_model=args.decomp_model, wide=args.wide_model,
+                            use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                            num_state=args.num_state_net)
+            posemaskpredfn = model.forward_only_pose if args.use_gt_masks else model.forward_pose_mask
+        if pargs.cuda:
+            model.cuda() # Convert to CUDA if enabled
+
+        # Update parameters from trained network
+        try:
+            model.load_state_dict(checkpoint['state_dict'])  # BWDs compatibility (TODO: remove)
+        except:
+            model.load_state_dict(checkpoint['model_state_dict'])
+
+        # Set model to evaluate mode
+        model.eval()
 
     # Sanity check some parameters (TODO: remove it later)
     assert(args.num_se3 == num_se3)
@@ -304,12 +316,6 @@ def main():
 
         # Get joint angles and check if there is reasonable motion
         poses, jtangles, ctrls = sample['poses'], sample['actctrlconfigs'], sample['controls']
-
-        # Test poses first
-        st_poses = generate_poses(jtangles[0], args.mesh_ids, args.cam_extrinsics[0]['modelView'])
-        gl_poses = generate_poses(jtangles[-1], args.mesh_ids, args.cam_extrinsics[0]['modelView'])
-        print('ST', (st_poses[0] - poses[0]).abs().mean(), (st_poses[0] - poses[0]).abs().max())
-        print('GL', (gl_poses[0] - poses[-1]).abs().mean(), (gl_poses[0] - poses[-1]).abs().max())
         if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
@@ -399,7 +405,7 @@ def main():
         sinp = [util.to_var(start_pts.type(deftype)), util.to_var(start_angles.view(1, -1).type(deftype))]
         tinp = [util.to_var(goal_pts.type(deftype)), util.to_var(goal_angles.view(1, -1).type(deftype))]
 
-        if pargs.use_gt_poses_transnet:
+        if pargs.use_gt_poses_transnet or pargs.use_gt_dynamics:
             start_poses = util.to_var(start_poses_all[k:k+1].clone().type(deftype))
             goal_poses = util.to_var(goal_poses_all[k:k+1].clone().type(deftype))
             _, start_rlabels = generate_ptcloud(start_angles)
@@ -508,8 +514,9 @@ def main():
         #     loss_s, err_indiv_s, curr_deg_errors_s = [], [], []
 
         # Model has to be in training mode
-        model.train()
-        transmodel = model if pargs.use_gt_poses_transnet else model.transitionmodel
+        if not pargs.use_gt_dynamics:
+            model.train()
+            transmodel = model if pargs.use_gt_poses_transnet else model.transitionmodel
 
         ############
         # Xalglib optimizers
@@ -520,20 +527,31 @@ def main():
             epsg, epsf, epsx, maxits = 1e-4, 0, 0, pargs.max_iter
 
             # Create function handle for optimization
-            func = lambda x, y, z: optimize_ctrl(x, y, z, transmodel, start_poses, goal_poses,
-                                                 start_angles, goal_angles, angles[0])
+            if pargs.use_gt_dynamics:
+                func = lambda x, z: optimize_gtpose_ctrl(x, z, start_angles, goal_angles,
+                                                         angles[0], args.mesh_ids,
+                                                         args.cam_extrinsics[0]['modelView'])
+            else:
+                func = lambda x, y, z: optimize_ctrl(x, y, z, transmodel, start_poses, goal_poses,
+                                                     start_angles, goal_angles, angles[0])
 
             # Run the optimization
             if pargs.optimizer == 'xalglib_cg':
                 # Setup CG optimizer
-                state = xalglib.mincgcreate(ctrlstate)
+                if pargs.use_gt_dynamics:
+                    state = xalglib.mincreatef(ctrlstate, pargs.fd_eps)
+                else:
+                    state = xalglib.mincgcreate(ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.mincgsetcond(state, epsg, epsf, epsx, maxits)
                 xalglib.mincgoptimize_g(state, func)
                 ctrlstate, rep = xalglib.mincgresults(state)
             elif pargs.optimizer == 'xalglib_lbfgs':
                 # Setup CG optimizer
-                state = xalglib.minlbfgscreate(5, ctrlstate)
+                if pargs.use_gt_dynamics:
+                    state = xalglib.minlbfgscreatef(5, ctrlstate, pargs.fd_eps)
+                else:
+                    state = xalglib.minlbfgscreate(5, ctrlstate)
                 pargs.xalglib_optim_state = state
                 xalglib.minlbfgssetcond(state, epsg, epsf, epsx, maxits)
                 xalglib.minlbfgsoptimize_g(state, func)
@@ -565,6 +583,7 @@ def main():
                               'deg_errors': deg_errors, 'losses': losses})
 
         else:
+            assert(not pargs.use_gt_dynamics)
             # Run open loop planner for a fixed number of iterations
             # This runs only in the pose space!
             for it in range(pargs.max_iter):
@@ -921,6 +940,62 @@ def integrate_ctrls(start_angles, ctrls, dt, pargs):
 
     # Return
     return angle_traj
+
+############
+### Optimizer that takes in state & controls, returns a loss and loss gradient
+def optimize_gtpose_ctrl(ctrls, param, start_angles, goal_angles,
+                         init_traj, mesh_ids, model_view):
+    # ============ Rollout control trajectory to get jt angles, do FK ============#
+    # Generate start and goal poses
+    start_poses = generate_poses(start_angles, mesh_ids, model_view)
+    goal_poses  = generate_poses(goal_angles, mesh_ids, model_view)
+
+    # Do forward integration of the ctrls
+    pose_loss, pose_iter_loss = 0, torch.zeros(pargs.horizon)
+    ctrls_v = torch.FloatTensor(ctrls).view(pargs.horizon, -1).type(pargs.deftype)
+    angle_traj = torch.zeros(pargs.horizon+1, start_angles.nelement())
+    angle_traj[0] = start_angles
+    for h in xrange(pargs.horizon):
+        # Get joint angles @ t
+        angle_traj[h+1] = angle_traj[h] + (ctrls_v[h] * dt)
+
+        # Get poses
+        pred_poses = generate_poses(angle_traj[h+1], mesh_ids, model_view)
+
+        # Compute loss and add to list of losses
+        if h > 0.75 * pargs.horizon:
+            loss = pargs.loss_wt * ctrlnets.BiMSELoss(pred_poses, goal_poses)
+            # loss = pargs.loss_wt * ctrlnets.BiAbsLoss(pred_pose, goal_pose_v) * ((h+1.) / pargs.horizon)
+            pose_loss += loss
+            pose_iter_loss[h] = loss
+
+    # Add a control smoothness cost
+    ctrl_vel = (ctrls_v[1:] - ctrls_v[:-1]) / (dt * args.step_len)
+    ctrl_loss = pargs.smooth_wt * ctrl_vel.pow(2).mean()
+
+    # Add losses together
+    total_loss = pose_loss + ctrl_loss
+
+    # ============ For visualization only ============#
+    # Print losses and errors
+    pargs.curr_iter += 1
+    curr_deg_error = (angle_traj[-1] - goal_angles) * (180.0 / np.pi)
+    init_deg_error = (init_traj[-1] - goal_angles) * (180.0 / np.pi)
+    total_deg_error = (start_angles - goal_angles) * (180.0 / np.pi)
+    print('Iter: {}/{}, Loss: {} ({}/{})'.format(pargs.curr_iter, pargs.max_iter, total_loss, pose_loss, ctrl_loss))
+    print('Joint angle errors in degrees (curr/init): ',
+          torch.cat([curr_deg_error.view(7,1), init_deg_error.view(7,1), total_deg_error.view(7,1)], 1))
+
+    # Request termination if we have reached a max num of iters
+    if pargs.curr_iter == pargs.max_iter:
+        print("Terminating as optimizer reached max number of function evaluations: {}".format(pargs.curr_iter))
+        if pargs.optimizer == 'xalglib_cg':
+            xalglib.mincgrequesttermination(pargs.xalglib_optim_state)
+        elif pargs.optimizer == 'xalglib_lbfgs':
+            xalglib.minlbfgsrequesttermination(pargs.xalglib_optim_state)
+
+    # Return loss and gradients
+    return total_loss
 
 ### Optimizer that takes in state & controls, returns a loss and loss gradient
 def optimize_ctrl(ctrls, ctrlsgrad, param, transmodel, start_poses, goal_poses,

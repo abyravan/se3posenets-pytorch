@@ -306,10 +306,8 @@ def main():
         poses, jtangles, ctrls = sample['poses'], sample['actctrlconfigs'], sample['controls']
 
         # Test poses first
-        st_poses = generate_poses(jtangles[0], args.mesh_ids,
-                                  args.camera_extrinsics[0]['modelView'])
-        gl_poses = generate_poses(jtangles[-1], args.mesh_ids,
-                                  args.camera_extrinsics[0]['modelView'])
+        st_poses = generate_poses(jtangles[0], args.mesh_ids, args.cam_extrinsics[0]['modelView'])
+        gl_poses = generate_poses(jtangles[-1], args.mesh_ids, args.cam_extrinsics[0]['modelView'])
         print('ST', (st_poses[0] - poses[0]).abs().mean(), (st_poses[0] - poses[0]).abs().max())
         print('GL', (gl_poses[0] - poses[-1]).abs().mean(), (gl_poses[0] - poses[-1]).abs().max())
 

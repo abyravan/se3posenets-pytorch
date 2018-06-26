@@ -304,6 +304,15 @@ def main():
 
         # Get joint angles and check if there is reasonable motion
         poses, jtangles, ctrls = sample['poses'], sample['actctrlconfigs'], sample['controls']
+
+        # Test poses first
+        st_poses = generate_poses(jtangles[0], args.mesh_ids,
+                                  args.camera_extrinsics[0]['modelView'])
+        gl_poses = generate_poses(jtangles[-1], args.mesh_ids,
+                                  args.camera_extrinsics[0]['modelView'])
+        print('ST', (st_poses[0] - poses[0]).abs().mean(), (st_poses[0] - poses[0]).abs().max())
+        print('GL', (gl_poses[0] - poses[-1]).abs().mean(), (gl_poses[0] - poses[-1]).abs().max())
+
         if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
@@ -996,6 +1005,29 @@ def generate_ptcloud(config):
     labels   = torch.FloatTensor(1, 1, args.img_ht, args.img_wd)
     pangolin.render_arm(config_f.numpy(), pts[0].numpy(), labels[0].numpy())
     return pts.type_as(config), labels.type_as(config)
+
+### Compute poses give the arm config
+# Assumes that a "Tensor" is the input, not a "Variable"
+def generate_poses(config, mesh_ids, model_view, nposes=50):
+    # Render the config & get the poses
+    assert(not util.is_var(config))
+    config_f = config.view(-1).clone().float()
+    allposes = torch.FloatTensor(1, nposes, 3, 4)
+    nposes_i = torch.IntTensor(1)
+    pangolin.render_pose(config_f.numpy(), allposes[0].numpy(), nposes_i.numpy())
+
+    # Get the correct poses (based on mesh ids)
+    num_meshes = mesh_ids.nelement()  # Num meshes
+    poses    = torch.FloatTensor(1, num_meshes+1, 3, 4).zero_()
+    poses[0,0,:,0:3] = torch.eye(3).float() # Identity transform for BG
+    for j in xrange(num_meshes):
+        meshid = mesh_ids[j]
+        # Transform using modelview matrix
+        tfm = torch.eye(4)
+        tfm[0:3,:] = allposes[0][meshid][0:3,:]
+        se3tfm = torch.mm(model_view, tfm)  # NOTE: Do matrix multiply, not * (cmul) here
+        poses[0,j+1] = se3tfm[0:3,:]  # 3 x 4 transform
+    return poses.type_as(config)
 
 ### Compute masks
 def compute_masks_from_labels(labels, mesh_ids):

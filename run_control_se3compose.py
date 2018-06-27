@@ -444,10 +444,10 @@ def main():
             ctrl_grads.append(ctrl_grad.cpu().float())  # Save this
 
             # Set last 3 joint's controls to zero
-            if pargs.only_top4_jts:
-                ctrl_grad[4:] = 0
-            elif pargs.only_top6_jts:
-                ctrl_grad[6:] = 0
+            # if pargs.only_top4_jts:
+            #     ctrl_grad[4:] = 0
+            # elif pargs.only_top6_jts:
+            #     ctrl_grad[6:] = 0
 
             # Decay controls if loss is small
             if loss < 1:
@@ -466,6 +466,10 @@ def main():
                 curr_ctrl = ctrl_grad.cpu().float()
 
             # Apply control (simple velocity integration)
+            if pargs.only_top4_jts:
+                curr_ctrl[4:] = 0
+            elif pargs.only_top6_jts:
+                curr_ctrl[6:] = 0
             next_angles = curr_angles - (curr_ctrl * dt)
 
             # Save stuff

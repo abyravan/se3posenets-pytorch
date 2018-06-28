@@ -14,6 +14,8 @@ int ComputeFlowAndVisibility_Pts_float(
             THFloatTensor *bwdflows,
             THByteTensor  *fwdvisibility,
             THByteTensor  *bwdvisibility,
+            THIntTensor   *fwdassocpixelids,
+            THIntTensor   *bwdassocpixelids,
             float fx,
             float fy,
             float cx,

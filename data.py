@@ -356,6 +356,8 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
     bwdflows      = torch.FloatTensor(seq, 3, ht, wd).type_as(cloud_2)
     fwdvisibility = torch.ByteTensor(seq, 1, ht, wd).cuda() if cloud_1.is_cuda else torch.ByteTensor(seq, 1, ht, wd)
     bwdvisibility = torch.ByteTensor(seq, 1, ht, wd).cuda() if cloud_2.is_cuda else torch.ByteTensor(seq, 1, ht, wd)
+    fwdassocpixelids = torch.IntTensor(seq, 1, ht, wd).cuda() if cloud_1.is_cuda else torch.IntTensor(seq, 1, ht, wd)
+    bwdassocpixelids = torch.IntTensor(seq, 1, ht, wd).cuda() if cloud_2.is_cuda else torch.IntTensor(seq, 1, ht, wd)
 
     # Compute inverse of poses
     poseinvs_1 = RtInverse(poses_1.clone())
@@ -386,6 +388,8 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
                                                          bwdflows,
                                                          fwdvisibility,
                                                          bwdvisibility,
+                                                         fwdassocpixelids,
+                                                         bwdassocpixelids,
                                                          intrinsics['fx'],
                                                          intrinsics['fy'],
                                                          intrinsics['cx'],
@@ -408,6 +412,8 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
                                                      bwdflows,
                                                      fwdvisibility,
                                                      bwdvisibility,
+                                                     fwdassocpixelids,
+                                                     bwdassocpixelids,
                                                      intrinsics['fx'],
                                                      intrinsics['fy'],
                                                      intrinsics['cx'],
@@ -416,7 +422,7 @@ def ComputeFlowAndVisibility(cloud_1, cloud_2, label_1, label_2,
                                                      dawinsize)
 
     # Return
-    return fwdflows, bwdflows, fwdvisibility, bwdvisibility
+    return fwdflows, bwdflows, fwdvisibility, bwdvisibility, fwdassocpixelids, bwdassocpixelids
 
 ### Compute fwd/bwd visibility (for points in time t, which are visible in time t+1 & vice-versa)
 # Expects 4D inputs: seq x ndim x ht x wd (or seq x ndim x 3 x 4)
@@ -888,9 +894,10 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Compute flow and visibility
     fwdflows, bwdflows, \
-    fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
-                                                                initpose, tarposes, camera_intrinsics,
-                                                                dathreshold, dawinsize, use_only_da)
+    fwdvisibilities, bwdvisibilities, \
+    fwdassocpixelids, bwdassocpixelids = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
+                                                                  initpose, tarposes, camera_intrinsics,
+                                                                  dathreshold, dawinsize, use_only_da)
 
     # Compute normal maps & target normal maps (rot/trans of init ones)
     if compute_normals:
@@ -927,12 +934,13 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
-            'controls': controls, 'comconfigs': comconfigs, 'poses': poses,
-            'dt': dt, 'actctrlconfigs': actctrlconfigs}
+            'fwdassocpixelids': fwdassocpixelids, 'controls': controls, 'comconfigs': comconfigs,
+            'poses': poses, 'dt': dt, 'actctrlconfigs': actctrlconfigs}
     if compute_bwdflows:
         data['masks']           = masks
         data['bwdflows']        = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+        data['bwdassocpixelids'] = bwdassocpixelids
     if supervised_seg_loss:
         data['labels'] = masks.max(dim=1)[1] # Get label image for supervised classification
     if compute_normals:
@@ -1078,17 +1086,20 @@ def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1
 
     # Compute flow and visibility
     fwdflows, bwdflows, \
-    fwdvisibilities, bwdvisibilities = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
-                                                                initpose, tarposes, camera_intrinsics,
-                                                                dathreshold, dawinsize, use_only_da)
+    fwdvisibilities, bwdvisibilities, \
+    fwdassocpixelids, bwdassocpixelids = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
+                                                                  initpose, tarposes, camera_intrinsics,
+                                                                  dathreshold, dawinsize, use_only_da)
 
     # Return loaded data
     data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
+            'fwdassocpixelids': fwdassocpixelids,
             'states': states, 'controls': controls, 'poses': poses, 'dt': dt}
     if compute_bwdflows:
         data['masks'] = masks
         data['bwdflows'] = bwdflows
         data['bwdvisibilities'] = bwdvisibilities
+        data['bwdassocpixelids'] = bwdassocpixelids
     if load_color:
         data['rgbs'] = rgbs
 

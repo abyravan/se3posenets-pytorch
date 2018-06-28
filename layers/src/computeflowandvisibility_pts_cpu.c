@@ -3,7 +3,7 @@
 #include <math.h>
 #include <stdbool.h>
 
-bool check_limits(const unsigned int r, const unsigned int c, const unsigned int maxr, const unsigned int maxc)
+bool check_limits(const long r, const long c, const long maxr, const long maxc)
 {
 	return ((r >= 0) && (r < maxr) && (c >= 0) && (c <= maxc));
 }
@@ -17,6 +17,7 @@ void compute_visibility_and_flows(
         const unsigned char *label2,
         const float *poses2,
         unsigned char *visible1,
+        int *assocpixelid1,
         float *flows12,
         const long *cs,
         const long *ls,
@@ -69,10 +70,10 @@ void compute_visibility_and_flows(
                 float rsubpix = (yp/zp)*fy + cy;
 
                 // Get the target depth & compute corresponding 3D point in the target
-                const unsigned int c1 = floor(csubpix);
-                const unsigned int c2 = c1 + 1;
-                const unsigned int r1 = floor(rsubpix);
-                const unsigned int r2 = r1 + 1;
+                const long c1 = floor(csubpix);
+                const long c2 = c1 + 1;
+                const long r1 = floor(rsubpix);
+                const long r2 = r1 + 1;
 
                 // Compute interpolated weights & depth
                 float w = 0, z = 0;
@@ -126,6 +127,11 @@ void compute_visibility_and_flows(
                     // == Set visibility to true
                     *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // visible
 
+                    // == Save the pixel that we associated to
+                    int cpix = (int) round(csubpix);
+                    int rpix = (int) round(rsubpix);
+                    *(assocpixelid1+ b*ls[0] + r*ls[2] + c*ls[3]) = (rpix * ncols) + cpix; // ID of pixel at t=2 that associates to pixel (r,c) at t=1
+
                     // == Flow is difference between that point @ t1 & DA point @ t2
                     // Point @ t1
                     float x1 = *(cloud1 + 0*cs[1] + valc);
@@ -159,6 +165,8 @@ int ComputeFlowAndVisibility_Pts_float(
             THFloatTensor *bwdflows,
             THByteTensor  *fwdvisibility,
             THByteTensor  *bwdvisibility,
+            THIntTensor   *fwdassocpixelids,
+            THIntTensor   *bwdassocpixelids,
             float fx,
             float fy,
             float cx,
@@ -186,6 +194,8 @@ int ComputeFlowAndVisibility_Pts_float(
     bwdflows      = THFloatTensor_newContiguous(bwdflows);
     fwdvisibility = THByteTensor_newContiguous(fwdvisibility);
     bwdvisibility = THByteTensor_newContiguous(bwdvisibility);
+    fwdassocpixelids = THIntTensor_newContiguous(fwdassocpixelids);
+    bwdassocpixelids = THIntTensor_newContiguous(bwdassocpixelids);
     local_1 = THFloatTensor_newContiguous(local_1);
     local_2 = THFloatTensor_newContiguous(local_2);
 
@@ -202,6 +212,8 @@ int ComputeFlowAndVisibility_Pts_float(
     float *bwdflows_data             = THFloatTensor_data(bwdflows);
     unsigned char *fwdvisibility_data = THByteTensor_data(fwdvisibility);
     unsigned char *bwdvisibility_data = THByteTensor_data(bwdvisibility);
+    int *fwdassocpixelids_data       = THIntTensor_data(fwdassocpixelids);
+    int *bwdassocpixelids_data       = THIntTensor_data(bwdassocpixelids);
     float *local1_data                = THFloatTensor_data(local_1);
     float *local2_data                = THFloatTensor_data(local_2);
 
@@ -210,6 +222,10 @@ int ComputeFlowAndVisibility_Pts_float(
     THByteTensor_fill(bwdvisibility, 0);
     THFloatTensor_fill(fwdflows, 0);
     THFloatTensor_fill(bwdflows, 0);
+
+    // Set assoc pixel ids to -1 by default
+    THIntTensor_fill(fwdassocpixelids, -1);
+    THIntTensor_fill(bwdassocpixelids, -1);
 
     // Get strides
     long *cs = cloud_1->stride;
@@ -261,13 +277,13 @@ int ComputeFlowAndVisibility_Pts_float(
     /// ======== Compute visibility masks
     // t -> t+1
     compute_visibility_and_flows(cloud1_data, cloud2_data, local1_data, local2_data, label1_data, label2_data, poses2_data,
-                                 fwdvisibility_data, fwdflows_data, cs, ls, ps,
+                                 fwdvisibility_data, fwdassocpixelids_data, fwdflows_data, cs, ls, ps,
                                  fx, fy, cx, cy, threshold, winsize,
                                  batchsize, nrows, ncols);
 
     // t+1 -> t
     compute_visibility_and_flows(cloud2_data, cloud1_data, local2_data, local1_data, label2_data, label1_data, poses1_data,
-                                 bwdvisibility_data, bwdflows_data, cs, ls, ps,
+                                 bwdvisibility_data, bwdassocpixelids_data, bwdflows_data, cs, ls, ps,
                                  fx, fy, cx, cy, threshold, winsize,
                                  batchsize, nrows, ncols);
 
@@ -284,6 +300,8 @@ int ComputeFlowAndVisibility_Pts_float(
     THByteTensor_free(bwdvisibility);
     THFloatTensor_free(local_1);
     THFloatTensor_free(local_2);
+    THIntTensor_free(fwdassocpixelids);
+    THIntTensor_free(bwdassocpixelids);
 
     // Return
     return 1;

@@ -342,7 +342,7 @@ def main():
         for k in xrange(len(val)):
             sample = val[k] # Get sample
             did = sample['datasetid'] # Dataset ID
-            if not poses.has_key(did):
+            if did not in poses:
                poses[did], jtangles[did] = [], []
             if k % 500 == 0:
                 print('Dataset: {}/{}, Example: {}/{}'.format(key, did, k+1, len(val)))

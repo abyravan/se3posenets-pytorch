@@ -160,8 +160,8 @@ def main():
     # Get the dataset
     dataset = torch.load(args.data)
     train_dataset, val_dataset, test_dataset = dataset['train'], dataset['val'], dataset['test']
-    assert(len(train_dataset['gtposes']) == len(test_dataset['gtposes']))
-    assert(len(train_dataset['gtposes']) == len(val_dataset['gtposes']))
+    # assert(len(train_dataset['gtposes']) == len(test_dataset['gtposes']))
+    # assert(len(train_dataset['gtposes']) == len(val_dataset['gtposes']))
     train_size, val_size, test_size = dataset_size(train_dataset, args.step_len, args.seq_len),\
                                       dataset_size(val_dataset, args.step_len, args.seq_len),\
                                       dataset_size(test_dataset, args.step_len, args.seq_len)

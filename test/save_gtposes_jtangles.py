@@ -74,7 +74,7 @@ def read_gtposesctrls_from_disk(dataset, id,
     camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
 
     # Setup memory
-    sequence, path, folid = data.generate_baxter_sequence(dataset, id)  # Get the file paths
+    sequence, path, folid = generate_baxter_sequence(dataset, id)  # Get the file paths
     actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Ids in actual data belonging to commanded data
     poses = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 

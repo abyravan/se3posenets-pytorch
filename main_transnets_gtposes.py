@@ -35,6 +35,10 @@ parser.add_argument('-d', '--data', required=True,
                     help='Path to tar file with pose data')
 parser.add_argument('-b', '--batch-size', default=32, type=int,
                     metavar='N', help='mini-batch size (default: 32)')
+parser.add_argument('--step-len', default=1, type=int,
+                    metavar='N', help='number of frames separating each example in the training sequence (default: 1)')
+parser.add_argument('--seq-len', default=1, type=int,
+                    metavar='N', help='length of the training sequence (default: 1)')
 
 # Data options
 parser.add_argument('--se3-type', default='se3aa', type=str, metavar='SE3',
@@ -93,6 +97,36 @@ parser.add_argument('--resume', default='', type=str, metavar='PATH',
 parser.add_argument('-s', '--save-dir', default='results', type=str, metavar='PATH',
                     help='directory to save results in. If it doesnt exist, will be created. (default: results/)')
 
+def dataset_size(dataset, step, seq):
+    dataset_size = 0
+    for k in xrange(len(dataset['gtposes'])):
+        dataset_size += dataset['gtposes'][k].size(0) - step*(seq+1)
+    return dataset_size
+
+def dataset_hist(dataset, step ,seq):
+    datahist = [0]
+    for k in xrange(len(dataset['gtposes'])):
+        numcurrdata = dataset['gtposes'][k].size(0) - step*(seq+1)
+        datahist.append(datahist[-1] + numcurrdata)
+    return datahist
+
+def get_sample(dataset, idx, data_hist, step, seq):
+    # Find which dataset to sample from
+    numdata = data_hist[-1]
+    assert (idx < numdata)  # Check if we are within limits
+    did = np.digitize(idx, data_hist) - 1  # If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
+
+    # Find ID of sample in that dataset (not the same as idx as we might have multiple datasets)
+    start = (idx - data_hist[did])  # This will be from 0 - size for either train/test/val part of that dataset
+    end   = start + step*seq
+
+    # Get sample
+    dt = (1.0/30.0) * step
+    poses    = dataset['gtposes'][did][start:end+1:step] # nseq x nse3 x 3 x 4
+    jtangles = dataset['jtangles'][did][start:end+1:step] # nseq x 7
+    ctrls    = (jtangles[1:] - jtangles[:1]) / dt # nseq x 7
+    return poses, jtangles, ctrls
+
 ######################
 def main():
     ########################
@@ -126,16 +160,18 @@ def main():
     # Get the dataset
     dataset = torch.load(args.data)
     train_dataset, val_dataset, test_dataset = dataset['train'], dataset['val'], dataset['test']
-    print('Dataset size => Train: {}, Val: {}, Test: {}'.format(train_dataset['gtposes'].size(0),
-                                                                val_dataset['gtposes'].size(0),
-                                                                test_dataset['gtposes'].size(0)))
+    assert(len(train_dataset['gtposes']) == len(test_dataset['gtposes']))
+    assert(len(train_dataset['gtposes']) == len(val_dataset['gtposes']))
+    train_size, val_size, test_size = dataset_size(train_dataset, args.step_len, args.seq_len),\
+                                      dataset_size(val_dataset, args.step_len, args.seq_len),\
+                                      dataset_size(test_dataset, args.step_len, args.seq_len)
+    print('Dataset size => Train: {}, Val: {}, Test: {}'.format(train_size, val_size, test_size))
 
     # Set up some vars
-    args.num_se3, args.seq_len = train_dataset['gtposes'].size(2), \
-                                 train_dataset['gtposes'].size(1)-1
-    args.num_ctrl = train_dataset['controls'].size(-1)
-    print('Num SE3: {}, Num ctrl: {}, SE3 Type: {}, Sequence length: {}'.format(
-        args.num_se3, args.num_ctrl, args.se3_type, args.seq_len))
+    args.num_se3 = train_dataset['gtposes'][0].size(1)
+    args.num_ctrl = train_dataset['jtangles'][0].size(-1)
+    print('Num SE3: {}, Num ctrl: {}, SE3 Type: {}, Step/Sequence length: {}/{}'.format(
+        args.num_se3, args.num_ctrl, args.se3_type, args.step_len, args.seq_len))
 
     ########################
     ## Check if datakey is valid
@@ -270,10 +306,12 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
         model.eval()
 
     # Run an epoch
+    datahist = dataset_hist(dataset, args.step_len, args.seq_len)
+    nexamples = datahist[-1]
     if (num_iters == -1):
-        num_iters = dataset['gtposes'].size(0) // args.batch_size
+        num_iters =  nexamples // args.batch_size
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(mode, epoch, num_iters))
-    ndata, nseq = dataset['gtposes'].size(0), args.seq_len
+    nseq = args.seq_len
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor'  # Default tensor type
     assert(args.loss_type == 'mse' or args.loss_type == 'abs')
     losslayer = torch.nn.MSELoss() if args.loss_type == 'mse' else torch.nn.L1Loss()
@@ -282,18 +320,24 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
         # Start timer
         start = time.time()
 
-        # Get a sample (go in sequence for test)
-        # TODO: This doesn't cover entire dataset yet as at test time this doesn't go through entire sequence
+        # Get the sample IDs (go in sequence for test)
+        ## TODO: Can we make sure to cover whole dataset at train/val time?
         if mode == 'test':
             st_id, ed_id = jj * args.batch_size, (jj + 1) * args.batch_size
             ids = torch.from_numpy(np.arange(st_id, ed_id)).long()
         else:
-            ids = torch.from_numpy(np.random.randint(0, ndata, args.batch_size)).long()
+            ids = torch.from_numpy(np.random.randint(0, nexamples, args.batch_size)).long()
 
-        # Load data and convert to cos/sin representation if needed
-        gtposes   = dataset['gtposes'][ids].type(deftype) # B x (seq+1) x state_dim
-        jtangles  = dataset['jtangles'][ids].type(deftype) # B x (seq+1) x state_dim
-        controls  = dataset['controls'][ids].type(deftype) # B x seq x 1
+        # Get the samples
+        gtposes, jtangles, controls = [], [], []
+        for k in xrange(ids.nelement()):
+            poses_c, angles_c, ctrls_c = get_sample(dataset, ids[k], datahist, args.step_len, args.seq_len)
+            gtposes.append(poses_c.unsqueeze(0))
+            jtangles.append(angles_c.unsqueeze(0))
+            controls.append(ctrls_c.unsqueeze(0))
+        gtposes  = torch.cat(gtposes, 0).type(deftype) # B x (seq+1) x nse3 x 3 x 4
+        jtangles = torch.cat(jtangles, 0).type(deftype) # B x (seq+1) x 7
+        controls = torch.cat(controls, 0).type(deftype) # B x seq x 7
 
         # Get state, controls @ t = 0 & all other time steps (inputs)
         poses_0 = util.to_var(gtposes[:,0].contiguous(), requires_grad=True)

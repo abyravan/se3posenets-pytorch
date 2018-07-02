@@ -336,26 +336,26 @@ def main():
     posedata = {}
     for key, val in datakeys.items():
         # Read data
-        poses, jtangles = {}, {}
+        poses, jtangles = [], []
+        dfids = {}
         for k in xrange(len(val)):
             sample = val[k] # Get sample
             did   = sample['datasetid'] # Dataset ID
             fid   = sample['folderid'] # Folder ID in dataset
-            if did not in poses:
-               poses[did], jtangles[did] = {}, {}
-            if fid not in poses[did]:
-                poses[did][fid], jtangles[did][fid] = [], []
+            if (did, fid) not in dfids:
+               dfids[(did, fid)] = True # We have seen this pair
+               poses.append([])
+               jtangles.append([])
             if k % 500 == 0:
-                print('Dataset: {}/{}, Example: {}/{}'.format(key, did, k+1, len(val)))
+                print('Dataset: {}/{}/{}/{}, Example: {}/{}'.format(key, did, fid, len(poses), k+1, len(val)))
             if sample['poses'].eq(sample['poses']).all(): # Only if there are no NaN values
-                poses[did][fid].append(sample['poses'][0:1]) # Choose first element only, 1 x 8 x 3 x 4
-                jtangles[did][fid].append(sample['actctrlconfigs'][0:1]) # 1 x 7
+                poses[-1].append(sample['poses'][0:1]) # Choose first element only, 1 x 8 x 3 x 4
+                jtangles[-1].append(sample['actctrlconfigs'][0:1]) # 1 x 7
                 # ctrls[did].append(sample['controls'][0:1])
         # Save data
-        for kk, _ in poses.items():
-            for jj, _ in poses[kk].items():
-                poses[kk][jj] = torch.cat(poses[kk][jj], 0) # N x 8 x 3 x 4
-                jtangles[kk][jj] = torch.cat(jtangles[kk][jj], 0) # N x 8 x 3 x 4
+        for kk in xrange(len(poses)):
+            poses[kk]    = torch.cat(poses[kk], 0) # N x 8 x 3 x 4
+            jtangles[kk] = torch.cat(jtangles[kk], 0) # N x 8 x 3 x 4
         posedata[key] = {'gtposes': poses,
                          #'controls': torch.cat(ctrls,0),
                          'jtangles': jtangles}

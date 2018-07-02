@@ -122,8 +122,8 @@ def get_sample(dataset, idx, data_hist, step, seq):
 
     # Get sample
     dt = (1.0/30.0) * step
-    poses    = dataset['gtposes'][did][start:end+1:step] # nseq x nse3 x 3 x 4
-    jtangles = dataset['jtangles'][did][start:end+1:step] # nseq x 7
+    poses    = dataset['gtposes'][did][start:end+1:step] # nseq+1 x nse3 x 3 x 4
+    jtangles = dataset['jtangles'][did][start:end+1:step] # nseq+1 x 7
     ctrls    = (jtangles[1:] - jtangles[:-1]) / dt # nseq x 7
     return poses, jtangles, ctrls
 

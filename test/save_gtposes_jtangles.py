@@ -31,41 +31,6 @@ except NameError: # Not defined in Python 3.x
         return iter(range(*args))
 
 ################ Stripped out function to read data from disk
-### Generate the data files (with all the depth, flow etc.) for each sequence
-def generate_baxter_sequence(dataset, idx):
-    # Get stuff from the dataset
-    step, seq, suffix = dataset['step'], dataset['seq'], dataset['suffix']
-    # If the dataset has subdirs, find the proper sub-directory to use
-    did = 0
-    if ('subdirs' in dataset) :#dataset.has_key('subdirs')):
-        # Find the sub-directory the data falls into
-        assert (idx < dataset['numdata']);  # Check if we are within limits
-        did = np.searchsorted(dataset['subdirs']['datahist'], idx, 'right') - 1  # ID of sub-directory. If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
-        # Update the ID and path so that we get the correct images
-        id   = idx - dataset['subdirs']['datahist'][did] # ID of image within the sub-directory
-        path = dataset['path'] + '/' + dataset['subdirs']['dirnames'][did] + '/' # Get the path of the sub-directory
-    else:
-        id   = dataset['ids'][idx] # Select from the list of valid ids
-        path = dataset['path'] # Root of dataset
-    # Setup start/end IDs of the sequence
-    start, end = id, id + (step * seq)
-    sequence, ct, stepid = {}, 0, step
-    for k in xrange(start, end + 1, step):
-        sequence[ct] = {'depth'     : path + 'depth' + suffix + str(k) + '.png',
-                        'label'     : path + 'labels' + suffix + str(k) + '.png',
-                        'color'     : path + 'color' + suffix + str(k) + '.png',
-                        'state1'    : path + 'state' + str(k) + '.txt',
-                        'state2'    : path + 'state' + str(k + 1) + '.txt',
-                        'se3state1' : path + 'se3state' + str(k) + '.txt',
-                        'se3state2' : path + 'se3state' + str(k + 1) + '.txt',
-                        'flow'   : path + 'flow_' + str(stepid) + '/flow' + suffix + str(start) + '.png',
-                        'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png',
-                        'datasetid': did}
-        stepid += step  # Get flow from start image to the next step
-        ct += 1  # Increment counter
-    return sequence, path
-
-
 ### Load baxter sequence from disk
 def read_gtposesctrls_from_disk(dataset, id,
                                 ctrl_type='actdiffvel', num_ctrl=7,
@@ -76,7 +41,7 @@ def read_gtposesctrls_from_disk(dataset, id,
     camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
 
     # Setup memory
-    sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
+    sequence, path = data.generate_baxter_sequence(dataset, id)  # Get the file paths
     actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Ids in actual data belonging to commanded data
     poses = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
 

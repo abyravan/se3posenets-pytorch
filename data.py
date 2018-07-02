@@ -1152,6 +1152,7 @@ class BaxterSeqDataset(Dataset):
         # Assumption: This function returns a dict of torch tensors
         sample = self.load_function(self.datasets[did], sid)
         sample['id'] = idx # Add the ID of the sample in
+        sample['datasetid'] = did # Add the ID of the dataset in
 
         # Return
         return sample

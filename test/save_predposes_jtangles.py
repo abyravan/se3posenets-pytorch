@@ -78,7 +78,8 @@ parser.add_argument('--trans-type', default='default', type=str,
 # Pose-Mask model type
 parser.add_argument('--posemask-type', default='default', type=str,
                     metavar='POSEMASK', help='type of pose-mask model: [default] | unet')
-
+parser.add_argument('--save-filename', default='predposedata-sim.pth.tar', type=str,
+                    metavar='PATH', help='file name to save results in (default: gtposedata-sim.pth.tar)')
 
 # Define xrange
 try:

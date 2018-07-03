@@ -440,6 +440,8 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
                 mode + '-poseerrmean': poseerrormean.sum(),
                 mode + '-poseerrmax': poseerrormax.sum(),
             }
+            for kj in xrange(args.seq_len):
+                info[mode + '-seqloss-s{}'.format(kj+1)] = seq_loss[kj]
             poseindivmean, poseindivmax = poseerrorindivmean.sum(0), poseerrorindivmax.sum(0)
             for kj in xrange(args.num_se3):
                 info[mode + '-poseerrmean-{}'.format(kj)] = poseindivmean[kj]

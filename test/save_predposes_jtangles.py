@@ -571,6 +571,9 @@ def iterate(data_loader, model, mode='test'):
 
         # Get a sample
         j, sample = data_loader.next()
+        if sample is None:
+            print("Sample is empty (probably due to NaN in ground truth poses)")
+            continue
 
         # Get inputs and targets (as variables)
         pts      = util.to_var(sample['points'].type(deftype), volatile=True)

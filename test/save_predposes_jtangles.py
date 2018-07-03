@@ -513,7 +513,7 @@ def iterate(data_loader, model, mode='test'):
         start = time.time()
 
         ### Predict the pose from the network
-        pred_poses = model.forward_only_pose([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
+        pred_poses = model.forward_only_pose([netinput[:,0], jtangles[:,0]])
 
         # Measure fwd pass time
         fwd_time.update(time.time() - start)

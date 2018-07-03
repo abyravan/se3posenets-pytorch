@@ -1143,18 +1143,18 @@ class BaxterSeqDataset(Dataset):
         # Find which dataset to sample from
         assert (idx < self.numdata);  # Check if we are within limits
         did = np.digitize(idx, self.datahist) - 1  # If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
-        print('A: ', did )
+
         # Find ID of sample in that dataset (not the same as idx as we might have multiple datasets)
         start = self.datasets[did][self.dtype][0]  # This is the ID of the starting sample of the train/test/val part in the entire dataset
         diff = (idx - self.datahist[did])  # This will be from 0 - size for either train/test/val part of that dataset
         sid = int(start + diff)
-        print('B: ', sid)
+
         # Call the disk load function
         # Assumption: This function returns a dict of torch tensors
         sample = self.load_function(self.datasets[did], sid)
         sample['id'] = idx # Add the ID of the sample in
         sample['datasetid'] = did # Add the ID of the dataset in
-        print('C: ', idx)
+
         # Return
         return sample
 

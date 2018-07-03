@@ -443,22 +443,22 @@ def main():
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
     print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
 
-    # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
-    train_sampler = torch.utils.data.dataloader.SequentialSampler(train_dataset)  # Run sequentially along the test dataset
-    train_loader  = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
-                                                  num_workers=args.num_workers, sampler=train_sampler,
-                                                  pin_memory=args.use_pin_memory,
-                                                  collate_fn=train_dataset.collate_batch))
-    val_sampler = torch.utils.data.dataloader.SequentialSampler(val_dataset)  # Run sequentially along the test dataset
-    val_loader  = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
-                                                num_workers=args.num_workers, sampler=val_sampler,
-                                                pin_memory=args.use_pin_memory,
-                                                collate_fn=val_dataset.collate_batch))
-    test_sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
-    test_loader  = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                                 num_workers=args.num_workers, sampler=test_sampler,
-                                                 pin_memory=args.use_pin_memory,
-                                                 collate_fn=test_dataset.collate_batch))
+    # # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
+    # train_sampler = torch.utils.data.dataloader.SequentialSampler(train_dataset)  # Run sequentially along the test dataset
+    # train_loader  = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False,
+    #                                               num_workers=args.num_workers, sampler=train_sampler,
+    #                                               pin_memory=args.use_pin_memory,
+    #                                               collate_fn=train_dataset.collate_batch))
+    # val_sampler = torch.utils.data.dataloader.SequentialSampler(val_dataset)  # Run sequentially along the test dataset
+    # val_loader  = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
+    #                                             num_workers=args.num_workers, sampler=val_sampler,
+    #                                             pin_memory=args.use_pin_memory,
+    #                                             collate_fn=val_dataset.collate_batch))
+    # test_sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
+    # test_loader  = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
+    #                                              num_workers=args.num_workers, sampler=test_sampler,
+    #                                              pin_memory=args.use_pin_memory,
+    #                                              collate_fn=test_dataset.collate_batch))
     ########################
     ############ Load models & optimization stuff
 
@@ -538,7 +538,7 @@ def main():
 
     ######
     ## Iterate over train/val/test set and save the data
-    datakeys = {'train': train_loader, 'test': test_loader, 'val': val_loader}
+    datakeys = {'train': train_dataset, 'test': test_dataset, 'val': val_dataset}
     posedata = {}
     for key, val in datakeys.items():
         posedata[key] = iterate(val, model, key)
@@ -547,7 +547,7 @@ def main():
     torch.save(posedata, args.save_filename)
 
 ### Main iterate function (train/test/val)
-def iterate(data_loader, model, mode='test'):
+def iterate(dataset, model, mode='test'):
     # Get global stuff?
     global num_train_iter
 
@@ -562,17 +562,17 @@ def iterate(data_loader, model, mode='test'):
     dfids = {}
 
     # Iterate over all the examples
-    print('========== Dataset: {}, Num iters: {} =========='.format(mode, len(data_loader)))
+    print('========== Dataset: {}, Num iters: {} =========='.format(mode, len(dataset)))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
-    for i in xrange(len(data_loader)):
+    for i in xrange(len(dataset)):
         # ============ Load data ============ #
         # Start timer
         start = time.time()
 
         # Get a sample
-        j, sample = data_loader.next()
-        if sample is None:
-            print("Sample is empty (probably due to NaN in ground truth poses)")
+        sample = dataset[i] # Get sample
+        if not sample['poses'].eq(sample['poses']).all():
+            print("Sample has NaN in ground truth poses")
             continue
 
         # Get inputs and targets (as variables)
@@ -599,30 +599,28 @@ def iterate(data_loader, model, mode='test'):
         start = time.time()
 
         ### Predict the pose from the network
-        pred_poses = model.forward_only_pose([netinput[:,0], jtangles[:,0]])
+        pred_poses = model.forward_only_pose([netinput[0:1], jtangles[0:1]])
 
         # Measure fwd pass time
         fwd_time.update(time.time() - start)
 
         # ============ Save stuff ============ #
-        dids = sample['datasetid']  # Dataset ID
-        fids = sample['folderid']  # Folder ID in dataset
-        for k in xrange(len(dids)):
-            did, fid = dids[k], fids[k] # Get dataset and folder ID
-            if (did, fid) not in dfids:
-                print('Added new ID ({}: {}, {})'.format(len(dfids), did, fid))
-                dfids[(did, fid)] = len(dfids)  # We have seen this pair
-                pred_poses_d.append([])
-                gt_poses_d.append([])
-                jtangles_d.append([])
-            # Save to list
-            pred_poses_d[-1].append(pred_poses.data[k:k+1].cpu().clone())
-            gt_poses_d[-1].append(sample['poses'][k:k+1].clone()) # Choose one element only, 1 x 8 x 3 x 4
-            jtangles_d[-1].append(sample['actctrlconfigs'][k:k+1].clone()) # 1 x 7
+        did = sample['datasetid']  # Dataset ID
+        fid = sample['folderid']  # Folder ID in dataset
+        if (did, fid) not in dfids:
+            print('Added new ID ({}: {}, {})'.format(len(dfids), did, fid))
+            dfids[(did, fid)] = len(dfids)  # We have seen this pair
+            pred_poses_d.append([])
+            gt_poses_d.append([])
+            jtangles_d.append([])
+        # Save to list
+        pred_poses_d[-1].append(pred_poses.data.cpu().clone())
+        gt_poses_d[-1].append(sample['poses'][0:1].clone()) # Choose one element only, 1 x 8 x 3 x 4
+        jtangles_d[-1].append(sample['actctrlconfigs'][0:1].clone()) # 1 x 7
 
         # Print stats
-        if i % 500 == 0:
-            print('Dataset: {}, Data-Folder ID: {}, Example: {}/{}'.format(mode, len(pred_poses_d), i+1, len(data_loader)))
+        if i % 5000 == 0:
+            print('Dataset: {}, Data-Folder ID: {}, Example: {}/{}'.format(mode, len(pred_poses_d), i+1, len(dataset)))
             print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
                   'Fwd: {fwd.val:.3f} ({fwd.avg:.3f})'.format(data=data_time, fwd=fwd_time))
 

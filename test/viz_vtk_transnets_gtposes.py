@@ -10,6 +10,7 @@ import sys
 import shutil
 import time
 import numpy as np
+sys.path.append(os.path.join(os.path.dirname(__file__), "../"))
 
 # Define xrange
 try:
@@ -57,11 +58,18 @@ def create_axes_actor(pose, xcol="red", ycol="red", zcol="red",
     # Return axes
     return axes
 
+def dataset_size(dataset, step, seq):
+    dataset_size = 0
+    for k in xrange(len(dataset['gtposes'])):
+        dataset_size += dataset['gtposes'][k].size(0) - step*(seq+1)
+    return dataset_size
+
 ######################
 #### Setup options
 # Parse arguments
 import argparse
 import configargparse
+import util
 
 # parser = configargparse.ArgumentParser(description='Viz transition model results on GT pose data (Baxter)')
 # parser.add_argument('--data', type=str, required=True,
@@ -77,9 +85,9 @@ import configargparse
 # largs = parser.parse_args()
 
 largs = argparse.Namespace()
-largs.data = 'gtposesctrls-sim.pth.tar'
+largs.data = os.path.expanduser('~/Projects/se3nets-pytorch/gtposesctrls-sim.pth.tar')
 largs.seed = 100
-largs.checkpoint = 'trained_nets/transnets_gtposes/sim-gtposes-default-lr1e-4-rmsprop-cpu/model_best.pth.tar'
+largs.checkpoint = os.path.expanduser('~/Projects/se3nets-pytorch/trained_nets/transnets_gtposes/sim-gtposes-default-lr1e-4-step2-seq1-rmsprop/model_best.pth.tar')
 largs.horizon = 10
 
 # Set seed
@@ -95,20 +103,18 @@ assert (os.path.exists(largs.data))
 # Get the dataset
 dataset = torch.load(largs.data)
 train_dataset, val_dataset, test_dataset = dataset['train'], dataset['val'], dataset['test']
-print('Dataset size => Train: {}, Val: {}, Test: {}'.format(train_dataset['gtposes'].size(0),
-                                                            val_dataset['gtposes'].size(0),
-                                                            test_dataset['gtposes'].size(0)))
+train_size, val_size, test_size = dataset_size(train_dataset, 2, largs.horizon),\
+                                  dataset_size(val_dataset, 2, largs.horizon),\
+                                  dataset_size(test_dataset, 2, largs.horizon)
+print('Dataset size => Train: {}, Val: {}, Test: {}'.format(train_size, val_size, test_size))
 
 # Load data and convert to cos/sin representation if needed
-gtposes_d  = train_dataset['gtposes']   # B x (seq+1) x state_dim
-jtangles_d = train_dataset['jtangles']  # B x (seq+1) x state_dim
-controls_d = train_dataset['controls']  # B x seq x 1
+gtposes_d  = train_dataset['gtposes'][0]   # B x (seq+1) x state_dim
+jtangles_d = train_dataset['jtangles'][0]  # B x (seq+1) x state_dim
 
-### Get the data sequence (jtangles and poses concat, ensure that we don't have different datasets)
-# Maybe for now just look at the first few examples...
-st, ed = 1000, 101000
-gtposes  = gtposes_d[st:ed, 0].clone()
-jtangles = jtangles_d[st:ed, 0].clone()
+### Get the data sequence
+gtposes  = gtposes_d.clone()
+jtangles = jtangles_d.clone()
 
 # Save RAM
 train_dataset, val_dataset, test_dataset = None, None, None

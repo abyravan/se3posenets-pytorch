@@ -97,16 +97,6 @@ def main():
     args.cuda       = not args.no_cuda and torch.cuda.is_available()
     args.batch_norm = not args.no_batch_norm
 
-    ### Create save directory and start tensorboard logger
-    util.create_dir(args.save_dir)  # Create directory
-    now = time.strftime("%c")
-    tblogger = util.TBLogger(args.save_dir + '/logs/' + now)  # Start tensorboard logger
-
-    # Create logfile to save prints
-    logfile = open(args.save_dir + '/logs/' + now + '/logfile.txt', 'w')
-    backup = sys.stdout
-    sys.stdout = Tee(sys.stdout, logfile)
-
     ########################
     ############ Parse options
     # Set seed

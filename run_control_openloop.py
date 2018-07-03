@@ -5,8 +5,8 @@ import os
 import sys
 import shutil
 import time
-import numpy as np
-import matplotlib.pyplot as plt
+#import numpy as np
+#import matplotlib.pyplot as plt
 import random
 
 # TODO: Make this cleaner, we don't need most of these parameters to create the pangolin window
@@ -28,6 +28,7 @@ pangolin = simctrlviz.PySimCtrlViz(img_ht, img_wd, img_scale, num_se3,
                                    cam_intrinsics['fx'], cam_intrinsics['fy'],
                                    cam_intrinsics['cx'], cam_intrinsics['cy'],
                                    savedir, posenets)
+import numpy as np
 
 ##########
 # NOTE: When importing torch before initializing the pangolin window, I get the error:
@@ -319,7 +320,7 @@ def main():
 
         # Get joint angles and check if there is reasonable motion
         poses, jtangles, ctrls = sample['poses'], sample['actctrlconfigs'], sample['controls']
-        if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.02):
+        if (jtangles[0] - jtangles[-1]).abs().mean() < (pargs.goal_horizon * 0.01):
             continue
         print('Example: {}/{}, Mean motion between start & goal is {} > {}'.format(k+1, nexamples,
             (jtangles[0] - jtangles[-1]).abs().mean(), pargs.goal_horizon * 0.02))

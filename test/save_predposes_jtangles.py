@@ -616,13 +616,13 @@ def iterate(data_loader, model, mode='test'):
                 gt_poses_d.append([])
                 jtangles_d.append([])
             # Save to list
-            pred_poses_d[-1].append(pred_poses.data[k:k+1].cpu())
-            gt_poses_d[-1].append(sample['poses'][k:k+1]) # Choose one element only, 1 x 8 x 3 x 4
-            jtangles_d[-1].append(sample['actctrlconfigs'][k:k+1]) # 1 x 7
+            pred_poses_d[-1].append(pred_poses.data[k:k+1].cpu().clone())
+            gt_poses_d[-1].append(sample['poses'][k:k+1].clone()) # Choose one element only, 1 x 8 x 3 x 4
+            jtangles_d[-1].append(sample['actctrlconfigs'][k:k+1].clone()) # 1 x 7
 
         # Print stats
         if i % 500 == 0:
-            print('Data-Folder ID: {}, Example: {}/{}'.format(len(pred_poses_d), i+1, len(data_loader)))
+            print('Dataset: {}, Data-Folder ID: {}, Example: {}/{}'.format(mode, len(pred_poses_d), i+1, len(data_loader)))
             print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
                   'Fwd: {fwd.val:.3f} ({fwd.avg:.3f})'.format(data=data_time, fwd=fwd_time))
 

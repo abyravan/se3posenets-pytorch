@@ -88,6 +88,90 @@ except NameError: # Not defined in Python 3.x
     def xrange(*args):
         return iter(range(*args))
 
+################ Data loading code
+### Load baxter sequence from disk
+def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
+                                   ctrl_type='actdiffvel', num_ctrl=7,
+                                   mesh_ids=torch.Tensor(),
+                                   compute_bwdflows=True, load_color=None, num_tracker=0,
+                                   dathreshold=0.01, dawinsize=5, use_only_da=False,
+                                   noise_func=None, compute_normals=False, maxdepthdiff=0.05,
+                                   bismooth_depths=False, bismooth_width=9, bismooth_std=0.001,
+                                   compute_bwdnormals=False, supervised_seg_loss=False):
+    # Setup vars
+    num_meshes = mesh_ids.nelement()  # Num meshes
+    seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
+    camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
+
+    # Setup memory
+    sequence, path, folid = data.generate_baxter_sequence(dataset, id)  # Get the file paths
+    points         = torch.FloatTensor(seq_len, 3, img_ht, img_wd)
+    actctrlconfigs = torch.FloatTensor(seq_len, num_ctrl)  # Ids in actual data belonging to commanded data
+    poses          = torch.FloatTensor(seq_len, mesh_ids.nelement() + 1, 3, 4).zero_()
+    allposes       = torch.FloatTensor()
+
+    # Setup temp var for depth
+    depths = points.narrow(1, 2, 1)  # Last channel in points is the depth
+
+    # Setup vars for color image
+    if load_color:
+        rgbs = torch.ByteTensor(seq_len, 3, img_ht, img_wd)
+
+    ## Read camera extrinsics (can be separate per dataset now!)
+    try:
+        camera_extrinsics = data.read_cameradata_file(path + '/cameradata.txt')
+    except:
+        pass  # Can use default cam extrinsics for the entire dataset
+
+    #####
+    # Load sequence
+    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
+    for k in xrange(len(sequence)-1): ## Only do this for the first element!
+        # Get data table
+        s = sequence[k]
+
+        # Load depth
+        depths[k] = data.read_depth_image(s['depth'], img_ht, img_wd, img_scale)  # Third channel is depth (x,y,z)
+
+        # Load configs
+        state = data.read_baxter_state_file(s['state1'])
+        actctrlconfigs[k] = state['actjtpos'][ctrl_ids]  # Get states for control IDs
+
+        # Load RGB
+        if load_color:
+            rgbs[k] = data.read_color_image(s['color'], img_ht, img_wd, colormap=load_color)
+            # actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
+            # comvels[k] = state['comjtvel']
+
+        # Load SE3 state & get all poses
+        se3state = data.read_baxter_se3state_file(s['se3state1'])
+        if allposes.nelement() == 0:
+            allposes.resize_(seq_len + 1, len(se3state) + 1, 3, 4).fill_(0)  # Setup size
+        allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        for id, tfm in se3state.items():
+            se3tfm = torch.mm(camera_extrinsics['modelView'],
+                              tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
+            allposes[k][id] = se3tfm[0:3, :]  # 3 x 4 transform (id is 1-indexed already, 0 is BG)
+
+        # Get poses of meshes we are moving
+        poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
+        for j in xrange(num_meshes):
+            meshid = mesh_ids[j]
+            poses[k][j + 1] = allposes[k][meshid][0:3, :]  # 3 x 4 transform
+
+    # Compute x & y values for the 3D points (= xygrid * depths)
+    xy = points[:, 0:2]
+    xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
+    xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
+
+    # Return loaded data
+    dataout = {'points': points, 'folderid': folid,
+               'poses': poses, 'actctrlconfigs': actctrlconfigs}
+    if load_color:
+        dataout['rgbs'] = rgbs
+    return dataout
+
+
 ################ MAIN
 #@profile
 def main():
@@ -326,7 +410,7 @@ def main():
                                                                          mean_dt=args.mean_dt, std_dt=args.std_dt,
                                                                          reject_left_motion=args.reject_left_motion,
                                                                          reject_right_still=args.reject_right_still)
-        read_seq_func = data.read_baxter_sequence_from_disk
+        read_seq_func = read_baxter_sequence_from_disk
     ### Noise function
     noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
                                                      defprob=0.005, noisestd=0.005)

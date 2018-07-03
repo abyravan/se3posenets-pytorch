@@ -564,6 +564,7 @@ def iterate(dataset, model, mode='test'):
     # Iterate over all the examples
     print('========== Dataset: {}, Num iters: {} =========='.format(mode, len(dataset)))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    total_start = time.time()
     for i in xrange(len(dataset)):
         # ============ Load data ============ #
         # Start timer
@@ -621,8 +622,9 @@ def iterate(dataset, model, mode='test'):
         # Print stats
         if i % 5000 == 0:
             print('Dataset: {}, Data-Folder ID: {}, Example: {}/{}'.format(mode, len(pred_poses_d), i+1, len(dataset)))
-            print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
-                  'Fwd: {fwd.val:.3f} ({fwd.avg:.3f})'.format(data=data_time, fwd=fwd_time))
+            print('\tTime => Total: {:.3f}, Data: {data.val:.3f} ({data.avg:.3f}), '
+                  'Fwd: {fwd.val:.3f} ({fwd.avg:.3f})'.format(
+                time.time() - total_start, data=data_time, fwd=fwd_time))
 
     ## Concat stuff and return
     for kk in xrange(len(gt_poses_d)):

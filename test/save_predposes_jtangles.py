@@ -582,10 +582,10 @@ def iterate(dataset, model, mode='test'):
         # Get XYZRGB input
         if args.use_xyzrgb:
             rgb = util.to_var(sample['rgbs'].type(deftype)/255.0, requires_grad=False) # Normalize RGB to 0-1
-            netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
+            netinput = torch.cat([pts, rgb], 1) # Concat along channels dimension
         elif args.use_xyzhue:
             hue = util.to_var(sample['rgbs'].narrow(2,0,1).type(deftype)/179.0, requires_grad=False)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
-            netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
+            netinput = torch.cat([pts, hue], 1) # Concat along channels dimension
         else:
             netinput = pts # XYZ
 

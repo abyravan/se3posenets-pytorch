@@ -669,6 +669,7 @@ def generate_baxter_sequence(dataset, idx):
     # Get stuff from the dataset
     step, seq, suffix = dataset['step'], dataset['seq'], dataset['suffix']
     # If the dataset has subdirs, find the proper sub-directory to use
+    did = 0
     if ('subdirs' in dataset) :#dataset.has_key('subdirs')):
         # Find the sub-directory the data falls into
         assert (idx < dataset['numdata']);  # Check if we are within limits
@@ -694,7 +695,7 @@ def generate_baxter_sequence(dataset, idx):
                         'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png'}
         stepid += step  # Get flow from start image to the next step
         ct += 1  # Increment counter
-    return sequence, path
+    return sequence, path, did
 
 ### Generate the data files (with all the depth, flow etc.) for each sequence
 def generate_box_sequence(dataset, idx):
@@ -763,7 +764,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset['ctrlids']
 
     # Setup memory
-    sequence, path = generate_baxter_sequence(dataset, id)  # Get the file paths
+    sequence, path, folid = generate_baxter_sequence(dataset, id)  # Get the file paths
     points     = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
     #actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
     actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl) # Ids in actual data belonging to commanded data
@@ -933,7 +934,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                                                      maxdepthdiff=maxdepthdiff)
 
     # Return loaded data
-    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
+    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities, 'folderid': folid,
             'fwdassocpixelids': fwdassocpixelids, 'controls': controls, 'comconfigs': comconfigs,
             'poses': poses, 'dt': dt, 'actctrlconfigs': actctrlconfigs}
     if compute_bwdflows:

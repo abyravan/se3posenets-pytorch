@@ -259,7 +259,7 @@ def main():
             posemaskpredfn = posemaskmodel.forward_only_pose if args.use_gt_masks else posemaskmodel.forward_pose_mask
             model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                              se3_type=checkpoint['args'].se3_type, nonlinearity=checkpoint['args'].nonlin,
-                                             init_se3_iden=args.init_se3_iden, use_kinchain=checkpoint['args'].use_kinchain,
+                                             init_se3_iden=checkpoint['args'].init_se3_iden, use_kinchain=checkpoint['args'].use_kinchain,
                                              delta_pivot='', local_delta_se3=False, use_jt_angles=False)
         else:
             modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel

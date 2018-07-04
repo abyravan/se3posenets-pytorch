@@ -63,7 +63,7 @@ parser = argparse.ArgumentParser(description='Reactive control using SE3-Pose-Ne
 
 parser.add_argument('--checkpoint', default='', type=str, metavar='PATH', required=True,
                     help='path to saved network to use for training (default: none)')
-parser.add_argument('--args-checkpoint', default='', type=str, metavar='PATH', required=True,
+parser.add_argument('--args-checkpoint', default='', type=str, metavar='PATH',
                     help='path to saved network to use for loading arguments (default: none)')
 parser.add_argument('--use-gt-poses-transnet', action='store_true', default=False,
                     help='Use transition model trained directly on GT poses (default: False)')
@@ -73,7 +73,7 @@ parser.add_argument('--fd-eps', default=1e-4, type=float, metavar='EPS',
                     help='Finite difference epsilon (default: 1e-4)')
 
 ## Predicted-poses transition network
-parser.add_argument('--pose-mask-checkpoint', default='', type=str, metavar='PATH', required=True,
+parser.add_argument('--pose-mask-checkpoint', default='', type=str, metavar='PATH',
                     help='path to saved network to use for loading pose-mask encoder only (default: none)')
 parser.add_argument('--use-pred-poses-transnet', action='store_true', default=False,
                     help='Use transition model trained directly on predicted poses (default: False)')

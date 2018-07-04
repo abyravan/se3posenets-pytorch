@@ -72,6 +72,12 @@ parser.add_argument('--use-gt-dynamics', action='store_true', default=False,
 parser.add_argument('--fd-eps', default=1e-4, type=float, metavar='EPS',
                     help='Finite difference epsilon (default: 1e-4)')
 
+## Predicted-poses transition network
+parser.add_argument('--pose-mask-checkpoint', default='', type=str, metavar='PATH', required=True,
+                    help='path to saved network to use for loading pose-mask encoder only (default: none)')
+parser.add_argument('--use-pred-poses-transnet', action='store_true', default=False,
+                    help='Use transition model trained directly on predicted poses (default: False)')
+
 # Problem options
 parser.add_argument('--only-top4-jts', action='store_true', default=False,
                     help='Controlling only the first 4 joints (default: False)')
@@ -158,7 +164,7 @@ def main():
     ########################
     ############ Load pre-trained network
     if pargs.use_gt_dynamics:
-        assert(not pargs.use_gt_poses_transnet)
+        assert(not (pargs.use_gt_poses_transnet or pargs.use_pred_poses_transnet) )
         if os.path.isfile(pargs.args_checkpoint):
             checkpoint = torch.load(pargs.args_checkpoint)  # For loading arguments
             args = checkpoint['args']
@@ -199,6 +205,12 @@ def main():
             args.da_winsize = args_1.da_winsize
             args.da_threshold = args_1.da_threshold
             args.use_only_da_for_flows = args_1.use_only_da_for_flows
+        elif pargs.use_pred_poses_transnet:
+            checkpoint_pm = torch.load(pargs.pose_mask_checkpoint)
+            args = checkpoint_pm['args'] # Overwrite args
+            print("=> loading pose-mask checkpoint '{}'".format(pargs.pose_mask_checkpoint))
+            print("=> loaded pose-mask checkpoint (epoch: {}, num train iter: {})"
+                  .format(checkpoint_pm['epoch'], checkpoint_pm['epoch'] * args.train_ipe))
         if not hasattr(args, "use_gt_masks"):
             args.use_gt_masks, args.use_gt_poses = False, False
         if not hasattr(args, "num_state"):
@@ -230,6 +242,25 @@ def main():
                                              init_se3_iden=args.init_se3_iden, use_kinchain=args.use_kinchain,
                                              delta_pivot='', local_delta_se3=False, use_jt_angles=False)
             posemaskpredfn = None
+        elif pargs.use_pred_poses_transnet:
+            # We have both posemaskmodel and transition model
+            modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
+            posemaskmodel = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
+                            se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                            input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                            init_posese3_iden=args.init_posese3_iden,
+                            init_transse3_iden=args.init_transse3_iden,
+                            use_wt_sharpening=args.use_wt_sharpening,
+                            sharpen_start_iter=args.sharpen_start_iter,
+                            sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                            decomp_model=args.decomp_model, wide=args.wide_model,
+                            use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                            num_state=args.num_state_net)
+            posemaskpredfn = posemaskmodel.forward_only_pose if args.use_gt_masks else posemaskmodel.forward_pose_mask
+            model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
+                                             se3_type=checkpoint['args'].se3_type, nonlinearity=checkpoint['args'].nonlin,
+                                             init_se3_iden=args.init_se3_iden, use_kinchain=checkpoint['args'].use_kinchain,
+                                             delta_pivot='', local_delta_se3=False, use_jt_angles=False)
         else:
             modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
             model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
@@ -255,6 +286,13 @@ def main():
 
         # Set model to evaluate mode
         model.eval()
+
+        # Take care of extra model for pred poses transition network
+        if pargs.use_gt_poses_transnet:
+            if args.cuda:
+                posemaskmodel.cuda()
+            posemaskmodel.load_state_dict(checkpoint_pm['model_state_dict'])
+            posemaskmodel.eval()
 
     # Sanity check some parameters (TODO: remove it later)
     assert(args.num_se3 == num_se3)
@@ -520,7 +558,8 @@ def main():
         # Model has to be in training mode
         if not pargs.use_gt_dynamics:
             model.train()
-            transmodel = model if pargs.use_gt_poses_transnet else model.transitionmodel
+            transmodel = model if (pargs.use_gt_poses_transnet or pargs.use_pred_poses_transnet) \
+                else model.transitionmodel
 
         ############
         # Xalglib optimizers

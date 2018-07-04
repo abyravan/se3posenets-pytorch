@@ -288,7 +288,7 @@ def main():
         model.eval()
 
         # Take care of extra model for pred poses transition network
-        if pargs.use_gt_poses_transnet:
+        if pargs.use_pred_poses_transnet:
             if args.cuda:
                 posemaskmodel.cuda()
             posemaskmodel.load_state_dict(checkpoint_pm['model_state_dict'])

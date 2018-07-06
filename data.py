@@ -934,7 +934,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
                                                                      maxdepthdiff=maxdepthdiff)
 
     # Return loaded data
-    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities, 'folderid': folid,
+    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities, 'folderid': int(folid),
             'fwdassocpixelids': fwdassocpixelids, 'controls': controls, 'comconfigs': comconfigs,
             'poses': poses, 'dt': dt, 'actctrlconfigs': actctrlconfigs}
     if compute_bwdflows:
@@ -1153,7 +1153,7 @@ class BaxterSeqDataset(Dataset):
         # Assumption: This function returns a dict of torch tensors
         sample = self.load_function(self.datasets[did], sid)
         sample['id'] = idx # Add the ID of the sample in
-        sample['datasetid'] = did # Add the ID of the dataset in
+        sample['datasetid'] = int(did) # Add the ID of the dataset in
 
         # Return
         return sample

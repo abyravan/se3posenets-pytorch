@@ -654,7 +654,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Mask Consistency Loss (between t & t+1)
         currmaskconsisloss, maskconsisloss = 0, torch.zeros(1)
         if mask_consis_wt > 0:
-            currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0, mask1, fwdpixelassocs,
+            currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0, mask1, fwdpixelassocs[:,0],
                                                                         args.mask_consis_loss_type)
             maskconsisloss = torch.Tensor([currmaskconsisloss.data[0]])
 
@@ -981,13 +981,13 @@ def clip_grad(v, min, max):
 def mask_consistency_loss(mask1, mask2, pixelassoc12, losstype='mse'):
     assert (losstype in ['mse', 'abs', 'kl'])
     bsz, nch, ht, wd = mask1.size()
-    assert(mask1.is_same_size(mask2) and (mask1.size() == torch.Size([bsz, 1, ht, wd])))
+    assert(mask1.is_same_size(mask2) and (pixelassoc12.size() == torch.Size([bsz, 1, ht, wd])))
     mask1v, mask2v, pixelassoc12v = mask1.view(bsz, nch, ht*wd), \
                                     mask2.view(bsz, nch, ht*wd), \
                                     pixelassoc12.view(bsz, 1, ht*wd).long()
-    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
+    assocmask = (pixelassoc12v != -1).type_as(mask1v) # Only these points need to be penalized
     pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
-    mask2v_1 = torch.index_select(mask2v, 2, pixelassoc12v) # Vals from tensor 2 in tensor 1, associated correctly
+    mask2v_1 = torch.gather(mask2v, 2, pixelassoc12v.expand_as(mask1v)) # Vals from tensor 2 in tensor 1, associated correctly
     if losstype == 'mse':
         maskloss = ctrlnets.Loss3D(mask1v, mask2v_1, 'mse', assocmask)
     elif losstype == 'abs':

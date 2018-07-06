@@ -38,6 +38,12 @@ parser = options.setup_comon_options()
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 
+# Mask consistency loss options
+parser.add_argument('--mask-consis-wt', default=0.01, type=float,
+                    metavar='WT', help='Weight for the mask consistency loss - only FWD direction (default: 0.01)')
+parser.add_argument('--mask-consis-loss-type', default='mse', type=str,
+                    metavar='STR', help='Type of loss to use for mask consistency errors, (default: mse | abs | kl)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -552,6 +558,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
     stats.consiserr                             = AverageMeter()
+    stats.maskconsisloss                        = AverageMeter()
     stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
@@ -573,6 +580,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         mode, epoch, num_iters))
     deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
     pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
+    mask_consis_wt = args.mask_consis_wt * args.loss_scale
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -600,6 +608,9 @@ def iterate(data_loader, model, tblogger, num_iters,
             netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
         else:
             netinput = pts # XYZ
+
+        # Get fwd pixel associations
+        fwdpixelassocs = util.to_var(sample['fwdassocpixelids'].type(deftype), requires_grad=False)
 
         # Get jt angles
         jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
@@ -640,14 +651,22 @@ def iterate(data_loader, model, tblogger, num_iters,
         nextpose_trans = model.transitionmodel.posedecoder(delta, pose0)
         currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
 
+        ### Mask Consistency Loss (between t & t+1)
+        currmaskconsisloss, maskconsisloss = 0, torch.zeros(1)
+        if mask_consis_wt > 0:
+            currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0, mask1, fwdpixelassocs,
+                                                                        args.mask_consis_loss_type)
+            maskconsisloss = torch.Tensor([currmaskconsisloss.data[0]])
+
         # Append to total loss
-        loss = currptloss + currconsisloss
+        loss = currptloss + currconsisloss + currmaskconsisloss
         ptloss     = torch.Tensor([currptloss.data[0]])
         consisloss = torch.Tensor([currconsisloss.data[0]])
 
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
+        stats.maskconsisloss.update(maskconsisloss)
         stats.loss.update(loss.data[0])
 
         # Measure FWD time
@@ -755,6 +774,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 mode+'-motionerravg': motionerr_avg.sum()/bsz,
                 mode+'-stillerrsum': stillerr_sum.sum() / bsz,
                 mode+'-stillerravg': stillerr_avg.sum() / bsz,
+                mode+'-maskconsissloss': maskconsisloss.sum(),
             }
             if mode == 'train':
                 info[mode+'-lr'] = args.curr_lr # Plot current learning rate
@@ -853,6 +873,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), '
               'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
+              'Mask-Consis: {:.3f} ({:.4f}),'
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
@@ -860,6 +881,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.ptloss.val[k], stats.ptloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
+            stats.maskconsisloss.val[k], stats.maskconsisloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
             stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,
@@ -953,6 +975,27 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_
 def clip_grad(v, min, max):
     v.register_hook(lambda g: g.clamp(min, max))
     return v
+
+### Mask consistency error
+# masks are B x K x H x W, assoc is B x 1 x H x W
+def mask_consistency_loss(mask1, mask2, pixelassoc12, losstype='mse'):
+    assert (losstype in ['mse', 'abs', 'kl'])
+    bsz, nch, ht, wd = mask1.size()
+    assert(mask1.is_same_size(mask2) and (mask1.size() == torch.Size([bsz, 1, ht, wd])))
+    mask1v, mask2v, pixelassoc12v = mask1.view(bsz, nch, ht*wd), \
+                                    mask2.view(bsz, nch, ht*wd), \
+                                    pixelassoc12.view(bsz, 1, ht*wd).long()
+    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
+    pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
+    mask2v_1 = torch.index_select(mask2v, 2, pixelassoc12v) # Vals from tensor 2 in tensor 1, associated correctly
+    if losstype == 'mse':
+        maskloss = ctrlnets.Loss3D(mask1v, mask2v_1, 'mse', assocmask)
+    elif losstype == 'abs':
+        maskloss = ctrlnets.Loss3D(mask1v, mask2v_1, 'abs', assocmask)
+    elif losstype == 'kl':
+        ## TODO - Add a KL loss
+        assert(False)
+    return maskloss
 
 ################ RUN MAIN
 if __name__ == '__main__':

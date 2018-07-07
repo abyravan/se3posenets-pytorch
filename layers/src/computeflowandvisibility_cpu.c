@@ -48,7 +48,16 @@ void compute_visibility(
                 // In case the ID is background, then skip DA (we need to check for z < 0 => this is local frame of reference, not camera)
                 if (mi == 0)
                 {
-                    *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // Assume that BG points are always visible
+                    // Get link label for the same pixel at next timestep
+                    // If no other object has moved on top of it then it is visible at next timestep, else not
+                    unsigned char mt = *(label2 + b*ls[0] + r*ls[2] + c*ls[3]);
+                    if (mi == mt)
+                    {
+                        *(visible1 + b*ls[0] + r*ls[2] + c*ls[3]) = 1; // Visible point (as it is BG at next timestep)
+                        *(assocpixelid1+ b*ls[0] + r*ls[2] + c*ls[3]) = (r * ncols) + c; // Assign association to same point in next image
+                    }
+
+                    // Done
                     continue;
                 }
 

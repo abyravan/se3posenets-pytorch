@@ -1011,7 +1011,7 @@ def mask_consistency_loss(mask1, mask2, pixelassoc12, losstype='mse'):
         maskloss = absloss[assocmask].mean()
     elif losstype == 'kl':
         ## KL(inp, tar) = tar * (log(tar) - log(inp))
-        nonzeros = mask1v.gt(0) * mask2v_1.gt(0) * assocmask # Only compute loss for vals that are > 0, log is inf else
+        nonzeros = util.to_var((mask1v.gt(0) * mask2v_1.gt(0) * assocmask).data.clone()) # Only compute loss for vals that are > 0, log is inf else
         klloss = mask2v_1 * (torch.log(mask2v_1) - torch.log(mask1v))
         maskloss = klloss[nonzeros].mean()
     elif losstype == 'kllog': # Assumes that you pass in log(inp) & log(tar)

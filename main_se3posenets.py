@@ -47,6 +47,10 @@ parser.add_argument('--mask-consis-loss-type', default='mse', type=str,
 parser.add_argument('--pre-mask-consis', action='store_true', default=False,
                     help='Use the pre-sharpened activations for mask consistency loss (default: False)')
 
+# Use SE3NN
+parser.add_argument('--use-se3nn', action='store_true', default=False,
+                    help='Use SE3NN SE3ToRt layer instead of the ones in se3.py (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -218,6 +222,11 @@ def main():
     if args.use_jt_angles_trans:
         print("Using Jt angles as input to the transition model")
 
+    if args.use_se3nn:
+        print('Using SE3NNs SE3ToRt layer implementation')
+    else:
+        print('Using the SE3ToRt implementation in se3.py')
+
     # DA threshold / winsize
     print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_threshold,
                                                                                  args.da_winsize))
@@ -327,7 +336,8 @@ def main():
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter) # noise_stop_iter not available for SE2 models
+                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
+                    use_se3nn=args.use_se3nn) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

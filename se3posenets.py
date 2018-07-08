@@ -15,7 +15,7 @@ class PoseMaskEncoder(nn.Module):
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7,
-                 full_res=False, noise_stop_iter=1e6):
+                 full_res=False, noise_stop_iter=1e6, use_se3nn=False):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -134,8 +134,10 @@ class PoseMaskEncoder(nn.Module):
 
         # Create pose decoder (convert to r/t)
         self.se3_type = se3_type
-        self.posedecoder = lambda x: se3.SE3ToRt(x, se3_type, use_pivot) # Convert to Rt
-
+        if use_se3nn:
+            self.posedecoder = se3nn.SE3ToRt(se3_type, use_pivot)
+        else:
+            self.posedecoder = lambda x: se3.SE3ToRt(x, se3_type, use_pivot) # Convert to Rt
         #self.posedecoder = nn.Sequential()
         #if se3_type != 'se3aar':
         #self.posedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, use_pivot)) # Convert to Rt
@@ -232,7 +234,8 @@ class PoseMaskEncoder(nn.Module):
 class TransitionModel(nn.Module):
     def __init__(self, num_ctrl, num_se3, delta_pivot='', se3_type='se3aa',
                  use_kinchain=False, nonlinearity='prelu', init_se3_iden=False,
-                 local_delta_se3=False, use_jt_angles=False, num_state=7):
+                 local_delta_se3=False, use_jt_angles=False, num_state=7,
+                 use_se3nn=False):
         super(TransitionModel, self).__init__()
         self.se3_dim = ctrlnets.get_se3_dimension(se3_type=se3_type, use_pivot=(delta_pivot == 'pred')) # Only if we are predicting directly
         self.num_se3 = num_se3
@@ -286,7 +289,10 @@ class TransitionModel(nn.Module):
         self.se3_type    = se3_type
         self.delta_pivot = delta_pivot
         self.inp_pivot   = (self.delta_pivot != '') and (self.delta_pivot != 'pred') # Only for these 2 cases, no pivot is passed in as input
-        self.deltaposedecoder = lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != ''))
+        if use_se3nn:
+            self.deltaposedecoder = se3nn.SE3ToRt(se3_type, (self.delta_pivot != ''))
+        else:
+            self.deltaposedecoder = lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != '')) # Convert to Rt
         #self.deltaposedecoder = nn.Sequential()
         #if se3_type != 'se3aar':
         #self.deltaposedecoder.add_module('se3rt', lambda x: se3.SE3ToRt(x, se3_type, (self.delta_pivot != '')))  # Convert to Rt
@@ -362,7 +368,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
                  full_res=False, noise_stop_iter=1e6, trans_type='default',
-                 posemask_type='default'):
+                 posemask_type='default', use_se3nn=False):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -398,7 +404,8 @@ class MultiStepSE3PoseModel(nn.Module):
                                         sharpen_start_iter=sharpen_start_iter, sharpen_rate=sharpen_rate,
                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                         use_jt_angles=use_jt_angles, num_state=num_state,
-                                        full_res=full_res, noise_stop_iter=noise_stop_iter)
+                                        full_res=full_res, noise_stop_iter=noise_stop_iter,
+                                        use_se3nn=use_se3nn)
 
         # # Initialize the transition model
         # if trans_type == 'default':
@@ -427,7 +434,8 @@ class MultiStepSE3PoseModel(nn.Module):
                                        se3_type=se3_type, use_kinchain=use_kinchain,
                                        nonlinearity=nonlinearity, init_se3_iden = init_transse3_iden,
                                        local_delta_se3=local_delta_se3,
-                                       use_jt_angles=use_jt_angles_trans, num_state=num_state)
+                                       use_jt_angles=use_jt_angles_trans, num_state=num_state,
+                                       use_se3nn=use_se3nn)
 
         # Options
         self.use_jt_angles = use_jt_angles

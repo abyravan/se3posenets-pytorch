@@ -209,16 +209,19 @@ class PoseMaskEncoder(nn.Module):
                 m = self.deconv4(m, c1)
                 m = self.deconv5(m)
 
+            # Save output before sharpening
+            self.pre_sharpen_mask = m
+
             # Predict a mask (either wt-sharpening or sigmoid-mask or soft-mask approach)
             # Normalize to sum across 1 along the channels (only for weight sharpening or soft-mask)
             if self.use_wt_sharpening:
                 noise_std, pow = self.compute_wt_sharpening_stats(train_iter=train_iter)
-                m = self.maskdecoder(m, add_noise=self.training, noise_std=noise_std, pow=pow)
+                mout = self.maskdecoder(m, add_noise=self.training, noise_std=noise_std, pow=pow)
             else:
-                m = self.maskdecoder(m)
+                mout = self.maskdecoder(m)
 
             # Return both
-            return p, m
+            return p, mout
         else:
             return p
 

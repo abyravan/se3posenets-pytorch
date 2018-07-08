@@ -42,7 +42,10 @@ parser.add_argument('--pt-wt', default=1, type=float,
 parser.add_argument('--mask-consis-wt', default=1.0, type=float,
                     metavar='WT', help='Weight for the mask consistency loss - only FWD direction (default: 0.01)')
 parser.add_argument('--mask-consis-loss-type', default='mse', type=str,
-                    metavar='STR', help='Type of loss to use for mask consistency errors, (default: mse | abs | kl)')
+                    metavar='STR', help='Type of loss to use for mask consistency errors, '
+                                        '(default: mse | abs | kl | kllog)')
+parser.add_argument('--pre-mask-consis', action='store_true', default=False,
+                    help='Use the pre-sharpened activations for mask consistency loss (default: False)')
 
 # Define xrange
 try:
@@ -625,7 +628,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         ####### Run a FWD pass through the network (multi-step)
         # Predict the poses and masks
         pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
+        mask0pre = model.posemaskmodel.pre_sharpen_mask.clone()
         pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
+        mask1pre = model.posemaskmodel.pre_sharpen_mask.clone()
 
         # Predict next pose based on pose & ctrl
         deltapose01, transpose1 = model.forward_next_pose(pose0, ctrls[:,0])
@@ -654,7 +659,17 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Mask Consistency Loss (between t & t+1)
         currmaskconsisloss, maskconsisloss = 0, torch.zeros(1)
         if mask_consis_wt > 0:
-            currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0, mask1, fwdpixelassocs[:,0],
+            if args.pre_mask_consis:
+                if args.mask_consis_loss_type == 'kl':
+                    mask0in, mask1in = F.softmax(mask0pre), F.softmax(mask1pre) # Softmax the pre-sharpening activations
+                elif args.mask_consis_loss_type == 'kllog':
+                    mask0in, mask1in = F.log_softmax(mask0pre), F.log_softmax(mask1pre) # Expects log inputs
+                else:
+                    mask0in, mask1in = mask0pre, mask1pre
+            else:
+                assert(args.mask_consis_loss_type is not 'kllog') # We have mask outputs which are not logs
+                mask0in, mask1in = mask0, mask1
+            currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0in, mask1in, fwdpixelassocs[:,0],
                                                                         args.mask_consis_loss_type)
             maskconsisloss = torch.Tensor([currmaskconsisloss.data[0]])
 
@@ -979,22 +994,30 @@ def clip_grad(v, min, max):
 ### Mask consistency error
 # masks are B x K x H x W, assoc is B x 1 x H x W
 def mask_consistency_loss(mask1, mask2, pixelassoc12, losstype='mse'):
-    assert (losstype in ['mse', 'abs', 'kl'])
+    assert (losstype in ['mse', 'abs', 'kl', 'kllog'])
     bsz, nch, ht, wd = mask1.size()
     assert(mask1.is_same_size(mask2) and (pixelassoc12.size() == torch.Size([bsz, 1, ht, wd])))
     mask1v, mask2v, pixelassoc12v = mask1.contiguous().view(bsz, nch, ht*wd), \
                                     mask2.contiguous().view(bsz, nch, ht*wd), \
                                     pixelassoc12.contiguous().view(bsz, 1, ht*wd).long()
-    assocmask = (pixelassoc12v != -1).type_as(mask1v) # Only these points need to be penalized
+    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
     pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
     mask2v_1 = torch.gather(mask2v, 2, pixelassoc12v.expand_as(mask1v)) # Vals from tensor 2 in tensor 1, associated correctly
     if losstype == 'mse':
-        maskloss = ctrlnets.Loss3D(mask1v, mask2v_1, 'mse', assocmask)
+        mseloss = (mask1v - mask2v_1).pow(2)
+        maskloss = 0.5 * mseloss[assocmask].mean()
     elif losstype == 'abs':
-        maskloss = ctrlnets.Loss3D(mask1v, mask2v_1, 'abs', assocmask)
+        absloss = (mask1v - mask2v_1).abs()
+        maskloss = absloss[assocmask].mean()
     elif losstype == 'kl':
-        ## TODO - Add a KL loss
-        assert(False)
+        ## KL(inp, tar) = tar * (log(tar) - log(inp))
+        nonzeros = mask1v.gt(0) * mask2v_1.gt(0) * assocmask # Only compute loss for vals that are > 0, log is inf else
+        klloss = mask2v_1 * (torch.log(mask2v_1) - torch.log(mask1v))
+        maskloss = klloss[nonzeros].mean()
+    elif losstype == 'kllog': # Assumes that you pass in log(inp) & log(tar)
+        ## KL(inp, tar) = tar * (log(tar) - log(inp))
+        klloss = torch.exp(mask2v_1) * (mask2v_1 - mask1v)
+        maskloss = klloss[assocmask].mean()
     return maskloss
 
 ################ RUN MAIN

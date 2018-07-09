@@ -24,6 +24,7 @@ wide-model:         True
 use-gt-poses:		  False
 use-gt-masks:		  False
 use-jt-angles:		  False
+compose-deltas:   False
 
 # Mask options
 use-wt-sharpening: True

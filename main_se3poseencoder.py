@@ -51,6 +51,10 @@ parser.add_argument('--pre-mask-consis', action='store_true', default=False,
 parser.add_argument('--use-se3nn', action='store_true', default=False,
                     help='Use SE3NN SE3ToRt layer instead of the ones in se3.py (default: False)')
 
+# Compose deltas for multi-step
+parser.add_argument('--compose-deltas', action='store_true', default=False,
+                    help='Compose delta SE3s over time (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)

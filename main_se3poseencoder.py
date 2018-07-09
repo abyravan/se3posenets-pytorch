@@ -455,12 +455,12 @@ def main():
                                     epoch+1, sfc, prev_best_fcloss, prev_best_fcepoch, best_loss, best_fcepoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
+        statstfile.write("{}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
                                                                        train_stats.ptloss.avg.sum(),
                                                                        train_stats.maskconsisloss.avg.sum(),
                                                                        train_stats.flowerr_sum.avg.sum()/args.batch_size,
                                                                        train_stats.flowerr_avg.avg.sum()/args.batch_size))
-        statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
+        statsvfile.write("{}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
                                                                        val_stats.ptloss.avg.sum(),
                                                                        val_stats.maskconsisloss.avg.sum(),
                                                                        val_stats.flowerr_sum.avg.sum() / args.batch_size,
@@ -543,7 +543,7 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
+    statsvfile.write("{}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
                                                                    test_stats.ptloss.avg.sum(),
                                                                    test_stats.maskconsisloss.avg.sum(),
                                                                    test_stats.flowerr_sum.avg.sum() / args.batch_size,

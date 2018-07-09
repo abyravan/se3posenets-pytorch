@@ -436,7 +436,7 @@ def main():
         # Find best losses
         val_loss, val_floss, val_fcloss = val_stats.loss.avg, \
                                           val_stats.ptloss.avg.sum(), \
-                                          val_stats.ptloss.avg.sum() + val_stats.consisloss.avg.sum()
+                                          val_stats.ptloss.avg.sum() + val_stats.maskconsisloss.avg.sum()
         is_best, is_fbest, is_fcbest    = (val_loss < best_loss), (val_floss < best_floss), (val_fcloss < best_fcloss)
         prev_best_loss, prev_best_floss, prev_best_fcloss    = best_loss, best_floss, best_fcloss
         prev_best_epoch, prev_best_fepoch, prev_best_fcepoch = best_epoch, best_fepoch, best_fcepoch
@@ -457,12 +457,12 @@ def main():
         # Write losses to stats file
         statstfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
                                                                        train_stats.ptloss.avg.sum(),
-                                                                       train_stats.consisloss.avg.sum(),
+                                                                       train_stats.maskconsisloss.avg.sum(),
                                                                        train_stats.flowerr_sum.avg.sum()/args.batch_size,
                                                                        train_stats.flowerr_avg.avg.sum()/args.batch_size))
         statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
                                                                        val_stats.ptloss.avg.sum(),
-                                                                       val_stats.consisloss.avg.sum(),
+                                                                       val_stats.maskconsisloss.avg.sum(),
                                                                        val_stats.flowerr_sum.avg.sum() / args.batch_size,
                                                                        val_stats.flowerr_avg.avg.sum() / args.batch_size))
 
@@ -545,7 +545,7 @@ def main():
     # Write test stats to val stats file at the end
     statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
                                                                    test_stats.ptloss.avg.sum(),
-                                                                   test_stats.consisloss.avg.sum(),
+                                                                   test_stats.maskconsisloss.avg.sum(),
                                                                    test_stats.flowerr_sum.avg.sum() / args.batch_size,
                                                                    test_stats.flowerr_avg.avg.sum() / args.batch_size))
     statsvfile.close(); statstfile.close()

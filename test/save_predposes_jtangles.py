@@ -39,7 +39,7 @@ except NameError: # Not defined in Python 3.x
     def xrange(*args):
         return iter(range(*args))
 
-################ Data loading code
+################ Data loadng code
 ### Load baxter sequence from disk
 def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
                                    ctrl_type='actdiffvel', num_ctrl=7,
@@ -66,7 +66,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Setup vars for color image
     if load_color:
-        rgbs = torch.ByteTensor(seq_len, 3, img_ht, img_wd)
+        rgbs = torch.ByteTensor(1, 3, img_ht, img_wd)
 
     ## Read camera extrinsics (can be separate per dataset now!)
     try:
@@ -96,7 +96,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
         # Load SE3 state & get all poses
         se3state = data.read_baxter_se3state_file(s['se3state1'])
         if allposes.nelement() == 0:
-            allposes.resize_(seq_len, len(se3state) + 1, 3, 4).fill_(0)  # Setup size
+            allposes.resize_(1, len(se3state) + 1, 3, 4).fill_(0)  # Setup size
         allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
         for id, tfm in se3state.items():
             se3tfm = torch.mm(camera_extrinsics['modelView'],
@@ -112,7 +112,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     # Compute x & y values for the 3D points (= xygrid * depths)
     xy = points[:, 0:2]
     xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
-    xy.mul_(depths.expand(seq_len, 2, img_ht, img_wd))  # = xygrid * depths
+    xy.mul_(depths.expand(1, 2, img_ht, img_wd))  # = xygrid * depths
 
     # Return loaded data
     dataout = {'points': points, 'folderid': int(folid),

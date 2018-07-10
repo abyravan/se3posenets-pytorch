@@ -165,7 +165,7 @@ def main():
 
     # Get the dataset
     loaddata = torch.load(args.data)
-    if hasattr(dataset, 'pargs'):
+    if 'pargs' in loaddata.keys():
         dataset = loaddata['posedata']
     else:
         dataset = loaddata

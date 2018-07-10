@@ -77,6 +77,8 @@ parser.add_argument('--pose-mask-checkpoint', default='', type=str, metavar='PAT
                     help='path to saved network to use for loading pose-mask encoder only (default: none)')
 parser.add_argument('--use-pred-poses-transnet', action='store_true', default=False,
                     help='Use transition model trained directly on predicted poses (default: False)')
+parser.add_argument('--encoder-only', action='store_true', default=False,
+                    help='Loaded pose mask checkpoint has only the encoder, no transition model (default: False)')
 
 # Problem options
 parser.add_argument('--only-top4-jts', action='store_true', default=False,
@@ -244,19 +246,31 @@ def main():
             posemaskpredfn = None
         elif pargs.use_pred_poses_transnet:
             # We have both posemaskmodel and transition model
-            modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
-            posemaskmodel = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
-                            se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
-                            input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                            init_posese3_iden=args.init_posese3_iden,
-                            init_transse3_iden=args.init_transse3_iden,
-                            use_wt_sharpening=args.use_wt_sharpening,
-                            sharpen_start_iter=args.sharpen_start_iter,
-                            sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                            decomp_model=args.decomp_model, wide=args.wide_model,
-                            use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
-                            num_state=args.num_state_net)
-            posemaskpredfn = posemaskmodel.forward_only_pose if args.use_gt_masks else posemaskmodel.forward_pose_mask
+            if pargs.encoder_only:
+                import se3posenets
+                posemaskmodel = se3posenets.PoseMaskEncoder(
+                    num_se3=args.num_se3, se3_type=args.se3_type,
+                    input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                    init_se3_iden=args.init_posese3_iden,
+                    use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
+                    sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
+                    use_se3nn=args.use_se3nn)
+                posemaskpredfn = posemaskmodel
+            else:
+                modelfn = ctrlnets.MultiStepSE3OnlyPoseModel if args.use_gt_masks else ctrlnets.MultiStepSE3PoseModel
+                posemaskmodel = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3, delta_pivot=args.delta_pivot,
+                                se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                                input_channels=3, use_bn=args.batch_norm, nonlinearity=args.nonlin,
+                                init_posese3_iden=args.init_posese3_iden,
+                                init_transse3_iden=args.init_transse3_iden,
+                                use_wt_sharpening=args.use_wt_sharpening,
+                                sharpen_start_iter=args.sharpen_start_iter,
+                                sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
+                                decomp_model=args.decomp_model, wide=args.wide_model,
+                                use_jt_angles=args.use_jt_angles, use_jt_angles_trans=args.use_jt_angles_trans,
+                                num_state=args.num_state_net)
+                posemaskpredfn = posemaskmodel.forward_only_pose if args.use_gt_masks else posemaskmodel.forward_pose_mask
             model = ctrlnets.TransitionModel(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                                              se3_type=checkpoint['args'].se3_type, nonlinearity=checkpoint['args'].nonlin,
                                              init_se3_iden=checkpoint['args'].init_se3_iden, use_kinchain=checkpoint['args'].use_kinchain,

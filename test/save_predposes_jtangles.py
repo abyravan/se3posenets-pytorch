@@ -147,6 +147,14 @@ def main():
     # Fix some options
     if not hasattr(args, 'trans_type'):
         args.trans_type, args.posemask_type = 'default', 'default'
+    if not hasattr(args, 'normal_wt'):
+        args.normal_wt = 0
+        args.normal_max_depth_diff = 0.05
+        args.bilateral_depth_smoothing = False
+        args.bilateral_depth_std = 0.005
+        args.bilateral_window_width = 9
+    if not hasattr(args, 'seg_wt'):
+        args.seg_wt = 0
 
     ########################
     ############ Parse options

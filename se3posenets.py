@@ -617,7 +617,7 @@ def setup_datasets(args):
     if args.use_jt_angles_trans:
         print("Using Jt angles as input to the transition model")
 
-    if args.use_se3nn:
+    if hasattr(args, 'use_se3nn') and args.use_se3nn:
         print('Using SE3NNs SE3ToRt layer implementation')
     else:
         print('Using the SE3ToRt implementation in se3.py')

@@ -144,6 +144,10 @@ def main():
     best_epoch   = checkpoint['best_epoch'] if 'best_epoch' in checkpoint else 0
     print('==== Best validation loss: {} was from epoch: {} ===='.format(best_loss, best_epoch))
 
+    # Fix some options
+    if not hasattr(args, 'trans_type'):
+        args.trans_type, args.posemask_type = 'default', 'default'
+
     ########################
     ############ Parse options
     # Set seed

@@ -164,7 +164,11 @@ def main():
     assert(os.path.exists(args.data))
 
     # Get the dataset
-    dataset = torch.load(args.data)
+    loaddata = torch.load(args.data)
+    if hasattr(dataset, 'pargs'):
+        dataset = loaddata['posedata']
+    else:
+        dataset = loaddata
     train_dataset, val_dataset, test_dataset = dataset['train'], dataset['val'], dataset['test']
     train_size, val_size, test_size = dataset_size(train_dataset, args.datakey, args.step_len, args.seq_len),\
                                       dataset_size(val_dataset, args.datakey, args.step_len, args.seq_len),\

@@ -56,9 +56,9 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     # Setup memory
     sequence, path, folid = data.generate_baxter_sequence(dataset, id)  # Get the file paths
-    points         = torch.FloatTensor(seq_len, 3, img_ht, img_wd)
-    actctrlconfigs = torch.FloatTensor(seq_len, num_ctrl)  # Ids in actual data belonging to commanded data
-    poses          = torch.FloatTensor(seq_len, mesh_ids.nelement() + 1, 3, 4).zero_()
+    points         = torch.FloatTensor(1, 3, img_ht, img_wd)
+    actctrlconfigs = torch.FloatTensor(1, num_ctrl)  # Ids in actual data belonging to commanded data
+    poses          = torch.FloatTensor(1, mesh_ids.nelement() + 1, 3, 4).zero_()
     allposes       = torch.FloatTensor()
 
     # Setup temp var for depth
@@ -76,7 +76,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
 
     #####
     # Load sequence
-    for k in xrange(len(sequence)-1): ## Only do this for the first element!
+    for k in xrange(1): ## Only do this for the first element (as we care only about pose 0, following in a sequence)
         # Get data table
         s = sequence[k]
 

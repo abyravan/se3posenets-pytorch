@@ -333,8 +333,12 @@ def iterate(dataset, model, mode='test'):
         # Get a sample
         if pargs.use_data_loader:
             _, sample = dataset.next()
+            if sample is None:
+                continue # Skip sample
         else:
             sample = dataset[i] # Get sample
+            if sample is None:
+                continue # Skip sample
             if not sample['poses'].eq(sample['poses']).all():
                 print("Sample has NaN in ground truth poses")
                 continue

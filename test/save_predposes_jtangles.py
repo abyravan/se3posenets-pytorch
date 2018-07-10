@@ -365,10 +365,11 @@ def iterate(dataset, model, mode='test'):
         start = time.time()
 
         ### Predict the pose from the network
+        posepredfn = model if pargs.encoder_only else model.forward_only_pose
         if pargs.use_data_loader:
-            pred_poses = model.forward_only_pose([netinput[:,0], jtangles[:,0]])
+            pred_poses = posepredfn([netinput[:,0], jtangles[:,0]])
         else:
-            pred_poses = model.forward_only_pose([netinput[0:1], jtangles[0:1]])
+            pred_poses = posepredfn([netinput[0:1], jtangles[0:1]])
 
         # Measure fwd pass time
         fwd_time.update(time.time() - start)

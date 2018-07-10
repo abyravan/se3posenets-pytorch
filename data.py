@@ -695,7 +695,7 @@ def generate_baxter_sequence(dataset, idx):
                         'visible': path + 'flow_' + str(stepid) + '/visible' + suffix + str(start) + '.png'}
         stepid += step  # Get flow from start image to the next step
         ct += 1  # Increment counter
-    return sequence, path, did
+    return sequence, path, int(did)
 
 ### Generate the data files (with all the depth, flow etc.) for each sequence
 def generate_box_sequence(dataset, idx):
@@ -1152,7 +1152,7 @@ class BaxterSeqDataset(Dataset):
         # Call the disk load function
         # Assumption: This function returns a dict of torch tensors
         sample = self.load_function(self.datasets[did], sid)
-        sample['id'] = idx # Add the ID of the sample in
+        sample['id'] = int(idx) # Add the ID of the sample in
         sample['datasetid'] = int(did) # Add the ID of the dataset in
 
         # Return

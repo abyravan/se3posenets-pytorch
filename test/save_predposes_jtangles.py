@@ -115,7 +115,7 @@ def read_baxter_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scal
     xy.mul_(depths.expand(seq_len, 2, img_ht, img_wd))  # = xygrid * depths
 
     # Return loaded data
-    dataout = {'points': points, 'folderid': folid,
+    dataout = {'points': points, 'folderid': int(folid),
                'poses': poses, 'actctrlconfigs': actctrlconfigs}
     if load_color:
         dataout['rgbs'] = rgbs

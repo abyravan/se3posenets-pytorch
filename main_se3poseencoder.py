@@ -23,6 +23,7 @@ import data
 import ctrlnets
 import util
 from util import AverageMeter, Tee, DataEnumerator
+import helperfuncs as helpers
 
 ## New layers
 import se3
@@ -85,223 +86,18 @@ def main():
     ############ Parse options
     # Set seed
     torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
-    # 480 x 640 or 240 x 320
-    if args.full_res:
-        print("Using full-resolution images (480x640)")
-    # XYZ-RGB
-    if args.use_xyzrgb:
-        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
-    elif args.use_xyzhue:
-        print("Using XYZ-Hue input - 4 channels. Assumes registered depth/RGB")
-
-    # Get default options & camera intrinsics
-    args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
-    args.state_labels = []
-    for k in xrange(len(args.data)):
-        load_dir = args.data[k] #args.data.split(',,')[0]
-        try:
-            # Read from file
-            intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
-            print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-            if args.se2_data or args.full_res:
-                args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
-            else:
-                args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
-            args.img_scale = 1.0 / intrinsics['s']  # Scale of the image (use directly from the data)
-
-            # Setup camera intrinsics
-            sc = float(args.img_ht) / intrinsics['ht']  # Scale factor for the intrinsics
-            cam_intrinsics = {'fx': intrinsics['fx'] * sc,
-                              'fy': intrinsics['fy'] * sc,
-                              'cx': intrinsics['cx'] * sc,
-                              'cy': intrinsics['cy'] * sc}
-            print("Scale factor for the intrinsics: {}".format(sc))
-        except:
-            print("Could not read intrinsics file, reverting to default settings")
-            args.img_ht, args.img_wd, args.img_scale = 240, 320, 1e-4
-            cam_intrinsics = {'fx': 589.3664541825391 / 2,
-                              'fy': 589.3664541825391 / 2,
-                              'cx': 320.5 / 2,
-                              'cy': 240.5 / 2}
-        print("Intrinsics => ht: {}, wd: {}, fx: {}, fy: {}, cx: {}, cy: {}".format(args.img_ht, args.img_wd,
-                                                                                    cam_intrinsics['fx'],
-                                                                                    cam_intrinsics['fy'],
-                                                                                    cam_intrinsics['cx'],
-                                                                                    cam_intrinsics['cy']))
-
-        # Compute intrinsic grid & add to list
-        cam_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(args.img_ht, args.img_wd,
-                                                                              cam_intrinsics)
-        args.cam_intrinsics.append(cam_intrinsics) # Add to list of intrinsics
-
-        ### BAXTER DATA
-        # Compute extrinsics
-        cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
-
-        # Get dimensions of ctrl & state
-        try:
-            statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
-            print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
-        except:
-            statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
-            ctrllabels = statelabels  # Just use the labels
-            trackerlabels = []
-            print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-        #args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
-        #print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
-        args.num_ctrl = len(ctrllabels)
-        print('Num ctrl: {}'.format(args.num_ctrl))
-
-        # Find the IDs of the controlled joints in the state vector
-        # We need this if we have state dimension > ctrl dimension and
-        # if we need to choose the vals in the state vector for the control
-        ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
-        print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
-
-        # Add to list of intrinsics
-        args.cam_extrinsics.append(cam_extrinsics)
-        args.ctrl_ids.append(ctrlids_in_state)
-        args.state_labels.append(statelabels)
-
-    # Data noise
-    if not hasattr(args, "add_noise_data") or (len(args.add_noise_data) == 0):
-        args.add_noise_data = [False for k in xrange(len(args.data))] # By default, no noise
-    else:
-        assert(len(args.data) == len(args.add_noise_data))
-    if hasattr(args, "add_noise") and args.add_noise: # BWDs compatibility
-        args.add_noise_data = [True for k in xrange(len(args.data))]
-
-    # Get mean/std deviations of dt for the data
-    if args.mean_dt == 0:
-        args.mean_dt = args.step_len * (1.0 / 30.0)
-        args.std_dt = 0.005  # +- 10 ms
-        print("Using default mean & std.deviation based on the step length. Mean DT: {}, Std DT: {}".format(
-            args.mean_dt, args.std_dt))
-    else:
-        exp_mean_dt = (args.step_len * (1.0 / 30.0))
-        assert ((args.mean_dt - exp_mean_dt) < 1.0 / 30.0), \
-            "Passed in mean dt ({}) is very different from the expected value ({})".format(
-                args.mean_dt, exp_mean_dt)  # Make sure that the numbers are reasonable
-        print("Using passed in mean & std.deviation values. Mean DT: {}, Std DT: {}".format(
-            args.mean_dt, args.std_dt))
-
-    # Image suffix
-    args.img_suffix = '' if (args.img_suffix == 'None') else args.img_suffix # Workaround since we can't specify empty string in the yaml
-    print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
-
-    # Read mesh ids and camera data (for baxter)
-    args.baxter_labels = data.read_statelabels_file(args.data[0] + '/statelabels.txt')
-    args.mesh_ids      = args.baxter_labels['meshIds']
-
-    # SE3 stuff
-    assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat', 'se3aar']), 'Unknown SE3 type: ' + args.se3_type
-
-    # Sequence stuff
-    print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
-
-    # Loss parameters
-    print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
-        args.loss_scale, args.pt_wt, args.consis_wt))
-
-    # Weight sharpening stuff
-    if args.use_wt_sharpening:
-        print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}, Noise stop iter: {}'.format(
-            args.sharpen_start_iter, args.sharpen_rate, args.noise_stop_iter))
-
-    # Loss type
-    delta_loss = ', Penalizing the delta-flow loss per unroll'
-    norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
-    print('3D loss type: ' + args.loss_type + norm_motion + delta_loss)
-
-    # Wide model
-    if args.wide_model:
-        print('Using a wider network!')
-
-    if args.use_jt_angles:
-        print("Using Jt angles as input to the pose encoder")
-
-    if args.use_jt_angles_trans:
-        print("Using Jt angles as input to the transition model")
-
-    if args.use_se3nn:
-        print('Using SE3NNs SE3ToRt layer implementation')
-    else:
-        print('Using the SE3ToRt implementation in se3.py')
-
-    # DA threshold / winsize
-    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_threshold,
-                                                                                 args.da_winsize))
-    if args.use_only_da_for_flows:
-        print("Computing flows using only data-associations. Flows can only be computed for visible points")
-    else:
-        print("Computing flows using tracker poses. Can get flows for all input points")
-
-    ########################
-    ############ Load datasets
-    # Get datasets
-    load_color = None
-    if args.use_xyzrgb:
-        load_color = 'rgb'
-    elif args.use_xyzhue:
-        load_color = 'hsv'
-    if args.reject_left_motion:
-        print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
-              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
-    if args.reject_right_still:
-        print("Examples where no joint of the right arm move by > 0.015 radians inter-frame will be discarded. \n"
-              "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
-    if args.add_noise:
-        print("Adding noise to the depths, actual configs & ctrls")
-
-    ### Baxter dataset
-    print("Baxter dataset")
-    valid_filter = lambda p, n, st, se, slab: data.valid_data_filter(p, n, st, se, slab,
-                                                                     mean_dt=args.mean_dt, std_dt=args.std_dt,
-                                                                     reject_left_motion=args.reject_left_motion,
-                                                                     reject_right_still=args.reject_right_still)
-    read_seq_func = data.read_baxter_sequence_from_disk
-
-    ### Noise function
-    #noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
-    #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
-    noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
-                                                     defprob=0.005, noisestd=0.005)
-    ### Load functions
-    baxter_data     = data.read_recurrent_baxter_dataset(args.data, args.img_suffix,
-                                                         step_len = args.step_len, seq_len = args.seq_len,
-                                                         train_per = args.train_per, val_per = args.val_per,
-                                                         valid_filter = valid_filter,
-                                                         cam_extrinsics=args.cam_extrinsics,
-                                                         cam_intrinsics=args.cam_intrinsics,
-                                                         ctrl_ids=args.ctrl_ids,
-                                                         state_labels=args.state_labels,
-                                                         add_noise=args.add_noise_data)
-    disk_read_func  = lambda d, i: read_seq_func(d, i, img_ht = args.img_ht, img_wd = args.img_wd,
-                                                 img_scale = args.img_scale, ctrl_type = args.ctrl_type,
-                                                 num_ctrl=args.num_ctrl,
-                                                 mesh_ids = args.mesh_ids,
-                                                 compute_bwdflows=args.use_gt_masks,
-                                                 dathreshold=args.da_threshold, dawinsize=args.da_winsize,
-                                                 use_only_da=args.use_only_da_for_flows,
-                                                 noise_func=noise_func,
-                                                 load_color=load_color) # Need BWD flows / masks if using GT masks
-    train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
-    val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
-    test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
-    print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset), len(val_dataset), len(test_dataset)))
+    # Setup datasets
+    train_dataset, val_dataset, test_dataset = se3posenets.setup_datasets(args)
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
     if args.evaluate:
         # Load only test loader
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
-        # torch.manual_seed(args.seed)
-        # if args.cuda:
-        #     torch.cuda.manual_seed(args.seed)
-        # sampler = torch.utils.data.dataloader.RandomSampler(test_dataset) # Random sampler
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                                      num_workers=args.num_workers, sampler=sampler,
                                                      pin_memory=args.use_pin_memory,
@@ -345,7 +141,7 @@ def main():
         model.cuda() # Convert to CUDA if enabled
 
     ### Load optimizer
-    optimizer = load_optimizer(args.optimization, model.parameters(), lr=args.lr,
+    optimizer = helpers.load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                momentum=args.momentum, weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
@@ -396,7 +192,7 @@ def main():
         test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
         # Save final test error
-        save_checkpoint({
+        helpers.save_checkpoint({
             'args': args,
             'test_stats': {'stats': test_stats,
                            'niters': test_loader.niters, 'nruns': test_loader.nruns,
@@ -467,7 +263,7 @@ def main():
                                                                        val_stats.flowerr_avg.avg.sum() / args.batch_size))
 
         # Save checkpoint
-        save_checkpoint({
+        helpers.save_checkpoint({
             'epoch': epoch+1,
             'args' : args,
             'best_loss'            : best_loss,
@@ -533,7 +329,7 @@ def main():
                                                                          best_fcepoch))
 
     # Save final test error
-    save_checkpoint({
+    helpers.save_checkpoint({
         'args': args,
         'test_stats': {'stats': test_stats,
                        'niters': test_loader.niters, 'nruns': test_loader.nruns,
@@ -686,8 +482,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 else:
                     assert(args.mask_consis_loss_type is not 'kllog') # We have mask outputs which are not logs
                     mask0in, mask1in = predmasks[0], predmasks[k+1]
-                currmaskconsisloss = mask_consis_wt * mask_consistency_loss(mask0in, mask1in, fwdpixelassocs[:,k],
-                                                                            args.mask_consis_loss_type)
+                currmaskconsisloss = mask_consis_wt * ctrlnets.MaskConsistencyLoss(mask0in, mask1in,
+                                                                                   fwdpixelassocs[:,k],
+                                                                                   args.mask_consis_loss_type)
                 maskconsisloss[k] = currmaskconsisloss.data[0]
 
             # Append to total loss
@@ -734,13 +531,13 @@ def iterate(data_loader, model, tblogger, num_iters,
                 motionerr_sum, motionerr_avg,\
                 stillerr_sum, stillerr_avg,\
                 motion_err, motion_npt,\
-                still_err, still_npt         = compute_masked_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
+                still_err, still_npt         = helpers.compute_masked_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
         else:
             flowerr_sum, flowerr_avg, \
                 motionerr_sum, motionerr_avg, \
                 stillerr_sum, stillerr_avg, \
                 motion_err, motion_npt, \
-                still_err, still_npt         = compute_masked_flow_errors(predflows, flows)
+                still_err, still_npt         = helpers.compute_masked_flow_errors(predflows, flows)
 
         # Update stats
         stats.flowerr_sum.update(flowerr_sum); stats.flowerr_avg.update(flowerr_avg)
@@ -802,7 +599,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 for k in xrange(args.seq_len+1):
                     gtpose    = sample['poses'][id, k]
                     predpose  = predposes[k].data[id].cpu().float()
-                    gtdepth   = normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
+                    gtdepth   = helpers.normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
                     for n in xrange(args.num_se3):
                         # Pose_1 (GT/Pred)
                         if n < gtpose.size(0):
@@ -890,122 +687,16 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.motionerr_avg.avg[k] / bsz, stats.stillerr_avg.avg[k] / bsz,
         ))
 
-### Load optimizer
-def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1e-4):
-    if optim_type == 'sgd':
-        optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=momentum,
-                                    weight_decay=weight_decay)
-    elif optim_type == 'adam':
-        optimizer = torch.optim.Adam(params=parameters, lr = lr, weight_decay= weight_decay)
-    elif optim_type == 'asgd':
-        optimizer = torch.optim.ASGD(params=parameters, lr=lr, weight_decay=weight_decay)
-    elif optim_type == 'rmsprop':
-        optimizer = torch.optim.RMSprop(params=parameters, lr=lr, momentum=momentum, weight_decay=weight_decay)
-    else:
-        assert False, "Unknown optimizer type: " + optim_type
-    return optimizer
-
-### Save checkpoint
-def save_checkpoint(state, is_best, is_fbest=False, is_fcbest=False, savedir='.', filename='checkpoint.pth.tar'):
-    savefile = savedir + '/' + filename
-    torch.save(state, savefile)
-    if is_best:
-        shutil.copyfile(savefile, savedir + '/model_best.pth.tar')
-    if is_fbest:
-        shutil.copyfile(savefile, savedir + '/model_flow_best.pth.tar')
-    if is_fcbest:
-        shutil.copyfile(savefile, savedir + '/model_flowconsis_best.pth.tar')
-
-### Compute flow errors for moving / non-moving pts (flows are size: B x S x 3 x H x W)
-def compute_masked_flow_errors(predflows, gtflows):
-    batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
-    # Compute num pts not moving per mask
-    # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
-    motionmask = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows) # B x S x 1 x H x W
-    err = (predflows - gtflows).mul_(1e2).pow(2).sum(2) # B x S x 1 x H x W
-
-    # Compute errors for points that are supposed to move
-    motion_err = (err * motionmask).view(batch, seq, -1).sum(2) # Errors for only those points that are supposed to move
-    motion_npt = motionmask.view(batch, seq, -1).sum(2) # Num points that move (B x S)
-
-    # Compute errors for points that are supposed to not move
-    motionmask.eq_(0) # Mask out points that are not supposed to move
-    still_err = (err * motionmask).view(batch, seq, -1).sum(2)  # Errors for non-moving points
-    still_npt = motionmask.view(batch, seq, -1).sum(2)  # Num non-moving pts (B x S)
-
-    # Bwds compatibility to old error
-    full_err_avg  = (motion_err + still_err) / motion_npt
-    full_err_avg[full_err_avg != full_err_avg] = 0  # Clear out any Nans
-    full_err_avg[full_err_avg == np.inf] = 0  # Clear out any Infs
-    full_err_sum, full_err_avg = (motion_err + still_err).sum(0), full_err_avg.sum(0) # S, S
-
-    # Compute sum/avg stats
-    motion_err_avg = (motion_err / motion_npt)
-    motion_err_avg[motion_err_avg != motion_err_avg] = 0  # Clear out any Nans
-    motion_err_avg[motion_err_avg == np.inf] = 0      # Clear out any Infs
-    motion_err_sum, motion_err_avg = motion_err.sum(0), motion_err_avg.sum(0) # S, S
-
-    # Compute sum/avg stats
-    still_err_avg = (still_err / still_npt)
-    still_err_avg[still_err_avg != still_err_avg] = 0  # Clear out any Nans
-    still_err_avg[still_err_avg == np.inf] = 0  # Clear out any Infs
-    still_err_sum, still_err_avg = still_err.sum(0), still_err_avg.sum(0)  # S, S
-
-    # Return
-    return full_err_sum.cpu().float(), full_err_avg.cpu().float(), \
-           motion_err_sum.cpu().float(), motion_err_avg.cpu().float(), \
-           still_err_sum.cpu().float(), still_err_avg.cpu().float(), \
-           motion_err.cpu().float(), motion_npt.cpu().float(), \
-           still_err.cpu().float(), still_npt.cpu().float()
-
-### Normalize image
-def normalize_img(img, min=-0.01, max=0.01):
-    return (img - min) / (max - min)
-
 ### Adjust learning rate
 def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_lr=1e-5):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
-    lr = min_lr if (args.lr < min_lr) else lr # Clamp at min_lr
+    lr = min_lr if (args.lr < min_lr) else lr  # Clamp at min_lr
     print("======== Epoch: {}, Initial learning rate: {}, Current: {}, Min: {} =========".format(
         epoch, args.lr, lr, min_lr))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     args.curr_lr = lr
-
-### Gradient clipping hook
-def clip_grad(v, min, max):
-    v.register_hook(lambda g: g.clamp(min, max))
-    return v
-
-### Mask consistency error
-# masks are B x K x H x W, assoc is B x 1 x H x W
-def mask_consistency_loss(mask1, mask2, pixelassoc12, losstype='mse'):
-    assert (losstype in ['mse', 'abs', 'kl', 'kllog'])
-    bsz, nch, ht, wd = mask1.size()
-    assert(mask1.is_same_size(mask2) and (pixelassoc12.size() == torch.Size([bsz, 1, ht, wd])))
-    mask1v, mask2v, pixelassoc12v = mask1.contiguous().view(bsz, nch, ht*wd), \
-                                    mask2.contiguous().view(bsz, nch, ht*wd), \
-                                    pixelassoc12.contiguous().view(bsz, 1, ht*wd).long()
-    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
-    pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
-    mask2v_1 = torch.gather(mask2v, 2, pixelassoc12v.expand_as(mask1v)) # Vals from tensor 2 in tensor 1, associated correctly
-    if losstype == 'mse':
-        mseloss = (mask1v - mask2v_1).pow(2)
-        maskloss = 0.5 * mseloss[assocmask].mean()
-    elif losstype == 'abs':
-        absloss = (mask1v - mask2v_1).abs()
-        maskloss = absloss[assocmask].mean()
-    elif losstype == 'kl':
-        ## KL(inp, tar) = tar * (log(tar) - log(inp))
-        nonzeros = util.to_var((mask1v.gt(0) * mask2v_1.gt(0) * assocmask).data.clone()) # Only compute loss for vals that are > 0, log is inf else
-        klloss = mask2v_1 * (torch.log(mask2v_1) - torch.log(mask1v))
-        maskloss = klloss[nonzeros].mean()
-    elif losstype == 'kllog': # Assumes that you pass in log(inp) & log(tar)
-        ## KL(inp, tar) = tar * (log(tar) - log(inp))
-        klloss = torch.exp(mask2v_1) * (mask2v_1 - mask1v)
-        maskloss = klloss[assocmask].mean()
-    return maskloss
 
 ################ RUN MAIN
 if __name__ == '__main__':

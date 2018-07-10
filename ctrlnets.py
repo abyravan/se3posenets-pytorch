@@ -195,6 +195,36 @@ def DisSimilarityLoss(input, target=None, size_average=True):
         loss = loss / input.nelement()
     return loss
 
+### Mask consistency error
+# masks are B x K x H x W, assoc is B x 1 x H x W
+def MaskConsistencyLoss(mask1, mask2, pixelassoc12, losstype='mse'):
+    assert (losstype in ['mse', 'abs', 'kl', 'kllog'])
+    bsz, nch, ht, wd = mask1.size()
+    assert(mask1.is_same_size(mask2) and (pixelassoc12.size() == torch.Size([bsz, 1, ht, wd])))
+    mask1v, mask2v, pixelassoc12v = mask1.contiguous().view(bsz, nch, ht*wd), \
+                                    mask2.contiguous().view(bsz, nch, ht*wd), \
+                                    pixelassoc12.contiguous().view(bsz, 1, ht*wd).long()
+    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
+    pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
+    mask2v_1 = torch.gather(mask2v, 2, pixelassoc12v.expand_as(mask1v)) # Vals from tensor 2 in tensor 1, associated correctly
+    if losstype == 'mse':
+        mseloss = (mask1v - mask2v_1).pow(2)
+        maskloss = 0.5 * mseloss[assocmask].mean()
+    elif losstype == 'abs':
+        absloss = (mask1v - mask2v_1).abs()
+        maskloss = absloss[assocmask].mean()
+    elif losstype == 'kl':
+        ## KL(inp, tar) = tar * (log(tar) - log(inp))
+        nonzeros = util.to_var((mask1v.gt(0) * mask2v_1.gt(0) * assocmask).data.clone()) # Only compute loss for vals that are > 0, log is inf else
+        klloss = mask2v_1 * (torch.log(mask2v_1) - torch.log(mask1v))
+        maskloss = klloss[nonzeros].mean()
+    elif losstype == 'kllog': # Assumes that you pass in log(inp) & log(tar)
+        ## KL(inp, tar) = tar * (log(tar) - log(inp))
+        klloss = torch.exp(mask2v_1) * (mask2v_1 - mask1v)
+        maskloss = klloss[assocmask].mean()
+    return maskloss
+
+####################################
 ### Basic Conv + Pool + BN + Non-linearity structure
 class BasicConv2D(nn.Module):
     def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):

@@ -488,7 +488,7 @@ def setup_datasets(args):
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
     args.state_labels = []
-    for k in xrange(len(args.data)):
+    for k in range(len(args.data)):
         load_dir = args.data[k]  # args.data.split(',,')[0]
         try:
             # Read from file
@@ -556,11 +556,11 @@ def setup_datasets(args):
 
     # Data noise
     if not hasattr(args, "add_noise_data") or (len(args.add_noise_data) == 0):
-        args.add_noise_data = [False for k in xrange(len(args.data))]  # By default, no noise
+        args.add_noise_data = [False for k in range(len(args.data))]  # By default, no noise
     else:
         assert (len(args.data) == len(args.add_noise_data))
     if hasattr(args, "add_noise") and args.add_noise:  # BWDs compatibility
-        args.add_noise_data = [True for k in xrange(len(args.data))]
+        args.add_noise_data = [True for k in range(len(args.data))]
 
     # Get mean/std deviations of dt for the data
     if args.mean_dt == 0:

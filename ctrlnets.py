@@ -343,7 +343,7 @@ class CoordConvBase(nn.Module):
         # we can save the batch size info + precomputed info.
         if self.batch_size is None or self.batch_size != bsz:
             self.batch_size = bsz
-            self.coord_batch = util.to_var(self.coord.expand(bsz,2,ht,wd), dim=0) # No gradients
+            self.coord_batch = util.to_var(self.coord.expand(bsz,2,ht,wd)) # No gradients
 
         # Cat coords to input and apply the conv layer
         x = torch.cat([inp, self.coord_batch], dim=1) # Concat along channels dimension

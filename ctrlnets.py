@@ -227,9 +227,13 @@ def MaskConsistencyLoss(mask1, mask2, pixelassoc12, losstype='mse'):
 ####################################
 ### Basic Conv + Pool + BN + Non-linearity structure
 class BasicConv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
+    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
         super(BasicConv2D, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        if coord_conv:
+            self.conv = CoordConv(in_channels, out_channels, **kwargs)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
         self.nonlin = get_nonlinearity(nonlinearity)
@@ -245,9 +249,13 @@ class BasicConv2D(nn.Module):
 
 ### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
 class BasicDeconv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
+    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
         super(BasicDeconv2D, self).__init__()
-        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+        if coord_conv:
+            self.deconv = CoordConvT(in_channels, out_channels, **kwargs)
+        else:
+            self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
         self.bn = nn.BatchNorm2d(out_channels, eps=0.001) if use_bn else None
         self.nonlin = get_nonlinearity(nonlinearity)
 
@@ -263,11 +271,15 @@ class BasicDeconv2D(nn.Module):
 
 ###  BN + Non-linearity + Basic Conv + Pool structure
 class PreConv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu', **kwargs):
+    def __init__(self, in_channels, out_channels, use_pool=False, use_bn=True, nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
         super(PreConv2D, self).__init__()
         self.bn = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
         self.nonlin = get_nonlinearity(nonlinearity)
-        self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        if coord_conv:
+            self.conv = CoordConv(in_channels, out_channels, **kwargs)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
         self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
 
     # BN -> Non-linearity -> Convolution -> Pool
@@ -282,11 +294,15 @@ class PreConv2D(nn.Module):
 
 ### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
 class PreDeconv2D(nn.Module):
-    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu', **kwargs):
+    def __init__(self, in_channels, out_channels, use_bn=True, nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
         super(PreDeconv2D, self).__init__()
         self.bn = nn.BatchNorm2d(in_channels, eps=0.001) if use_bn else None
         self.nonlin = get_nonlinearity(nonlinearity)
-        self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+        if coord_conv:
+            self.deconv = CoordConvT(in_channels, out_channels, **kwargs)
+        else:
+            self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
 
     # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
     def forward(self, x, y=None):
@@ -299,6 +315,51 @@ class PreDeconv2D(nn.Module):
             x = self.deconv(x)
         return x
 
+###################
+####### CoordConv from Uber: https://eng.uber.com/coordconv/
+class CoordConvBase(nn.Module):
+    def __init__(self):
+        super(CoordConvBase, self).__init__()
+        self.conv = None
+        self.coord = None
+        self.batch_size = None
+        self.coord_batch = None
+
+    def forward(self, inp):
+        # Assumes input is B x C x H x W
+        bsz, _, ht, wd = inp.size()
+        if self.coord is None:
+            ## Create the coordinates
+            def trange(dim1, dim2):
+                r = torch.range(0, dim1 - 1) / (dim1 - 1)
+                a = torch.cat([r] * dim2, dim=-1).reshape(dim1, dim2)
+                return a
+            # Setup coords from -1 to 1
+            xrng = trange(ht, wd)[None, None, :, :]
+            yrng = trange(ht, wd).transpose(0,1)[None, None, :, :]
+            self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp) * 2) - 1 # -1 to 1
+
+        # If the batch size changes we need to recompute some things. Then
+        # we can save the batch size info + precomputed info.
+        if self.batch_size is None or self.batch_size != bsz:
+            self.batch_size = bsz
+            self.coord_batch = util.to_var(torch.cat([self.coord] * bsz, dim=0)) # No gradients
+
+        # Cat coords to input and apply the conv layer
+        x = torch.cat([inp, self.coord_batch], dim=1) # Concat along channels dimension
+        return self.conv(x)
+
+class CoordConv(CoordConvBase):
+    def __init__(self, in_dim, out_dim, **kwargs):
+        super(CoordConv, self).__init__()
+        self.conv = nn.Conv2d(in_dim + 2, out_dim, **kwargs)
+
+class CoordConvT(CoordConvBase):
+    def __init__(self, in_dim, out_dim, **kwargs):
+        super(CoordConvT, self).__init__()
+        self.conv = nn.ConvTranspose2d(in_dim + 2, out_dim, **kwargs)
+
+###################
 ### Basic Conv + Pool + BN + Non-linearity structure
 class BasicLinear(nn.Module):
     def __init__(self, in_dim, out_dim, use_bn=True, nonlinearity='prelu'):

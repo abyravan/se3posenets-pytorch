@@ -52,6 +52,10 @@ parser.add_argument('--pre-mask-consis', action='store_true', default=False,
 parser.add_argument('--use-se3nn', action='store_true', default=False,
                     help='Use SE3NN SE3ToRt layer instead of the ones in se3.py (default: False)')
 
+# Use coord convolution
+parser.add_argument('--coord-conv', action='store_true', default=False,
+                    help='Use Coordinate Convolutions (default: False)')
+
 # Define xrange
 try:
     a = xrange(1)
@@ -137,7 +141,7 @@ def main():
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
-                    use_se3nn=args.use_se3nn) # noise_stop_iter not available for SE2 models
+                    use_se3nn=args.use_se3nn, coord_conv = args.coord_conv) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 

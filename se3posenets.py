@@ -15,7 +15,7 @@ class PoseMaskEncoder(nn.Module):
                  input_channels=3, use_bn=True, nonlinearity='prelu', init_se3_iden=False,
                  use_wt_sharpening=False, sharpen_start_iter=0, sharpen_rate=1,
                  use_sigmoid_mask=False, wide=False, use_jt_angles=False, num_state=7,
-                 full_res=False, noise_stop_iter=1e6, use_se3nn=False):
+                 full_res=False, noise_stop_iter=1e6, use_se3nn=False, coord_conv=False):
         super(PoseMaskEncoder, self).__init__()
 
         ###### Choose type of convolution
@@ -23,6 +23,12 @@ class PoseMaskEncoder(nn.Module):
             print('Using BN + Non-Linearity + Conv/Deconv architecture')
         ConvType   = ctrlnets.PreConv2D if pre_conv else ctrlnets.BasicConv2D
         DeconvType = ctrlnets.PreDeconv2D if pre_conv else ctrlnets.BasicDeconv2D
+
+        # Coordinate convolution
+        if coord_conv:
+            print('Using co-ordinate convolutional layers')
+        ConvType   = lambda **v: ConvType(coord_conv=coord_conv, **v)
+        DeconvType = lambda **v: DeconvType(coord_conv=coord_conv, **v)
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)
@@ -368,7 +374,7 @@ class MultiStepSE3PoseModel(nn.Module):
                  use_sigmoid_mask=False, local_delta_se3=False, wide=False,
                  use_jt_angles=False, use_jt_angles_trans=False, num_state=7,
                  full_res=False, noise_stop_iter=1e6, trans_type='default',
-                 posemask_type='default', use_se3nn=False):
+                 posemask_type='default', use_se3nn=False, coord_conv=False):
         super(MultiStepSE3PoseModel, self).__init__()
 
         # Initialize the pose & mask model
@@ -405,7 +411,7 @@ class MultiStepSE3PoseModel(nn.Module):
                                         use_sigmoid_mask=use_sigmoid_mask, wide=wide,
                                         use_jt_angles=use_jt_angles, num_state=num_state,
                                         full_res=full_res, noise_stop_iter=noise_stop_iter,
-                                        use_se3nn=use_se3nn)
+                                        use_se3nn=use_se3nn, coord_conv=coord_conv)
 
         # # Initialize the transition model
         # if trans_type == 'default':

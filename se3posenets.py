@@ -21,16 +21,16 @@ class PoseMaskEncoder(nn.Module):
         ###### Choose type of convolution
         if pre_conv:
             print('Using BN + Non-Linearity + Conv/Deconv architecture')
-        ConvType   = ctrlnets.PreConv2D if pre_conv else ctrlnets.BasicConv2D
-        DeconvType = ctrlnets.PreDeconv2D if pre_conv else ctrlnets.BasicDeconv2D
+        ConvType_a   = ctrlnets.PreConv2D if pre_conv else ctrlnets.BasicConv2D
+        DeconvType_a = ctrlnets.PreDeconv2D if pre_conv else ctrlnets.BasicDeconv2D
 
         # Coordinate convolution
         if coord_conv:
             print('Using co-ordinate convolutional layers')
-        ConvType   = lambda x, y, **v: ConvType(in_channels=x, out_channels=y,
-                                                coord_conv=coord_conv, **v)
-        DeconvType = lambda x, y, **v: DeconvType(in_channels=x, out_channels=y,
+        ConvType   = lambda x, y, **v: ConvType_a(in_channels=x, out_channels=y,
                                                   coord_conv=coord_conv, **v)
+        DeconvType = lambda x, y, **v: DeconvType_a(in_channels=x, out_channels=y,
+                                                    coord_conv=coord_conv, **v)
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)

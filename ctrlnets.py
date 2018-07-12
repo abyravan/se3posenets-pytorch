@@ -331,19 +331,19 @@ class CoordConvBase(nn.Module):
         if self.coord is None:
             ## Create the coordinates
             def trange(dim1, dim2):
-                r = torch.range(0, dim1 - 1) / (dim1 - 1)
-                a = torch.cat([r] * dim2, dim=-1).reshape(dim1, dim2)
+                r = torch.arange(0, dim1) / (dim1 - 1)
+                a = r.view(dim1,1).expand(dim1,dim2)
                 return a
             # Setup coords from -1 to 1
-            xrng = trange(ht, wd)[None, None, :, :]
-            yrng = trange(ht, wd).transpose(0,1)[None, None, :, :]
+            xrng = trange(wd, ht).transpose(0,1)[None, None, :, :] # 0 to 1 along cols
+            yrng = trange(ht, wd)[None, None, :, :] # 0 to 1 along rows
             self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp) * 2) - 1 # -1 to 1
 
         # If the batch size changes we need to recompute some things. Then
         # we can save the batch size info + precomputed info.
         if self.batch_size is None or self.batch_size != bsz:
             self.batch_size = bsz
-            self.coord_batch = util.to_var(torch.cat([self.coord] * bsz, dim=0)) # No gradients
+            self.coord_batch = util.to_var(self.coord.expand(bsz,2,ht,wd), dim=0) # No gradients
 
         # Cat coords to input and apply the conv layer
         x = torch.cat([inp, self.coord_batch], dim=1) # Concat along channels dimension

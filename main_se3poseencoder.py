@@ -457,7 +457,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             predpremasks.append(currpremask)
 
         ####### Compute losses - We use point loss in the FWD dirn and Consistency loss between poses
-        ptloss, maskconsisloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        loss, ptloss, maskconsisloss = 0, torch.zeros(args.seq_len), torch.zeros(args.seq_len)
         for k in xrange(args.seq_len):
             ### 3D loss
             # If motion-normalized loss, pass in GT flows
@@ -488,7 +488,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 maskconsisloss[k] = currmaskconsisloss.data[0]
 
             # Append to total loss
-            loss      = currptloss + currmaskconsisloss
+            loss     += currptloss + currmaskconsisloss
             ptloss[k] = currptloss.data[0]
 
         # Update stats

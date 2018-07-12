@@ -337,7 +337,7 @@ class CoordConvBase(nn.Module):
             # Setup coords from -1 to 1
             xrng = trange(wd, ht).transpose(0,1)[None, None, :, :] # 0 to 1 along cols
             yrng = trange(ht, wd)[None, None, :, :] # 0 to 1 along rows
-            self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp) * 2) - 1 # -1 to 1
+            self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp.data) * 2) - 1 # -1 to 1
 
         # If the batch size changes we need to recompute some things. Then
         # we can save the batch size info + precomputed info.

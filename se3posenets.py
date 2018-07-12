@@ -31,6 +31,7 @@ class PoseMaskEncoder(nn.Module):
                                                   coord_conv=coord_conv, **v)
         DeconvType = lambda x, y, **v: DeconvType_a(in_channels=x, out_channels=y,
                                                     coord_conv=coord_conv, **v)
+        DeconvLayer = ctrlnets.CoordConvT if coord_conv else nn.ConvTranspose2d
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)
@@ -74,8 +75,8 @@ class PoseMaskEncoder(nn.Module):
                 self.deconv6 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
                                           use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 240x320 -> 480x640
             else:
-                self.deconv6 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2,
-                                                  padding=3)  # 8x8, 120x160 -> 240x320
+                self.deconv6 = DeconvLayer(chn[0], num_se3, kernel_size=8, stride=2,
+                                           padding=3)  # 8x8, 120x160 -> 240x320
         else:
             ###### Mask Decoder
             # Create deconv-decoder (FCN style, has skip-add connections to conv outputs)
@@ -94,8 +95,8 @@ class PoseMaskEncoder(nn.Module):
                 self.deconv5 = DeconvType(chn[0], num_se3, kernel_size=8, stride=2, padding=3,
                                           use_bn=use_bn, nonlinearity=nonlinearity)  # 8x8, 120x160 -> 240x320
             else:
-                self.deconv5 = nn.ConvTranspose2d(chn[0], num_se3, kernel_size=8, stride=2,
-                                                  padding=3)  # 8x8, 120x160 -> 240x320
+                self.deconv5 = DeconvLayer(chn[0], num_se3, kernel_size=8, stride=2,
+                                           padding=3)  # 8x8, 120x160 -> 240x320
 
         # Normalize to generate mask (wt-sharpening vs sigmoid-mask vs soft-mask model)
         self.use_wt_sharpening = use_wt_sharpening

@@ -40,7 +40,7 @@ parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 
 # Mask consistency loss options
-parser.add_argument('--mask-consis-wt', default=1.0, type=float,
+parser.add_argument('--mask-consis-wt', default=0.0, type=float,
                     metavar='WT', help='Weight for the mask consistency loss - only FWD direction (default: 0.01)')
 parser.add_argument('--mask-consis-loss-type', default='mse', type=str,
                     metavar='STR', help='Type of loss to use for mask consistency errors, '

@@ -27,8 +27,10 @@ class PoseMaskEncoder(nn.Module):
         # Coordinate convolution
         if coord_conv:
             print('Using co-ordinate convolutional layers')
-        ConvType   = lambda **v: ConvType(coord_conv=coord_conv, **v)
-        DeconvType = lambda **v: DeconvType(coord_conv=coord_conv, **v)
+        ConvType   = lambda x, y, **v: ConvType(in_channels=x, out_channels=y,
+                                                coord_conv=coord_conv, **v)
+        DeconvType = lambda x, y, **v: DeconvType(in_channels=x, out_channels=y,
+                                                  coord_conv=coord_conv, **v)
 
         ###### Encoder
         # Create conv-encoder (large net => 5 conv layers with pooling)

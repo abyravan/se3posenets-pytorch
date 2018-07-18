@@ -22,7 +22,6 @@ from _ext import se3layers
 class NTfm3DFunction(Function):
 	def __init__(self, use_mask_gradmag=True):
 		super(NTfm3DFunction, self).__init__()
-		self.output 	 = None
 		self.use_mask_gradmag = use_mask_gradmag  # Default this is true
 
 	def forward(self, points, masks, transforms):
@@ -34,49 +33,46 @@ class NTfm3DFunction(Function):
 		assert(transforms.size() == torch.Size([batch_size, num_se3, 3, 4])) # Transforms [R|t]
 
 		# Create output (or reshape)
-		if not self.output:
-			self.output = points.clone().zero_()
-		elif not self.output.is_same_size(points):
-			self.output.resize_as_(points)
-		
+		output = points.new_zeros(*points.size())
+
 		# Run the FWD pass
-		self.save_for_backward(points, masks, transforms) # Save for BWD pass
 		if points.is_cuda:
-			se3layers.NTfm3D_forward_cuda(points, masks, transforms, self.output)
+			se3layers.NTfm3D_forward_cuda(points, masks, transforms, output)
 		elif points.type() == 'torch.DoubleTensor':
-			se3layers.NTfm3D_forward_double(points, masks, transforms, self.output)
+			se3layers.NTfm3D_forward_double(points, masks, transforms, output)
 		else:
-			se3layers.NTfm3D_forward_float(points, masks, transforms, self.output)
-		
+			se3layers.NTfm3D_forward_float(points, masks, transforms, output)
+		self.save_for_backward(points, masks, transforms, output) # Save for BWD pass
+
 		# Return
-		return self.output
+		return output
 
 	def backward(self, grad_output):
 		# Get saved tensors
-		points, masks, transforms = self.saved_tensors
-		assert(grad_output.is_same_size(self.output));
-		
+		points, masks, transforms, output = self.saved_tensors
+		assert(grad_output.is_same_size(output))
+
 		# Initialize grad input
-		grad_points 	 = points.new().resize_as_(points)
-		grad_masks 		 = masks.new().resize_as_(masks)
-		grad_transforms = transforms.new().resize_as_(transforms)
-		
+		grad_points 	= points.new_zeros(*points.size())
+		grad_masks      = masks.new_zeros(*masks.size())
+		grad_transforms = transforms.new_zeros(*transforms.size())
+
 		# Run the BWD pass
 		if grad_output.is_cuda:
-			se3layers.NTfm3D_backward_cuda(points, masks, transforms, self.output,
+			se3layers.NTfm3D_backward_cuda(points, masks, transforms, output,
 										   grad_points, grad_masks, grad_transforms, grad_output,
 										   self.use_mask_gradmag)
 		elif grad_output.type() == 'torch.DoubleTensor':
-			se3layers.NTfm3D_backward_double(points, masks, transforms, self.output,
+			se3layers.NTfm3D_backward_double(points, masks, transforms, output,
 											 grad_points, grad_masks, grad_transforms, grad_output,
-										   	 self.use_mask_gradmag)
+											 self.use_mask_gradmag)
 		else:
-			se3layers.NTfm3D_backward_float(points, masks, transforms, self.output,
+			se3layers.NTfm3D_backward_float(points, masks, transforms, output,
 											grad_points, grad_masks, grad_transforms, grad_output,
-										    self.use_mask_gradmag)
-		
+											self.use_mask_gradmag)
+
 		# Return
-		return grad_points, grad_masks, grad_transforms;
+		return grad_points, grad_masks, grad_transforms
 
 ## FWD/BWD pass module
 class NTfm3D(Module):

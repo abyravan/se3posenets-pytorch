@@ -320,7 +320,7 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
         num_iters =  nexamples // args.batch_size
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(mode, epoch, num_iters))
     nseq = args.seq_len
-    deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor'  # Default tensor type
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     assert(args.loss_type == 'mse' or args.loss_type == 'abs')
     losslayer = torch.nn.MSELoss() if args.loss_type == 'mse' else torch.nn.L1Loss()
     for jj in xrange(num_iters):
@@ -344,14 +344,14 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
             poses.append(poses_c.unsqueeze(0))
             jtangles.append(angles_c.unsqueeze(0))
             controls.append(ctrls_c.unsqueeze(0))
-        poses    = torch.cat(poses, 0).type(deftype) # B x (seq+1) x nse3 x 3 x 4
-        jtangles = torch.cat(jtangles, 0).type(deftype) # B x (seq+1) x 7
-        controls = torch.cat(controls, 0).type(deftype) # B x seq x 7
+        poses    = torch.cat(poses, 0).to(device) # B x (seq+1) x nse3 x 3 x 4
+        jtangles = torch.cat(jtangles, 0).to(device) # B x (seq+1) x 7
+        controls = torch.cat(controls, 0).to(device) # B x seq x 7
 
         # Get state, controls @ t = 0 & all other time steps (inputs)
-        poses_0 = util.to_var(poses[:,0].contiguous(), requires_grad=True)
-        poses_t = util.to_var(poses[:,1:].contiguous(), requires_grad=False)
-        ctrls   = util.to_var(controls, requires_grad=True) # Ctrl @ t=0->T-1
+        poses_0 = util.req_grad(poses[:,0].contiguous(),  train) # pose 0
+        poses_t = util.req_grad(poses[:,1:].contiguous(), False) # No gradient needed, poses from t = 1 to N
+        ctrls   = util.req_grad(controls, train) # Ctrl @ t=0->T-1
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -376,10 +376,10 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
 
             # Save stuff
             loss += curr_loss
-            seq_loss[k] = curr_loss.data[0]
+            seq_loss[k] = curr_loss.item()
 
         # Save loss
-        stats.loss.update(loss.data[0])
+        stats.loss.update(loss.item())
         stats.seq_loss.update(seq_loss)
 
         # Measure FWD time
@@ -404,56 +404,59 @@ def iterate(dataset, model, tblogger, num_iters, mode='test', optimizer=None, ep
             bwd_time.update(time.time() - start)
 
         # ============ Visualization ============#
-        # Start timer
-        start = time.time()
+        # Make sure to not add to the computation graph (will memory leak otherwise)!
+        with torch.no_grad():
 
-        ### Pose error
-        poseerrormean, poseerrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-        poseerrorindivmean, poseerrorindivmax = torch.zeros(args.seq_len,args.num_se3), \
-                                                torch.zeros(args.seq_len,args.num_se3)
-        for k in xrange(args.seq_len):
-            diff = (pred_poses[k].data - poses_t[:,k].data).cpu().abs()
-            poseerrormax[k]       = diff.max()
-            poseerrormean[k]      = diff.mean()
-            poseerrorindivmax[k]  = diff.permute(1,0,2,3).contiguous().view(args.num_se3,-1).max(dim=1)[0]
-            poseerrorindivmean[k] = diff.permute(1,0,2,3).contiguous().view(args.num_se3,-1).mean(dim=1)
-        stats.poseerrmean.update(poseerrormean)
-        stats.poseerrmax.update(poseerrormax)
-        stats.poseerrindivmean.update(poseerrorindivmean)
-        stats.poseerrindivmax.update(poseerrorindivmax)
+            # Start timer
+            start = time.time()
 
-        ### Send errors to tensorboard
-        # Display/Print frequency
-        if jj % args.disp_freq == 0:
-            ### Print statistics
-            print_stats(mode, epoch=epoch, curr=jj+1, total=num_iters, stats=stats)
+            ### Pose error
+            poseerrormean, poseerrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+            poseerrorindivmean, poseerrorindivmax = torch.zeros(args.seq_len,args.num_se3), \
+                                                    torch.zeros(args.seq_len,args.num_se3)
+            for k in xrange(args.seq_len):
+                diff = (pred_poses[k] - poses_t[:,k]).cpu().abs()
+                poseerrormax[k]       = diff.max()
+                poseerrormean[k]      = diff.mean()
+                poseerrorindivmax[k]  = diff.permute(1,0,2,3).contiguous().view(args.num_se3,-1).max(dim=1)[0]
+                poseerrorindivmean[k] = diff.permute(1,0,2,3).contiguous().view(args.num_se3,-1).mean(dim=1)
+            stats.poseerrmean.update(poseerrormean)
+            stats.poseerrmax.update(poseerrormax)
+            stats.poseerrindivmean.update(poseerrorindivmean)
+            stats.poseerrindivmax.update(poseerrorindivmax)
 
-            ### Print time taken
-            print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
-                  'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
-                  'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
-                  'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
-                data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
+            ### Send errors to tensorboard
+            # Display/Print frequency
+            if jj % args.disp_freq == 0:
+                ### Print statistics
+                print_stats(mode, epoch=epoch, curr=jj+1, total=num_iters, stats=stats)
 
-            ### TensorBoard logging
-            # (1) Log the scalar values
-            iterct = args.iter_ctr[mode]  # Get total number of iterations so far
-            info = {
-                mode + '-loss': loss.data[0],
-                mode + '-seqloss': seq_loss.sum(),
-                mode + '-poseerrmean': poseerrormean.sum(),
-                mode + '-poseerrmax': poseerrormax.sum(),
-            }
-            for kj in xrange(args.seq_len):
-                info[mode + '-seqloss-s{}'.format(kj+1)] = seq_loss[kj]
-            poseindivmean, poseindivmax = poseerrorindivmean.sum(0), poseerrorindivmax.sum(0)
-            for kj in xrange(args.num_se3):
-                info[mode + '-poseerrmean-{}'.format(kj)] = poseindivmean[kj]
-                info[mode + '-poseerrmax-{}'.format(kj)]  = poseindivmax[kj]
-            if mode == 'train':
-                info[mode + '-lr'] = args.curr_lr  # Plot current learning rate
-            for tag, value in info.items():
-                tblogger.scalar_summary(tag, value, iterct)
+                ### Print time taken
+                print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
+                      'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
+                      'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
+                      'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
+                    data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
+
+                ### TensorBoard logging
+                # (1) Log the scalar values
+                iterct = args.iter_ctr[mode]  # Get total number of iterations so far
+                info = {
+                    mode + '-loss': loss.item(),
+                    mode + '-seqloss': seq_loss.sum(),
+                    mode + '-poseerrmean': poseerrormean.sum(),
+                    mode + '-poseerrmax': poseerrormax.sum(),
+                }
+                for kj in xrange(args.seq_len):
+                    info[mode + '-seqloss-s{}'.format(kj+1)] = seq_loss[kj]
+                poseindivmean, poseindivmax = poseerrorindivmean.sum(0), poseerrorindivmax.sum(0)
+                for kj in xrange(args.num_se3):
+                    info[mode + '-poseerrmean-{}'.format(kj)] = poseindivmean[kj]
+                    info[mode + '-poseerrmax-{}'.format(kj)]  = poseindivmax[kj]
+                if mode == 'train':
+                    info[mode + '-lr'] = args.curr_lr  # Plot current learning rate
+                for tag, value in info.items():
+                    tblogger.scalar_summary(tag, value, iterct)
 
         # Measure viz time
         viz_time.update(time.time() - start)

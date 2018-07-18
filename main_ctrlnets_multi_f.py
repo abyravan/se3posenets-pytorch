@@ -24,6 +24,7 @@ import ctrlnets
 import se2nets
 import util
 from util import AverageMeter, Tee, DataEnumerator
+import helperfuncs as helpers
 
 #### Setup options
 # Common
@@ -119,6 +120,7 @@ def main():
     ############ Parse options
     # Set seed
     torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     if args.cuda:
         torch.cuda.manual_seed(args.seed)
 
@@ -452,7 +454,7 @@ def main():
         model.cuda() # Convert to CUDA if enabled
 
     ### Load optimizer
-    optimizer = load_optimizer(args.optimization, model.parameters(), lr=args.lr,
+    optimizer = helpers.load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                momentum=args.momentum, weight_decay=args.weight_decay)
 
     # optionally resume from a checkpoint
@@ -503,7 +505,7 @@ def main():
         test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
         # Save final test error
-        save_checkpoint({
+        helpers.save_checkpoint({
             'args': args,
             'test_stats': {'stats': test_stats,
                            'niters': test_loader.niters, 'nruns': test_loader.nruns,
@@ -580,7 +582,7 @@ def main():
                                                                        val_stats.consiserr.avg.sum()))
 
         # Save checkpoint
-        save_checkpoint({
+        helpers.save_checkpoint({
             'epoch': epoch+1,
             'args' : args,
             'best_loss'            : best_loss,
@@ -646,7 +648,7 @@ def main():
                                                                          best_fcepoch))
 
     # Save final test error
-    save_checkpoint({
+    helpers.save_checkpoint({
         'args': args,
         'test_stats': {'stats': test_stats,
                        'niters': test_loader.niters, 'nruns': test_loader.nruns,
@@ -701,7 +703,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         # stats.pts = []
 
     # Switch model modes
-    train = True if (mode == 'train') else False
+    train = (mode == 'train')
     if train:
         assert (optimizer is not None), "Please pass in an optimizer if we are iterating in training mode"
         model.train()
@@ -720,7 +722,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Point predictor
     # NOTE: The prediction outputs of both layers are the same if mask normalization is used, if sigmoid the outputs are different
     # NOTE: Gradients are same for pts & tfms if mask normalization is used, always different for the masks
-    ptpredlayer = se3nn.NTfm3D
+    ptpredlayer = se3nn.NTfm3D()
 
     # Type of loss (mixture of experts = wt sharpening or sigmoid)
     mex_loss = True
@@ -728,10 +730,10 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Run an epoch
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
-    deftype = 'torch.cuda.FloatTensor' if args.cuda else 'torch.FloatTensor' # Default tensor type
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     pt_wt, consis_wt, normal_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.normal_wt * args.loss_scale
     anchor_wt, seg_wt = args.pose_anchor_wt * args.loss_scale, args.seg_wt * args.loss_scale
-    identfm = util.to_var(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).type(deftype), requires_grad=False)
+    identfm = util.req_grad(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).to(device), False)
     for i in xrange(num_iters):
         # ============ Load data ============#
         # Start timer
@@ -743,42 +745,39 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
-        pts      = util.to_var(sample['points'].type(deftype), requires_grad=train, volatile=not train)
-        ctrls    = util.to_var(sample['controls'].type(deftype), requires_grad=train)
-        fwdflows = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
-        fwdvis   = util.to_var(sample['fwdvisibilities'].type(deftype), requires_grad=False)
-        tarpts   = util.to_var(sample['fwdflows'].type(deftype), requires_grad=False)
-        tarpts.data.add_(pts.data.narrow(1,0,1).expand_as(tarpts.data)) # Add "k"-step flows to the initial point cloud
+        pts      = util.req_grad(sample['points'].to(device), train)  # Need gradients
+        ctrls    = util.req_grad(sample['controls'].to(device), train)  # Need gradients
+        fwdflows = util.req_grad(sample['fwdflows'].to(device), False)  # No gradients
+        fwdvis   = util.req_grad(sample['fwdvisibilities'].float().to(device), False)
 
         # Get XYZRGB input
         if args.use_xyzrgb:
-            rgb = util.to_var(sample['rgbs'].type(deftype)/255.0, requires_grad=train) # Normalize RGB to 0-1
-            netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
+            rgb      = util.req_grad(sample['rgbs'].to(device) / 255.0, train)  # Normalize RGB to 0-1
+            netinput = torch.cat([pts, rgb], 2)  # Concat along channels dimension
         elif args.use_xyzhue:
-            hue = util.to_var(sample['rgbs'].narrow(2,0,1).type(deftype)/179.0, requires_grad=train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
-            netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
+            hue      = util.req_grad(sample['rgbs'].narrow(2, 0, 1).to(device) / 179.0, train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
+            netinput = torch.cat([pts, hue], 2)  # Concat along channels dimension
         else:
-            netinput = pts # XYZ
+            netinput = pts  # XYZ
 
         # Get jt angles
         #if args.use_full_jt_angles:
-        #    jtangles = util.to_var(sample['actconfigs'].type(deftype), requires_grad=train)
+        #    jtangles = util.req_grad(sample['actconfigs'].to(device), train)
         #else:
         if args.box_data:
-            jtangles = util.to_var(sample['states'].type(deftype), requires_grad=train)
+            jtangles = util.req_grad(sample['states'].to(device), train)
         else:
-            jtangles = util.to_var(sample['actctrlconfigs'].type(deftype), requires_grad=train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
+            jtangles = util.req_grad(sample['actctrlconfigs'].to(device), train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Get normals (if computed)
         if (args.normal_wt > 0):
-            initnormals = util.to_var(sample['initnormals'].type(deftype), requires_grad=train)
-            tarnormals  = util.to_var(sample['tarnormals'].type(deftype), requires_grad=train)
-            validinitnormals = util.to_var(sample['validinitnormals'].type(deftype), requires_grad=train)
+            initnormals = util.req_grad(sample['initnormals'].to(device), train)
+            tarnormals  = util.req_grad(sample['tarnormals'].to(device),  train)
+            validinitnormals = util.req_grad(sample['validinitnormals'].to(device), train)
 
         # Get segmentation labels
         if (args.seg_wt > 0):
-            deflabtype = 'torch.cuda.LongTensor' if args.cuda else 'torch.LongTensor'
-            seglabels = util.to_var(sample['labels'].type(deflabtype), requires_grad=False)
+            seglabels = util.req_grad(sample['labels'].to(device), False)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -800,15 +799,15 @@ def iterate(data_loader, model, tblogger, num_iters,
                 if(k == 0):
                     if args.use_gt_masks:
                         p = model.forward_only_pose([netinput[:,k], jtangles[:,k]]) # We can only predict poses
-                        initmask = util.to_var(sample['masks'][:,0].type(deftype).clone(), requires_grad=False) # Use GT masks
+                        initmask = util.req_grad(sample['masks'][:,0].to(device).clone(), False) # Use GT masks
                     elif args.use_gt_poses:
-                        p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                        p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
                         initmask = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter)  # Predict masks
                     else:
                         p, initmask = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter)
                 else:
                     if args.use_gt_poses:
-                        p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                        p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
                     else:
                         p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])
                 poses.append(p)
@@ -818,9 +817,9 @@ def iterate(data_loader, model, tblogger, num_iters,
                 # Predict the poses and masks for all timesteps
                 if args.use_gt_masks:
                     p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])  # We can only predict poses
-                    m = util.to_var(sample['masks'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT masks
+                    m = util.req_grad(sample['masks'][:,k].to(device).clone(), False)  # Use GT masks
                 elif args.use_gt_poses:
-                    p = util.to_var(sample['poses'][:,k].type(deftype).clone(), requires_grad=False)  # Use GT poses
+                    p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
                     m = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter) # Predict masks
                 else:
                     p, m = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
@@ -849,7 +848,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             if (k == 0):
                 pose = poses[0] # Use initial pose (NOTE: We want to backprop to the pose model here)
             else:
-                pose = util.to_var(transposes[k-1].data.clone(), requires_grad=False) # Use previous predicted pose (NOTE: This is a copy with the graph cut)
+                pose = transposes[k-1].detach() # Use previous predicted pose (NOTE: This is a copy with the graph cut)
 
             # Predict next pose based on curr pose, control
             if args.trans_type == 'locallinear' or args.trans_type == 'locallineardelta':
@@ -866,7 +865,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                 if (k == 0):
                     compdeltaposes.append(delta) # This keeps the graph intact
                 else:
-                    prevcompdelta = util.to_var(compdeltaposes[k-1].data.clone(), requires_grad=False) # Cut graph here, no gradient feedback in transition model
+                    prevcompdelta = compdeltaposes[k-1].detach() # Cut graph here, no gradient feedback in transition model
                     compdeltaposes.append(se3nn.ComposeRtPair()(delta, prevcompdelta)) # delta_full = delta_curr * delta_prev
 
         # Now compute the losses across the sequence
@@ -881,13 +880,13 @@ def iterate(data_loader, model, tblogger, num_iters,
             if args.backprop_only_first_delta:
                 # Predict transformed 3D points
                 # We back-propagate only to the first predicted delta, so we break the graph between the later deltas and the predicted 3D points
-                compdelta = compdeltaposes[k] if (k == 0) else util.to_var(compdeltaposes[k].data.clone(), requires_grad=False)
-                nextpts = ptpredlayer()(pts[:,0], initmask, compdelta)
+                compdelta = compdeltaposes[k] if (k == 0) else compdeltaposes[k].detach()
+                nextpts = ptpredlayer(pts[:,0], initmask, compdelta)
 
                 # Predict transformed normals and normalize them to get "unit" vectors
                 if (args.normal_wt > 0):
                     compdeltarot    = compdelta.clone(); compdeltarot[:,:,:,3] = 0 # No translation
-                    nextnormals     = ptpredlayer()(initnormals[:,0], initmask, compdeltarot)
+                    nextnormals     = ptpredlayer(initnormals[:,0], initmask, compdeltarot)
                     nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
                     prednormals.append(nextunitnormals.unsqueeze(1))
 
@@ -900,13 +899,13 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 # Predict transformed 3D points
                 # We do not want to backpropagate across the chain of predicted points so we break the graph here
-                currpts = pts[:,0] if (k == 0) else util.to_var(predpts[k-1].data.clone(), requires_grad=False)
-                nextpts = ptpredlayer()(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
+                currpts = pts[:,0] if (k == 0) else predpts[k-1].detach()
+                nextpts = ptpredlayer(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
 
                 # Predict transformed normals and normalize them to get "unit" vectors
                 if (args.normal_wt > 0):
                     deltarot        = deltaposes[k].clone(); deltarot[:,:,:,3] = 0 # No translation
-                    nextnormals     = ptpredlayer()(initnormals[:, 0], initmask, deltarot)
+                    nextnormals     = ptpredlayer(initnormals[:,0], initmask, deltarot)
                     nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
                     prednormals.append(nextunitnormals.unsqueeze(1)) # B x 1 x 3 x H x W
 
@@ -936,37 +935,37 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                  wts=fwdvis[:,k] * validinitnormals[:,k],
                                                                  motion=targets if args.motion_norm_normal_loss else None)
                 loss += currnormalloss
-                normalloss[k] = currnormalloss.data[0]
+                normalloss[k] = currnormalloss.item()
                 prednormals = torch.cat(prednormals, 1) # B x S x 3 x H x W
 
             ### Segmentation loss (only for mask at t = 0)
             if (args.seg_wt > 0) and (k == 0):
                 currsegloss = seg_wt * nn.NLLLoss2d(weight=None, size_average=True)(initmask.log(), seglabels[:,0])
                 loss += currsegloss
-                segloss = currsegloss.data[0]
+                segloss = currsegloss.item()
 
             ### Pose anchor loss
             if (args.pose_anchor_wt > 0):
                 # Get pose centers and mask mean
                 # We do not want to backpropagate across the chain of predicted points so we break the graph here
-                currpts = pts[:,0] if (k == 0) else util.to_var(predpts[k-1].data.clone(), requires_grad=False)
+                currpts = pts[:,0] if (k == 0) else predpts[k-1].detach()
                 maskmeanp  = se3nn.WeightedAveragePoints()(currpts, initmask) # (B x K x 3)
                 if (not args.pose_anchor_maskbprop):
-                    maskmean = util.to_var(maskmeanp.data.clone(), requires_grad=False) # Break graph to backprop to mask
+                    maskmean = maskmeanp.detach() # Break graph to backprop to mask
                 else:
                     maskmean = maskmeanp # Backprop to mask mean
                 posecenter = poses[k][:,:,:,3] # Translation points (B x K x 3)
                 # Compute loss
                 curranchorloss = anchor_wt * ctrlnets.BiMSELoss(maskmean, posecenter)
                 if args.pose_anchor_grad_clip and mode =='train':
-                    curranchorloss = clip_grad(curranchorloss, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid explosive gradient
+                    curranchorloss = helpers.clip_grad(curranchorloss, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid explosive gradient
                 loss += curranchorloss
-                anchorloss[k] = curranchorloss.data[0]
+                anchorloss[k] = curranchorloss.item()
 
             ### Consistency loss (between t & t+1)
             # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
             # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
-            delta = util.to_var(deltaposes[k].data.clone(), requires_grad=False)  # Break the graph here
+            delta = deltaposes[k].detach()  # Break the graph here
             nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
             if args.consis_rt_loss:
                 currconsisloss = consis_wt * ctrlnets.PoseC(nextpose_trans, poses[k+1])
@@ -984,15 +983,15 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # Append to total loss
             loss += currptloss + currconsisloss # + currdissimposeloss + currdissimdeltaloss
-            ptloss[k]     = currptloss.data[0]
-            consisloss[k] = currconsisloss.data[0]
-            dissimposeloss[k]  = currdissimposeloss.data[0]
-            dissimdeltaloss[k] = currdissimdeltaloss.data[0]
+            ptloss[k]     = currptloss.item()
+            consisloss[k] = currconsisloss.item()
+            dissimposeloss[k]  = currdissimposeloss.item()
+            dissimdeltaloss[k] = currdissimdeltaloss.item()
 
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
-        stats.loss.update(loss.data[0])
+        stats.loss.update(loss.item())
         stats.dissimposeloss.update(dissimposeloss)
         stats.dissimdeltaloss.update(dissimdeltaloss)
         stats.normalloss.update(normalloss)
@@ -1020,194 +1019,197 @@ def iterate(data_loader, model, tblogger, num_iters,
             bwd_time.update(time.time() - start)
 
         # ============ Visualization ============#
-        # Start timer
-        start = time.time()
+        # Make sure to not add to the computation graph (will memory leak otherwise)!
+        with torch.no_grad():
 
-        # Compute flow predictions and errors
-        # NOTE: I'm using CUDA here to speed up computation by ~4x
-        predflows = torch.cat([(x.data - pts.data[:,0]).unsqueeze(1) for x in predpts], 1)
-        flows = fwdflows.data
-        if args.use_only_da_for_flows:
-            # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
-            # account when computing the flow errors
-            flowerr_sum, flowerr_avg, \
-                motionerr_sum, motionerr_avg,\
-                stillerr_sum, stillerr_avg,\
-                motion_err, motion_npt,\
-                still_err, still_npt         = compute_masked_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
-        else:
-            flowerr_sum, flowerr_avg, \
-                motionerr_sum, motionerr_avg, \
-                stillerr_sum, stillerr_avg, \
-                motion_err, motion_npt, \
-                still_err, still_npt         = compute_masked_flow_errors(predflows, flows)
+            # Start timer
+            start = time.time()
 
-        # Update stats
-        stats.flowerr_sum.update(flowerr_sum); stats.flowerr_avg.update(flowerr_avg)
-        stats.motionerr_sum.update(motionerr_sum); stats.motionerr_avg.update(motionerr_avg)
-        stats.stillerr_sum.update(stillerr_sum); stats.stillerr_avg.update(stillerr_avg)
-        if mode == 'test':
-            stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
-            stats.still_err.append(still_err); stats.still_npt.append(still_npt)
+            # Compute flow predictions and errors
+            # NOTE: I'm using CUDA here to speed up computation by ~4x
+            predflows = torch.cat([(x - pts[:,0]).unsqueeze(1) for x in predpts], 1)
+            flows = fwdflows
+            if args.use_only_da_for_flows:
+                # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
+                # account when computing the flow errors
+                flowerr_sum, flowerr_avg, \
+                    motionerr_sum, motionerr_avg,\
+                    stillerr_sum, stillerr_avg,\
+                    motion_err, motion_npt,\
+                    still_err, still_npt         = helpers.compute_masked_flow_errors(predflows * fwdvis, flows) # Zero out flows for non-visible points
+            else:
+                flowerr_sum, flowerr_avg, \
+                    motionerr_sum, motionerr_avg, \
+                    stillerr_sum, stillerr_avg, \
+                    motion_err, motion_npt, \
+                    still_err, still_npt         = helpers.compute_masked_flow_errors(predflows, flows)
 
-        # Save poses if in test mode
-        if (mode == 'test') and (args.detailed_test_stats):
-            stats.predposes.append([x.data.cpu().float() for x in poses])
-            stats.predtransposes.append([x.data.cpu().float() for x in transposes])
-            stats.preddeltas.append([x.data.cpu().float() for x in deltaposes])
-            stats.ctrls.append(ctrls.data.cpu().float())
-            stats.poses.append(sample['poses'])
-            # stats.predmasks.append(initmask.data.cpu().float())
-            # stats.masks.append(sample['masks'][:,0])
-            # stats.predflows.append(predflows.cpu())
-            # stats.gtflows.append(flows.cpu())
-            # stats.pts.append(sample['points'][:,0])
+            # Update stats
+            stats.flowerr_sum.update(flowerr_sum); stats.flowerr_avg.update(flowerr_avg)
+            stats.motionerr_sum.update(motionerr_sum); stats.motionerr_avg.update(motionerr_avg)
+            stats.stillerr_sum.update(stillerr_sum); stats.stillerr_avg.update(stillerr_avg)
+            if mode == 'test':
+                stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
+                stats.still_err.append(still_err); stats.still_npt.append(still_npt)
 
-        # Compute flow error per mask (if asked to)
-        #if args.disp_err_per_mask:
-        #    flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predflows.data,
-        #                                                                                      flows.data,
-        #                                                                                      sample['gtmasks'])
+            # Save poses if in test mode
+            if (mode == 'test') and (args.detailed_test_stats):
+                stats.predposes.append([x.cpu().float() for x in poses])
+                stats.predtransposes.append([x.cpu().float() for x in transposes])
+                stats.preddeltas.append([x.cpu().float() for x in deltaposes])
+                stats.ctrls.append(ctrls.cpu().float())
+                stats.poses.append(sample['poses'])
+                # stats.predmasks.append(initmask.cpu().float())
+                # stats.masks.append(sample['masks'][:,0])
+                # stats.predflows.append(predflows.cpu())
+                # stats.gtflows.append(flows.cpu())
+                # stats.pts.append(sample['points'][:,0])
 
-        ### Pose consistency error
-        # Compute consistency error for display
-        consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-        for k in xrange(args.seq_len):
-            consiserrormax[k] = (poses[k+1].data - transposes[k].data).abs().max()
-            consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1].data, transposes[k].data)
-        stats.consiserr.update(consiserror)
+            # Compute flow error per mask (if asked to)
+            #if args.disp_err_per_mask:
+            #    flowloss_mask_sum_fwd, flowloss_mask_avg_fwd, _, _ = compute_flow_errors_per_mask(predflows,
+            #                                                                                      flows,
+            #                                                                                      sample['gtmasks'])
 
-        # Display/Print frequency
-        bsz = pts.size(0)
-        if i % args.disp_freq == 0:
-            ### Print statistics
-            print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
-                        samplecurr=j+1, sampletotal=len(data_loader),
-                        stats=stats, bsz=bsz)
+            ### Pose consistency error
+            # Compute consistency error for display
+            consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+            for k in xrange(args.seq_len):
+                consiserrormax[k] = (poses[k+1] - transposes[k]).abs().max()
+                consiserror[k] = ctrlnets.BiAbsLoss(poses[k+1], transposes[k])
+            stats.consiserr.update(consiserror)
 
-            ### Print stuff if we have weight sharpening enabled
-            if args.use_wt_sharpening and not args.use_gt_masks:
-                try:
-                    noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
-                except:
-                    noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
-                print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
-                    num_train_iter, noise_std, pow))
+            # Display/Print frequency
+            bsz = pts.size(0)
+            if i % args.disp_freq == 0:
+                ### Print statistics
+                print_stats(mode, epoch=epoch, curr=i+1, total=num_iters,
+                            samplecurr=j+1, sampletotal=len(data_loader),
+                            stats=stats, bsz=bsz)
 
-            ### Print time taken
-            print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
-                        'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
-                        'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
-                        'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
-                    data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
+                ### Print stuff if we have weight sharpening enabled
+                if args.use_wt_sharpening and not args.use_gt_masks:
+                    try:
+                        noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                    except:
+                        noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                    print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
+                        num_train_iter, noise_std, pow))
 
-            ### TensorBoard logging
-            # (1) Log the scalar values
-            iterct = data_loader.iteration_count() # Get total number of iterations so far
-            info = {
-                mode+'-loss': loss.data[0],
-                mode+'-pt3dloss': ptloss.sum(),
-                mode+'-consisloss': consisloss.sum(),
-                mode+'-normalloss': normalloss.sum(),
-                mode+'-anchorloss': anchorloss.sum(),
-                mode+'-dissimposeloss': dissimposeloss.sum(),
-                mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
-                mode+'-consiserr': consiserror.sum(),
-                mode+'-consiserrmax': consiserrormax.sum(),
-                mode+'-flowerrsum': flowerr_sum.sum()/bsz,
-                mode+'-flowerravg': flowerr_avg.sum()/bsz,
-                mode+'-motionerrsum': motionerr_sum.sum()/bsz,
-                mode+'-motionerravg': motionerr_avg.sum()/bsz,
-                mode+'-stillerrsum': stillerr_sum.sum() / bsz,
-                mode+'-stillerravg': stillerr_avg.sum() / bsz,
-                mode+'-segloss': segloss
-            }
-            if mode == 'train':
-                info[mode+'-lr'] = args.curr_lr # Plot current learning rate
-            for tag, value in info.items():
-                tblogger.scalar_summary(tag, value, iterct)
+                ### Print time taken
+                print('\tTime => Data: {data.val:.3f} ({data.avg:.3f}), '
+                            'Fwd: {fwd.val:.3f} ({fwd.avg:.3f}), '
+                            'Bwd: {bwd.val:.3f} ({bwd.avg:.3f}), '
+                            'Viz: {viz.val:.3f} ({viz.avg:.3f})'.format(
+                        data=data_time, fwd=fwd_time, bwd=bwd_time, viz=viz_time))
 
-            # (2) Log images & print predicted SE3s
-            # TODO: Numpy or matplotlib
-            if i % args.imgdisp_freq == 0:
-
-                ## Log the images (at a lower rate for now)
-                id = random.randint(0, sample['points'].size(0)-1)
-
-                # Render the predicted and GT poses onto the depth
-                depths = []
-                for k in xrange(args.seq_len+1):
-                    gtpose    = sample['poses'][id, k]
-                    predpose  = poses[k].data[id].cpu().float()
-                    predposet = transposes[k-1].data[id].cpu().float() if (k > 0) else None
-                    gtdepth   = normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
-                    for n in xrange(args.num_se3):
-                        # Pose_1 (GT/Pred)
-                        if n < gtpose.size(0):
-                            util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
-                        util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
-                        if predposet is not None:
-                            util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
-                    depths.append(gtdepth)
-                depthdisp = torch.cat(depths, 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 320*seq_len+1 image)
-
-                # Concat the flows, depths and masks into one tensor
-                flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
-                                                                   predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                                                        nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
-                #depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
-                maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.data.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
-                                                        nrow=args.num_se3, normalize=True, range=(0,1))
-
-                # Display RGB
-                if args.use_xyzrgb:
-                    rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
-                                                            nrow=args.seq_len, normalize=True, range=(0.0,255.0))
-                elif args.use_xyzhue:
-                    rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id,:,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                            nrow=args.seq_len, normalize=True, range=(0.0, 179.0)) # Show only hue, goes from 0-179 in OpenCV
-
-                # Show as an image summary
-                info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
-                         mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
-                         mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
+                ### TensorBoard logging
+                # (1) Log the scalar values
+                iterct = data_loader.iteration_count() # Get total number of iterations so far
+                info = {
+                    mode+'-loss': loss.item(),
+                    mode+'-pt3dloss': ptloss.sum(),
+                    mode+'-consisloss': consisloss.sum(),
+                    mode+'-normalloss': normalloss.sum(),
+                    mode+'-anchorloss': anchorloss.sum(),
+                    mode+'-dissimposeloss': dissimposeloss.sum(),
+                    mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
+                    mode+'-consiserr': consiserror.sum(),
+                    mode+'-consiserrmax': consiserrormax.sum(),
+                    mode+'-flowerrsum': flowerr_sum.sum()/bsz,
+                    mode+'-flowerravg': flowerr_avg.sum()/bsz,
+                    mode+'-motionerrsum': motionerr_sum.sum()/bsz,
+                    mode+'-motionerravg': motionerr_avg.sum()/bsz,
+                    mode+'-stillerrsum': stillerr_sum.sum() / bsz,
+                    mode+'-stillerravg': stillerr_avg.sum() / bsz,
+                    mode+'-segloss': segloss
                 }
-                if args.use_xyzrgb or args.use_xyzhue:
-                    info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
-                if (args.normal_wt > 0):
-                    normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.data.narrow(0, id, 1),
-                                                                      prednormals.data.narrow(0, id, 1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                                                           nrow=args.seq_len, normalize=True, range=(-1, 1))
-                    info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
-                if (args.seg_wt > 0):
-                    segdisp = torchvision.utils.make_grid(sample['labels'][id,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                            nrow=1, normalize=True, range=(0, len(args.mesh_ids)))
-                    info[mode+'-seglabels'] = util.to_np(segdisp.unsqueeze(0))  # Optional segmentation labels
-                for tag, images in info.items():
-                    tblogger.image_summary(tag, images, iterct)
+                if mode == 'train':
+                    info[mode+'-lr'] = args.curr_lr # Plot current learning rate
+                for tag, value in info.items():
+                    tblogger.scalar_summary(tag, value, iterct)
 
-                ## Print the predicted delta-SE3s
-                #deltase3s = predictions['deltase3'].data[id].view(args.num_se3, -1).cpu()
-                #if len(pivots) > 0:
-                #    deltase3s = torch.cat([deltase3s, pivots[-1].data[id].view(args.num_se3,-1).cpu()], 1)
-                #print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+                # (2) Log images & print predicted SE3s
+                # TODO: Numpy or matplotlib
+                if i % args.imgdisp_freq == 0:
 
-                ## Details on the centers
-                if len(posecenters) > 0:
-                    centers = torch.cat([maskcenters[-1].data[id].cpu(), posecenters[-1].data[id].cpu(), poses[-1].data[id,:,:,3].cpu()], 1)
-                    print('\tMaskCenters | PoseCenters (Init) | PoseCenters (Final)', centers)
+                    ## Log the images (at a lower rate for now)
+                    id = random.randint(0, sample['points'].size(0)-1)
 
-                ## Print the predicted mask values
-                print('\tPredicted mask stats:')
-                for k in xrange(args.num_se3):
-                    print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
-                        initmask.data[id,k].max(), initmask.data[id,k].min(), initmask.data[id,k].mean(),
-                        initmask.data[id,k].std(), initmask.data[id,k].view(-1).cpu().float().median(),
-                        (initmask.data[id,k] - 1).abs().le(1e-5).sum()))
-                print('')
+                    # Render the predicted and GT poses onto the depth
+                    depths = []
+                    for k in xrange(args.seq_len+1):
+                        gtpose    = sample['poses'][id, k]
+                        predpose  = poses[k][id].cpu().float()
+                        predposet = transposes[k-1][id].cpu().float() if (k > 0) else None
+                        gtdepth   = helpers.normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
+                        for n in xrange(args.num_se3):
+                            # Pose_1 (GT/Pred)
+                            if n < gtpose.size(0):
+                                util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
+                            util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
+                            if predposet is not None:
+                                util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
+                        depths.append(gtdepth)
+                    depthdisp = torch.cat(depths, 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 320*seq_len+1 image)
 
-        # Measure viz time
-        viz_time.update(time.time() - start)
+                    # Concat the flows, depths and masks into one tensor
+                    flowdisp  = torchvision.utils.make_grid(torch.cat([flows.narrow(0,id,1),
+                                                                       predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
+                                                            nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
+                    #depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
+                    maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                                                            nrow=args.num_se3, normalize=True, range=(0,1))
+
+                    # Display RGB
+                    if args.use_xyzrgb:
+                        rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
+                                                                nrow=args.seq_len, normalize=True, range=(0.0,255.0))
+                    elif args.use_xyzhue:
+                        rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id,:,0].float().view(-1, 1, args.img_ht, args.img_wd),
+                                                                nrow=args.seq_len, normalize=True, range=(0.0, 179.0)) # Show only hue, goes from 0-179 in OpenCV
+
+                    # Show as an image summary
+                    info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
+                             mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
+                             mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
+                    }
+                    if args.use_xyzrgb or args.use_xyzhue:
+                        info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
+                    if (args.normal_wt > 0):
+                        normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.narrow(0, id, 1),
+                                                                          prednormals.narrow(0, id, 1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
+                                                               nrow=args.seq_len, normalize=True, range=(-1, 1))
+                        info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
+                    if (args.seg_wt > 0):
+                        segdisp = torchvision.utils.make_grid(sample['labels'][id,0].float().view(-1, 1, args.img_ht, args.img_wd),
+                                                                nrow=1, normalize=True, range=(0, len(args.mesh_ids)))
+                        info[mode+'-seglabels'] = util.to_np(segdisp.unsqueeze(0))  # Optional segmentation labels
+                    for tag, images in info.items():
+                        tblogger.image_summary(tag, images, iterct)
+
+                    ## Print the predicted delta-SE3s
+                    #deltase3s = predictions['deltase3'][id].view(args.num_se3, -1).cpu()
+                    #if len(pivots) > 0:
+                    #    deltase3s = torch.cat([deltase3s, pivots[-1][id].view(args.num_se3,-1).cpu()], 1)
+                    #print('\tPredicted delta-SE3s @ t=2:', deltase3s)
+
+                    ## Details on the centers
+                    if len(posecenters) > 0:
+                        centers = torch.cat([maskcenters[-1][id].cpu(), posecenters[-1][id].cpu(), poses[-1][id,:,:,3].cpu()], 1)
+                        print('\tMaskCenters | PoseCenters (Init) | PoseCenters (Final)', centers)
+
+                    ## Print the predicted mask values
+                    print('\tPredicted mask stats:')
+                    for k in xrange(args.num_se3):
+                        print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
+                            initmask[id,k].max(), initmask[id,k].min(), initmask[id,k].mean(),
+                            initmask[id,k].std(), initmask[id,k].view(-1).cpu().float().median(),
+                            (initmask[id,k] - 1).abs().le(1e-5).sum()))
+                    print('')
+
+            # Measure viz time
+            viz_time.update(time.time() - start)
 
     ### Print stats at the end
     print('========== Mode: {}, Epoch: {}, Final results =========='.format(mode, epoch))
@@ -1252,78 +1254,6 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.motionerr_avg.avg[k] / bsz, stats.stillerr_avg.avg[k] / bsz,
         ))
 
-### Load optimizer
-def load_optimizer(optim_type, parameters, lr=1e-3, momentum=0.9, weight_decay=1e-4):
-    if optim_type == 'sgd':
-        optimizer = torch.optim.SGD(params=parameters, lr=lr, momentum=momentum,
-                                    weight_decay=weight_decay)
-    elif optim_type == 'adam':
-        optimizer = torch.optim.Adam(params=parameters, lr = lr, weight_decay= weight_decay)
-    elif optim_type == 'asgd':
-        optimizer = torch.optim.ASGD(params=parameters, lr=lr, weight_decay=weight_decay)
-    elif optim_type == 'rmsprop':
-        optimizer = torch.optim.RMSprop(params=parameters, lr=lr, momentum=momentum, weight_decay=weight_decay)
-    else:
-        assert False, "Unknown optimizer type: " + optim_type
-    return optimizer
-
-### Save checkpoint
-def save_checkpoint(state, is_best, is_fbest=False, is_fcbest=False, savedir='.', filename='checkpoint.pth.tar'):
-    savefile = savedir + '/' + filename
-    torch.save(state, savefile)
-    if is_best:
-        shutil.copyfile(savefile, savedir + '/model_best.pth.tar')
-    if is_fbest:
-        shutil.copyfile(savefile, savedir + '/model_flow_best.pth.tar')
-    if is_fcbest:
-        shutil.copyfile(savefile, savedir + '/model_flowconsis_best.pth.tar')
-
-### Compute flow errors for moving / non-moving pts (flows are size: B x S x 3 x H x W)
-def compute_masked_flow_errors(predflows, gtflows):
-    batch, seq = predflows.size(0), predflows.size(1) # B x S x 3 x H x W
-    # Compute num pts not moving per mask
-    # !!!!!!!!! > 1e-3 returns a ByteTensor and if u sum within byte tensors, the max value we can get is 255 !!!!!!!!!
-    motionmask = (gtflows.abs().sum(2) > 1e-3).type_as(gtflows) # B x S x 1 x H x W
-    err = (predflows - gtflows).mul_(1e2).pow(2).sum(2) # B x S x 1 x H x W
-
-    # Compute errors for points that are supposed to move
-    motion_err = (err * motionmask).view(batch, seq, -1).sum(2) # Errors for only those points that are supposed to move
-    motion_npt = motionmask.view(batch, seq, -1).sum(2) # Num points that move (B x S)
-
-    # Compute errors for points that are supposed to not move
-    motionmask.eq_(0) # Mask out points that are not supposed to move
-    still_err = (err * motionmask).view(batch, seq, -1).sum(2)  # Errors for non-moving points
-    still_npt = motionmask.view(batch, seq, -1).sum(2)  # Num non-moving pts (B x S)
-
-    # Bwds compatibility to old error
-    full_err_avg  = (motion_err + still_err) / motion_npt
-    full_err_avg[full_err_avg != full_err_avg] = 0  # Clear out any Nans
-    full_err_avg[full_err_avg == np.inf] = 0  # Clear out any Infs
-    full_err_sum, full_err_avg = (motion_err + still_err).sum(0), full_err_avg.sum(0) # S, S
-
-    # Compute sum/avg stats
-    motion_err_avg = (motion_err / motion_npt)
-    motion_err_avg[motion_err_avg != motion_err_avg] = 0  # Clear out any Nans
-    motion_err_avg[motion_err_avg == np.inf] = 0      # Clear out any Infs
-    motion_err_sum, motion_err_avg = motion_err.sum(0), motion_err_avg.sum(0) # S, S
-
-    # Compute sum/avg stats
-    still_err_avg = (still_err / still_npt)
-    still_err_avg[still_err_avg != still_err_avg] = 0  # Clear out any Nans
-    still_err_avg[still_err_avg == np.inf] = 0  # Clear out any Infs
-    still_err_sum, still_err_avg = still_err.sum(0), still_err_avg.sum(0)  # S, S
-
-    # Return
-    return full_err_sum.cpu().float(), full_err_avg.cpu().float(), \
-           motion_err_sum.cpu().float(), motion_err_avg.cpu().float(), \
-           still_err_sum.cpu().float(), still_err_avg.cpu().float(), \
-           motion_err.cpu().float(), motion_npt.cpu().float(), \
-           still_err.cpu().float(), still_npt.cpu().float()
-
-### Normalize image
-def normalize_img(img, min=-0.01, max=0.01):
-    return (img - min) / (max - min)
-
 ### Adjust learning rate
 def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_lr=1e-5):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
@@ -1334,11 +1264,6 @@ def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     args.curr_lr = lr
-
-### Gradient clipping hook
-def clip_grad(v, min, max):
-    v.register_hook(lambda g: g.clamp(min, max))
-    return v
 
 ################ RUN MAIN
 if __name__ == '__main__':

@@ -85,13 +85,14 @@ class SE3ToRtFunction(Function):
         # Create the skew symmetric matrix:
         # [0 -z y; z 0 -x; -y x 0]
         N = vector.size(0)
-        output = vector.new().resize_(N, 3, 3).fill_(0)
-        output[:, 0, 1] = -vector[:, 2]
-        output[:, 1, 0] = vector[:, 2]
-        output[:, 0, 2] = vector[:, 1]
-        output[:, 2, 0] = -vector[:, 1]
-        output[:, 1, 2] = -vector[:, 0]
-        output[:, 2, 1] = vector[:, 0]
+        vec = vector.contiguous().view(N, 3)
+        output = vec.new().resize_(N, 3, 3).fill_(0)
+        output[:, 0, 1] = -vec[:, 2]
+        output[:, 1, 0] =  vec[:, 2]
+        output[:, 0, 2] =  vec[:, 1]
+        output[:, 2, 0] = -vec[:, 1]
+        output[:, 1, 2] = -vec[:, 0]
+        output[:, 2, 1] =  vec[:, 0]
         return output
 
     ########
@@ -101,10 +102,11 @@ class SE3ToRtFunction(Function):
     # From Barfoot's book: http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf (6.7)
     def create_rotx(self, theta):
         N = theta.size(0)
-        rot = torch.eye(3).view(1, 3, 3).repeat(N, 1, 1).type_as(theta)  # (DO NOT use expand as it does not allocate new memory)
-        rot[:, 1, 1] = torch.cos(theta)
+        thetas = theta.squeeze()
+        rot = torch.eye(3).view(1, 3, 3).repeat(N, 1, 1).type_as(thetas)  # (DO NOT use expand as it does not allocate new memory)
+        rot[:, 1, 1] = torch.cos(thetas)
         rot[:, 2, 2] = rot[:, 1, 1]
-        rot[:, 1, 2] = torch.sin(theta)
+        rot[:, 1, 2] = torch.sin(thetas)
         rot[:, 2, 1] = -rot[:, 1, 2]
         return rot
 
@@ -112,10 +114,11 @@ class SE3ToRtFunction(Function):
     # From Barfoot's book: http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf (6.6)
     def create_roty(self, theta):
         N = theta.size(0)
-        rot = torch.eye(3).view(1, 3, 3).repeat(N, 1, 1).type_as(theta)  # (DO NOT use expand as it does not allocate new memory)
-        rot[:, 0, 0] = torch.cos(theta)
+        thetas = theta.squeeze()
+        rot = torch.eye(3).view(1, 3, 3).repeat(N, 1, 1).type_as(thetas)  # (DO NOT use expand as it does not allocate new memory)
+        rot[:, 0, 0] = torch.cos(thetas)
         rot[:, 2, 2] = rot[:, 0, 0]
-        rot[:, 2, 0] = torch.sin(theta)
+        rot[:, 2, 0] = torch.sin(thetas)
         rot[:, 0, 2] = -rot[:, 2, 0]
         return rot
 
@@ -123,10 +126,11 @@ class SE3ToRtFunction(Function):
     # From Barfoot's book: http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf (6.5)
     def create_rotz(self, theta):
         N = theta.size(0)
+        thetas = theta.squeeze()
         rot = torch.eye(3).view(1, 3, 3).repeat(N, 1, 1).type_as(theta)  # (DO NOT use expand as it does not allocate new memory)
-        rot[:, 0, 0] = torch.cos(theta)
+        rot[:, 0, 0] = torch.cos(thetas)
         rot[:, 1, 1] = rot[:, 0, 0]
-        rot[:, 0, 1] = torch.sin(theta)
+        rot[:, 0, 1] = torch.sin(thetas)
         rot[:, 1, 0] = -rot[:, 0, 1]
         return rot
 
@@ -289,8 +293,7 @@ class SE3ToRtFunction(Function):
         self.check(input)  # Check size
         batch_size, num_se3, num_params = input.size()
         tot_se3 = batch_size * num_se3
-        rot_dim = 4 if (self.transform_type == 'se3quat') else 9 if (
-        self.transform_type == 'affine') else 3  # Number of rotation parameters
+        rot_dim = 4 if (self.transform_type == 'se3quat') else 9 if (self.transform_type == 'affine') else 3  # Number of rotation parameters
 
         # Init memory
         num_cols = 5 if (self.has_pivot) else 4
@@ -298,16 +301,23 @@ class SE3ToRtFunction(Function):
         outputv = output.view(tot_se3, 3, num_cols)
 
         ####
-        # Affine transform: [trans, rot, pivot]
+        # Affine transform: Just reshape things
         if (self.transform_type == 'affine'):
-            # Create output
-            output.narrow(3, 3, 1).copy_(input.narrow(2, 0, 3))  # Translation (3x1)
-            output.narrow(3, 0, 3).copy_(input.narrow(2, 3, rot_dim))  # Rotation (3x3)
-            if self.has_pivot:
-                output.narrow(3, 4, 1).copy_(input.narrow(2, 3 + rot_dim, 3))  # Pivot (3x1)
-            # Return, we are done
+            output = input.view(batch_size, num_se3, 3, num_cols).contiguous()
+            # We are done
             self.save_for_backward(input, output)
             return output
+
+            # # Create output
+            # output[:,:,:,3]   = input[:,:,0:3] # Translation (3x1)
+            # output[:,:,:,0:3] = input[:,:,3:3+rot_dim].view(batch_size, num_se3, 3, 3) # Rotation (3x3)
+            # #output.narrow(3, 3, 1).copy_(input.narrow(2, 0, 3))
+            # #output.narrow(3, 0, 3).copy_(input.narrow(2, 3, rot_dim))
+            # if self.has_pivot:
+            #     output[:,:,:,4] = input[:,:,3+rot_dim:] # Pivot (3x1)
+            #     #output.narrow(3, 4, 1).copy_(input.narrow(2, 3 + rot_dim, 3))  # Pivot (3x1)
+            # # Return, we are done
+            # return output
 
         ####
         # Create rotation matrix based on the SE3 types (3x3)
@@ -347,7 +357,7 @@ class SE3ToRtFunction(Function):
 
         ####
         # Translation vector (3x1)
-        outputv.narrow(2, 3, 1).copy_(params.narrow(1, 0, 3))  # [tx,ty,tz] (B x k x 3)
+        outputv[:,:,3] = params[:,0:3]  # [tx,ty,tz] (B x k x 3)
 
         ####
         # Pivot vector (3x1)
@@ -367,8 +377,7 @@ class SE3ToRtFunction(Function):
         self.check(input, grad_output)  # Check size
         batch_size, num_se3, num_params = input.size()
         tot_se3 = batch_size * num_se3
-        rot_dim = 4 if (self.transform_type == 'se3quat') else 9 if (
-        self.transform_type == 'affine') else 3  # Number of rotation parameters
+        rot_dim = 4 if (self.transform_type == 'se3quat') else 9 if (self.transform_type == 'affine') else 3  # Number of rotation parameters
 
         # Init memory for grad input
         grad_input = input.new().resize_as_(input)
@@ -381,12 +390,18 @@ class SE3ToRtFunction(Function):
         ####
         # Affine transform: [trans, rot, pivot]
         if (self.transform_type == 'affine'):
-            # Create grad_input
-            grad_input_v.narrow(1, 0, 3).copy_(grad_output_v.narrow(2, 3, 1))  # Translation (3x1)
-            grad_input_v.narrow(1, 3, rot_dim).copy_(grad_output_v.narrow(2, 0, 3))  # Rotation (3x3)
-            if self.has_pivot:
-                grad_input_v.narrow(1, 3 + rot_dim, 3).copy_(grad_output_v.narrow(2, 4, 1))  # Pivot (3x1)
+            grad_input = grad_output.view(batch_size, num_se3, 3*num_cols)
             return grad_input
+
+            # # Create grad_input
+            # grad_input_v[:,0:3]         = grad_output_v[:,:,3] # Translation (3x1)
+            # grad_input_v[:,3:3+rot_dim] = grad_output_v[:,:,0:3].contiguous().view(batch_size*num_se3, rot_dim) # Rotation (3x3)
+            # #grad_input_v.narrow(1, 0, 3).copy_(grad_output_v.narrow(2, 3, 1))  # Translation (3x1)
+            # #grad_input_v.narrow(1, 3, rot_dim).copy_(grad_output_v.narrow(2, 0, 3))  # Rotation (3x3)
+            # if self.has_pivot:
+            #     grad_input_v[:,3+rot_dim:] = grad_output_v[:,:,4] # Pivot (3x1)
+            #     #grad_input_v.narrow(1, 3 + rot_dim, 3).copy_(grad_output_v.narrow(2, 4, 1))  # Pivot (3x1)
+            # return grad_input
 
         ####
         # Gradient w.r.t rotation parameters (different based on rotation type)
@@ -408,7 +423,7 @@ class SE3ToRtFunction(Function):
 
             # Gradient w.r.t Euler angles from Barfoot's book (http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf)
             for k in range(3):
-                gradr = grad_rot_params.narrow(1, k, 1)  # Gradient w.r.t angle (k)
+                gradr = grad_rot_params[:,k]  # Gradient w.r.t angle (k)
                 vec = torch.zeros(1, 3).type_as(gradr)
                 vec[0][k] = 1  # Unit vector
                 skewsym = self.create_skew_symmetric_matrix(vec).view(1, 3, 3).expand_as(rot)  # Skew symmetric matrix of unit vector
@@ -444,16 +459,16 @@ class SE3ToRtFunction(Function):
                 # For those AAs with angle^2 < threshold, gradient is different
                 # We assume angle = 0 for these AAs and update the skew-symmetric matrix to be one w.r.t identity
                 if (nSmall > 0):
-                    vec = torch.zeros(1, 3).type_as(skewsym);
+                    vec = torch.zeros(1, 3).type_as(skewsym)
                     vec[0][k] = 1  # Unit vector
-                    idskewsym = self.create_skew_symmetric_matrix(vec);
+                    idskewsym = self.create_skew_symmetric_matrix(vec)
                     for i in range(tot_se3):
                         if (angle2[i].squeeze()[0] < self.eps):
-                            skewsym[i].copy_(idskewsym)  # Use the new skew sym matrix (around identity)
+                            skewsym[i].copy_(idskewsym.squeeze())  # Use the new skew sym matrix (around identity)
 
                 # Compute the gradients now
                 out = (torch.bmm(skewsym, rot) * grad_output_v.narrow(2, 0, 3)).sum(2).sum(1)  # [(Bk) x 1 x 1] => (vV x R) .* gradOutput
-                grad_rot_params.narrow(1, k, 1).copy_(out)
+                grad_rot_params[:,k] = out
         elif (self.transform_type == 'se3quat'):
             # Compute the unit quaternion
             quat = rot_params
@@ -493,7 +508,7 @@ class SE3ToRtFunction(Function):
 
         ####
         # Gradient w.r.t translation vector (3x1)
-        grad_input_v.narrow(1, 0, 3).copy_(grad_output_v.narrow(2, 3, 1))  # [tx,ty,tz] (Bk x 3 x 1)
+        grad_input_v[:,0:3] = grad_output_v[:,:,3]  # [tx,ty,tz] (Bk x 3 x 1)
 
         ####
         # Gradient w.r.t pivot vector (3x1)

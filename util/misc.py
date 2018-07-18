@@ -3,22 +3,24 @@ import torch
 
 ################# HELPER FUNCTIONS
 
-### Check if torch variable is of type autograd.Variable
-def is_var(x):
-    return (type(x) == torch.autograd.variable.Variable)
+# ### Check if torch variable is of type autograd.Variable
+# def is_var(x):
+#     return (type(x) == torch.autograd.Variable)
 
 ### Convert variable to numpy array
 def to_np(x):
-    if is_var(x):
-        return x.data.cpu().numpy()
-    else:
-        return x.cpu().numpy()
+    return x.detach().cpu().numpy()
 
-### Convert torch tensor to autograd.variable
-def to_var(x, to_cuda=False, requires_grad=False, volatile=False):
-    if torch.cuda.is_available() and to_cuda:
-        x = x.cuda()
-    return torch.autograd.Variable(x, requires_grad=requires_grad, volatile=volatile)
+### Set gradient flag
+def req_grad(x, req=False):
+    x.requires_grad = req
+    return x
+
+# ### Convert torch tensor to autograd.variable
+# def to_var(x, to_cuda=False, requires_grad=False, volatile=False):
+#     if torch.cuda.is_available() and to_cuda:
+#         x = x.cuda()
+#     return torch.autograd.Variable(x, requires_grad=requires_grad, volatile=volatile)
 
 ### Create a directory. From: https://stackoverflow.com/questions/273192/how-can-i-create-a-directory-if-it-does-not-exist
 def create_dir(directory):

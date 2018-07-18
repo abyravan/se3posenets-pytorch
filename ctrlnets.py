@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from  torch.autograd import Variable
+#from  torch.autograd import Variable
 import se3layers as se3nn
-import util
+#import util
 import data
 
 ################################################################################
@@ -42,7 +42,7 @@ def get_se3_dimension(se3_type, use_pivot):
 
 ### Hook for backprops of variables, just prints min, max, mean of grads along with num of "NaNs"
 def variable_hook(grad, txt):
-    print(txt, grad.max().data[0], grad.min().data[0], grad.mean().data[0], grad.ne(grad).sum().data[0])
+    print(txt, grad.max().item(), grad.min().item(), grad.mean().item(), grad.ne(grad).sum().item())
 
 ### Initialize the SE3 prediction layer to identity
 def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
@@ -50,7 +50,7 @@ def init_se3layer_identity(layer, num_se3=8, se3_type='se3aa'):
     layer.bias.data.uniform_(-0.0001, 0.0001)  # Initialize biases to near identity
     # Special initialization for specific SE3 types
     if se3_type == 'affine':
-        bs = layer.bias.data.view(num_se3, 3, 4)
+        bs = layer.bias.data.view(num_se3, 3, -1)
         bs.narrow(2, 0, 3).copy_(torch.eye(3).view(1, 3, 3).expand(num_se3, 3, 3))
     elif se3_type == 'se3quat':
         bs = layer.bias.data.view(num_se3, -1)
@@ -204,7 +204,7 @@ def MaskConsistencyLoss(mask1, mask2, pixelassoc12, losstype='mse'):
     mask1v, mask2v, pixelassoc12v = mask1.contiguous().view(bsz, nch, ht*wd), \
                                     mask2.contiguous().view(bsz, nch, ht*wd), \
                                     pixelassoc12.contiguous().view(bsz, 1, ht*wd).long()
-    assocmask = (pixelassoc12v != -1) # Only these points need to be penalized
+    assocmask = (pixelassoc12v != -1).expand_as(mask1v) # Only these points need to be penalized
     pixelassoc12v[pixelassoc12v == -1] = 0 # These points index the first value (doesn't matter as mask = 0 for those pts)
     mask2v_1 = torch.gather(mask2v, 2, pixelassoc12v.expand_as(mask1v)) # Vals from tensor 2 in tensor 1, associated correctly
     if losstype == 'mse':
@@ -215,7 +215,7 @@ def MaskConsistencyLoss(mask1, mask2, pixelassoc12, losstype='mse'):
         maskloss = absloss[assocmask].mean()
     elif losstype == 'kl':
         ## KL(inp, tar) = tar * (log(tar) - log(inp))
-        nonzeros = util.to_var((mask1v.gt(0) * mask2v_1.gt(0) * assocmask).data.clone()) # Only compute loss for vals that are > 0, log is inf else
+        nonzeros = (mask1v.gt(0) * mask2v_1.gt(0) * assocmask).detach() # Only compute loss for vals that are > 0, log is inf else
         klloss = mask2v_1 * (torch.log(mask2v_1) - torch.log(mask1v))
         maskloss = klloss[nonzeros].mean()
     elif losstype == 'kllog': # Assumes that you pass in log(inp) & log(tar)
@@ -337,13 +337,13 @@ class CoordConvBase(nn.Module):
             # Setup coords from -1 to 1
             xrng = trange(wd, ht).transpose(0,1)[None, None, :, :] # 0 to 1 along cols
             yrng = trange(ht, wd)[None, None, :, :] # 0 to 1 along rows
-            self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp.data) * 2) - 1 # -1 to 1
+            self.coord = (torch.cat([xrng, yrng], dim=1).type_as(inp) * 2) - 1 # -1 to 1
 
         # If the batch size changes we need to recompute some things. Then
         # we can save the batch size info + precomputed info.
         if self.batch_size is None or self.batch_size != bsz:
             self.batch_size = bsz
-            self.coord_batch = util.to_var(self.coord.expand(bsz,2,ht,wd)) # No gradients
+            self.coord_batch = self.coord.expand(bsz,2,ht,wd) # No gradients
 
         # Cat coords to input and apply the conv layer
         x = torch.cat([inp, self.coord_batch], dim=1) # Concat along channels dimension
@@ -397,7 +397,7 @@ class SelfNormalizingLinear(nn.Module):
 def sharpen_masks(input, add_noise=True, noise_std=0, pow=1):
     input = F.sigmoid(input)
     if (add_noise and noise_std > 0):
-        noise = Variable(input.data.new(input.size()).normal_(mean=0.0, std=noise_std)) # Sample gaussian noise
+        noise = input.new_zeros(*input.size()).normal_(mean=0.0, std=noise_std) # Sample gaussian noise
         input = input + noise
     input = (torch.clamp(input, min=0, max=100000) ** pow) + 1e-12  # Clamp to non-negative values, raise to a power and add a constant
     return F.normalize(input, p=1, dim=1, eps=1e-12)  # Normalize across channels to sum to 1
@@ -417,7 +417,7 @@ def compute_pivots(ptcloud, masks, poses, pivottype):
     elif pivottype == 'maskmeannograd':
         # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
         assert masks is not None, "Need to pass masks as input for pivot type: [maskmeannograd]"
-        masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
+        masksc = masks.detach() # Cut path to masks
         pivots = se3nn.WeightedAveragePoints()(ptcloud, masksc)
     elif pivottype == 'posecenter':
         assert poses is not None, "Need to pass poses as input for pivot type: [posecenter]"
@@ -441,7 +441,7 @@ def update_pose_centers(ptcloud, masks, poses, centertype):
     elif centertype == 'predwmaskmeannograd':
         # Cut off the graph -> don't backprop gradients to the masks (fine if we backprop to pts)
         assert masks is not None, "Need to pass masks as input for pivot type: [predwmaskmeannograd]"
-        masksc = util.to_var(masks.data.clone(), requires_grad=False) # Cut path to masks
+        masksc = masks.detach() # Cut path to masks
         maskcent = se3nn.WeightedAveragePoints()(ptcloud, masksc)
         posecent = poses[:,:,:,3]
         return torch.cat([poses[:,:,:,0:3], (posecent+maskcent).view(bsz,nse3,3,1)], 3), posecent, maskcent
@@ -490,7 +490,7 @@ def se3ToRt(input):
     axis = rotparam.clone().view(N, 3, 1)  # Un-normalized axis
     angle2 = (axis * axis).sum(1).view(N, 1, 1)  # Norm of vector (squared angle)
     angle  = torch.sqrt(angle2)  # Angle
-    small  = (angle2 < eps).data # Don't need gradient w.r.t this operation (also because of pytorch error: https://discuss.pytorch.org/t/get-error-message-maskedfill-cant-differentiate-the-mask/9129/4)
+    small  = (angle2 < eps).detach() # Don't need gradient w.r.t this operation (also because of pytorch error: https://discuss.pytorch.org/t/get-error-message-maskedfill-cant-differentiate-the-mask/9129/4)
 
     # Create Identity matrix
     I = angle2.expand(N,3,3).clone()
@@ -1225,7 +1225,7 @@ class LocalLinearTransitionModel(nn.Module):
 
         # Init identity mat
         if self.I is None:
-            self.I = util.to_var(torch.eye(self.nstate).view(1,self.nstate,self.nstate).type_as(se3.data), requires_grad=False)
+            self.I = torch.eye(self.nstate).view(1,self.nstate,self.nstate).type_as(se3)
 
         # TODO: We can have multiplicative interactions instead of additive for the controls
         # Get matrix A (nstate x nstate)

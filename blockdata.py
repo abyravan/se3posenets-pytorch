@@ -101,7 +101,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
 
             # Read number of example images in the file
             max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows
-            with h5py.File(os.path.join(load_dir, file)) as h5data:
+            with h5py.File(os.path.join(load_dir, file), 'r') as h5data:
                 # Get number of examples from that h5
                 nexamples = len(h5data['images_rgb']) - max_flow_step # We only have flows for these many images!
                 if (nexamples < 1):
@@ -111,7 +111,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
                 filenames.append(file)
 
         # Print stats
-        print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), len(files)-1, # -1 for .DS_Store
+        print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), len(files), # -1 for .DS_Store
                                                                               sum(numdata), load_dir))
 
         # Setup training and test splits in the dataset, here we actually split based on the h5s
@@ -146,7 +146,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
         ##### Setup camera intrinsics and extrinsics
         ##### ASSUME: Intrinsics and extrinsics are the same for a given dataset directory
         # Load a single h5 example
-        with h5py.File(os.path.join(load_dir, dataset['files']['names'][0])) as h5data:
+        with h5py.File(os.path.join(load_dir, dataset['files']['names'][0]), 'r') as h5data:
             # Load a single RGB image
             rgb = np.array(PNGToNumpy(h5data['images_rgb'][0])) / 255. #
 
@@ -217,7 +217,7 @@ def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yu
 
     ### Load data from the h5 file
     # Get depth, RGB, labels and poses
-    with h5py.File(path) as h5data:
+    with h5py.File(path, 'r') as h5data:
         ##### Read image data
         # Get RGB images
         rgbs = None

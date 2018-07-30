@@ -288,7 +288,7 @@ def main():
     args.imgdisp_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                    num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
+                                    num_workers=args.num_workers, sampler=sampler, pin_memory=False,
                                     collate_fn=test_dataset.collate_batch))
     test_stats = iterate(test_loader, model, tblogger, len(test_loader),
                          mode='test', epoch=args.epochs)

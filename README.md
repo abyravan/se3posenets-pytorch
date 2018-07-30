@@ -2,7 +2,8 @@
 # Intro
 
 Setting up training:
-1) Install the following packages: 
+1) Install the following packages:
+     PyTorch: conda install pytorch=0.4.0 cuda90 torchvision -c pytorch (0.4.1 has some compile issues) 
      Tensorflow (only the CPU version - for tensor board visualisation), 
      OpenCV (condo install opencv -c menpo)
      configargparse

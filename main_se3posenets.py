@@ -417,10 +417,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Get XYZRGB input
         if args.use_xyzrgb:
-            rgb = util.req_grad(sample['rgbs'].to(device)/255.0, train) # Normalize RGB to 0-1
+            rgb = util.req_grad(sample['rgbs'].type_as(pts)/255.0, train) # Normalize RGB to 0-1
             netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
         elif args.use_xyzhue:
-            hue = util.req_grad(sample['rgbs'].narrow(2,0,1).to(device)/179.0, train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
+            hue = util.req_grad(sample['rgbs'].narrow(2,0,1).type_as(pts)/179.0, train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
             netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
         else:
             netinput = pts # XYZ

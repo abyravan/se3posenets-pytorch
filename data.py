@@ -7,7 +7,7 @@ import math
 from torch.utils.data import Dataset
 import se3layers as se3nn
 from torch.autograd import Variable
-import util.util3d as u3d
+import util.util3d as u3d  # In case tf is not installed
 
 # NOTE: This is slightly ugly, use this only for the NTfm3D implementation (for use in dataloader)
 from layers._ext import se3layers

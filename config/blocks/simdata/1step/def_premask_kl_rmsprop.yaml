@@ -23,6 +23,7 @@ init-transse3-iden: True
 init-posese3-iden:  True
 wide-model:         True
 use-jt-angles:		  True
+use-xyzrgb:         True
 
 # Mask options
 use-wt-sharpening: True

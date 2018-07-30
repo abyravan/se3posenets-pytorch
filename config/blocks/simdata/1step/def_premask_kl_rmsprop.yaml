@@ -1,6 +1,6 @@
 ---
 # Dataset options
-data:         [/home/barun/Projects/blocks/data/blocks_data_v2/]
+data:         [/home/barun/Projects/blocks/data/simdata/blocks_data_v2/]
 batch-size:   16
 num-workers:  8
 train-per:    0.6

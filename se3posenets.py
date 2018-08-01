@@ -322,8 +322,8 @@ class TransitionModel(nn.Module):
         self.local_delta_se3 = local_delta_se3
         if self.local_delta_se3:
             print('Deltas predicted by transition model will affect points in local frame of reference')
-            self.rtinv = se3.RtInverse
-            self.globaldeltadecoder = se3.ComposeRtPair
+            #self.rtinv = se3.RtInverse
+            #self.globaldeltadecoder = se3.ComposeRtPair
 
     def forward(self, x):
         # Run the forward pass
@@ -354,8 +354,9 @@ class TransitionModel(nn.Module):
         x = self.deltaposedecoder(x)  # Convert delta-SE3 to delta-Pose (can be in local or global frame of reference)
         if self.local_delta_se3:
             # Predicted delta is in the local frame of reference, can't use it directly
+            self.pred_local_delta = x
             z = self.posedecoder(p, x) # SE3_2 = SE3_1 * D_local (takes a point in local frame to global frame)
-            y = x #TODO: This is not correct, fix it! self.globaldeltadecoder(z, self.rtinv(p)) # D_global = SE3_2 * SE3_1^-1 = SE3_1 * D_local * SE3_1^-1 (from global to global)
+            y = se3.ComposeRtPair(p, se3.ComposeRtPair(x, se3.RtInverse(p))) # D_global = SE3_2 * SE3_1^-1 = SE3_1 * D_local * SE3_1^-1 (from global to global)
         else:
             # Predicted delta is already in the global frame of reference, use it directly (from global to global)
             z = self.posedecoder(x, p) # Compose predicted delta & input pose to get next pose (SE3_2 = SE3_2 * SE3_1^-1 * SE3_1)

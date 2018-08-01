@@ -124,6 +124,8 @@ def main():
 
     if args.se2_data:
         assert(False)
+    if not hasattr(args, 'local_delta_se3'):
+        args.local_delta_se3 = False
 
     ### Load the model
     num_train_iter = 0
@@ -141,7 +143,8 @@ def main():
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
-                    use_se3nn=args.use_se3nn, coord_conv = args.coord_conv) # noise_stop_iter not available for SE2 models
+                    use_se3nn=args.use_se3nn, coord_conv = args.coord_conv,
+                    local_delta_se3=args.local_delta_se3) # noise_stop_iter not available for SE2 models
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -465,8 +468,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Consistency loss (between t & t+1)
         # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
         # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
-        delta = deltapose01.detach()  # Break the graph here
-        nextpose_trans = model.transitionmodel.posedecoder(delta, pose0)
+        if args.local_delta_se3:
+            delta = model.transitionmodel.pred_local_delta.detach() # Break the graph here
+            nextpose_trans = model.transitionmodel.posedecoder(pose0, delta)
+        else:
+            delta = deltapose01.detach()  # Break the graph here
+            nextpose_trans = model.transitionmodel.posedecoder(delta, pose0)
         currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
 
         ### Mask Consistency Loss (between t & t+1)

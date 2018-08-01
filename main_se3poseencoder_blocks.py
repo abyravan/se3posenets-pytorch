@@ -19,7 +19,7 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 
 # Local imports
 import se3layers as se3nn
-import data
+import blockdata
 import ctrlnets
 import util
 from util import AverageMeter, Tee, DataEnumerator
@@ -33,11 +33,7 @@ import se3posenets
 # Common
 import argparse
 import options
-parser = options.setup_comon_options()
-
-# Loss options
-parser.add_argument('--pt-wt', default=1, type=float,
-                    metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
+parser = options.setup_common_block_options()
 
 # Mask consistency loss options
 parser.add_argument('--mask-consis-wt', default=0.0, type=float,
@@ -48,13 +44,9 @@ parser.add_argument('--mask-consis-loss-type', default='mse', type=str,
 parser.add_argument('--pre-mask-consis', action='store_true', default=False,
                     help='Use the pre-sharpened activations for mask consistency loss (default: False)')
 
-# Use SE3NN
-parser.add_argument('--use-se3nn', action='store_true', default=False,
-                    help='Use SE3NN SE3ToRt layer instead of the ones in se3.py (default: False)')
-
-# Use coord convolution
-parser.add_argument('--coord-conv', action='store_true', default=False,
-                    help='Use Coordinate Convolutions (default: False)')
+# Compose deltas for multi-step
+parser.add_argument('--compose-deltas', action='store_true', default=False,
+                    help='Compose delta SE3s over time (default: False)')
 
 # Define xrange
 try:
@@ -91,60 +83,42 @@ def main():
         torch.cuda.manual_seed(args.seed)
 
     # Setup datasets
-    train_dataset, val_dataset, test_dataset = se3posenets.setup_datasets(args)
+    train_dataset, val_dataset, test_dataset = blockdata.parse_options_and_setup_block_dataset_loader(args)
 
     # Create a data-collater for combining the samples of the data into batches along with some post-processing
     if args.evaluate:
         # Load only test loader
         args.imgdisp_freq = 10 * args.disp_freq  # Tensorboard log frequency for the image data
         sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
-        # torch.manual_seed(args.seed)
-        # if args.cuda:
-        #     torch.cuda.manual_seed(args.seed)
-        # sampler = torch.utils.data.dataloader.RandomSampler(test_dataset) # Random sampler
         test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
                                                      num_workers=args.num_workers, sampler=sampler,
-                                                     pin_memory=args.use_pin_memory,
+                                                     pin_memory=False,
                                                      collate_fn=test_dataset.collate_batch))
     else:
         # Create dataloaders (automatically transfer data to CUDA if args.cuda is set to true)
         train_loader = DataEnumerator(util.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
-                                                      num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                                      num_workers=args.num_workers, pin_memory=False,
                                                       collate_fn=train_dataset.collate_batch))
         val_loader = DataEnumerator(util.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True,
-                                                    num_workers=args.num_workers, pin_memory=args.use_pin_memory,
+                                                    num_workers=args.num_workers, pin_memory=False,
                                                     collate_fn=val_dataset.collate_batch))
 
     ########################
     ############ Load models & optimization stuff
-
-    #assert not args.use_full_jt_angles, "Can only use as many jt angles as the control dimension"
-    print('Using state of controllable joints')
-    args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
-
-    if args.se2_data:
-        assert(False)
-    if not hasattr(args, 'local_delta_se3'):
-        args.local_delta_se3 = False
 
     ### Load the model
     num_train_iter = 0
     num_input_channels = 3 # Num input channels
     if args.use_xyzrgb:
         num_input_channels = 6
-    elif args.use_xyzhue:
-        num_input_channels = 4 # Use only hue as input
-    if args.use_gt_masks or args.use_gt_poses:
-        assert(False)
-    model = se3posenets.MultiStepSE3PoseModel(
-                    num_ctrl=args.num_ctrl, num_se3=args.num_se3, se3_type=args.se3_type,
+    model = se3posenets.PoseMaskEncoder(
+                    num_se3=args.num_se3, se3_type=args.se3_type,
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
-                    init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
+                    init_se3_iden=args.init_posese3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, wide=args.wide_model, use_jt_angles=args.use_jt_angles,
-                    num_state=args.num_state_net, noise_stop_iter=args.noise_stop_iter,
-                    use_se3nn=args.use_se3nn, coord_conv = args.coord_conv,
-                    local_delta_se3=args.local_delta_se3) # noise_stop_iter not available for SE2 models
+                    num_state=args.num_ctrl, noise_stop_iter=args.noise_stop_iter,
+                    use_se3nn=args.use_se3nn)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -154,10 +128,6 @@ def main():
 
     # optionally resume from a checkpoint
     if args.resume:
-        # TODO: Save path to TB log dir, save new log there again
-        # TODO: Reuse options in args (see what all to use and what not)
-        # TODO: Use same num train iters as the saved checkpoint
-        # TODO: Print some stats on the training so far, reset best validation loss, best epoch etc
         if os.path.isfile(args.resume):
             print("=> loading checkpoint '{}'".format(args.resume))
             checkpoint       = torch.load(args.resume)
@@ -192,10 +162,6 @@ def main():
     ########################
     ############ Test (don't create the data loader unless needed, creates 4 extra threads)
     if args.evaluate:
-        # Delete train and val loaders
-        #del train_loader, val_loader
-
-        # TODO: Move this to before the train/val loader creation??
         print('==== Evaluating pre-trained network on test data ===')
         test_stats = iterate(test_loader, model, tblogger, len(test_loader), mode='test')
 
@@ -216,8 +182,8 @@ def main():
     ## Create a file to log different validation errors over training epochs
     statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
     statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
-    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg, Consiserr\n")
-    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg, Consiserr\n")
+    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg\n")
+    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg\n")
 
     ########################
     ############ Train / Validate
@@ -240,7 +206,7 @@ def main():
         # Find best losses
         val_loss, val_floss, val_fcloss = val_stats.loss.avg, \
                                           val_stats.ptloss.avg.sum(), \
-                                          val_stats.ptloss.avg.sum() + val_stats.consisloss.avg.sum()
+                                          val_stats.ptloss.avg.sum() + val_stats.maskconsisloss.avg.sum()
         is_best, is_fbest, is_fcbest    = (val_loss < best_loss), (val_floss < best_floss), (val_fcloss < best_fcloss)
         prev_best_loss, prev_best_floss, prev_best_fcloss    = best_loss, best_floss, best_fcloss
         prev_best_epoch, prev_best_fepoch, prev_best_fcepoch = best_epoch, best_fepoch, best_fcepoch
@@ -259,18 +225,16 @@ def main():
                                     epoch+1, sfc, prev_best_fcloss, prev_best_fcepoch, best_loss, best_fcepoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
+        statstfile.write("{}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
                                                                        train_stats.ptloss.avg.sum(),
-                                                                       train_stats.consisloss.avg.sum(),
+                                                                       train_stats.maskconsisloss.avg.sum(),
                                                                        train_stats.flowerr_sum.avg.sum()/args.batch_size,
-                                                                       train_stats.flowerr_avg.avg.sum()/args.batch_size,
-                                                                       train_stats.consiserr.avg.sum()))
-        statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
+                                                                       train_stats.flowerr_avg.avg.sum()/args.batch_size))
+        statsvfile.write("{}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
                                                                        val_stats.ptloss.avg.sum(),
-                                                                       val_stats.consisloss.avg.sum(),
+                                                                       val_stats.maskconsisloss.avg.sum(),
                                                                        val_stats.flowerr_sum.avg.sum() / args.batch_size,
-                                                                       val_stats.flowerr_avg.avg.sum() / args.batch_size,
-                                                                       val_stats.consiserr.avg.sum()))
+                                                                       val_stats.flowerr_avg.avg.sum() / args.batch_size))
 
         # Save checkpoint
         helpers.save_checkpoint({
@@ -327,7 +291,7 @@ def main():
     args.imgdisp_freq = 10 * args.disp_freq # Tensorboard log frequency for the image data
     sampler = torch.utils.data.dataloader.SequentialSampler(test_dataset)  # Run sequentially along the test dataset
     test_loader = DataEnumerator(util.DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False,
-                                    num_workers=args.num_workers, sampler=sampler, pin_memory=args.use_pin_memory,
+                                    num_workers=args.num_workers, sampler=sampler, pin_memory=False,
                                     collate_fn=test_dataset.collate_batch))
     test_stats = iterate(test_loader, model, tblogger, len(test_loader),
                          mode='test', epoch=args.epochs)
@@ -349,12 +313,11 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
+    statsvfile.write("{}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
                                                                    test_stats.ptloss.avg.sum(),
-                                                                   test_stats.consisloss.avg.sum(),
+                                                                   test_stats.maskconsisloss.avg.sum(),
                                                                    test_stats.flowerr_sum.avg.sum() / args.batch_size,
-                                                                   test_stats.flowerr_avg.avg.sum() / args.batch_size,
-                                                                   test_stats.consiserr.avg.sum()))
+                                                                   test_stats.flowerr_avg.avg.sum() / args.batch_size))
     statsvfile.close(); statstfile.close()
 
     # Close log file
@@ -373,18 +336,15 @@ def iterate(data_loader, model, tblogger, num_iters,
 
     # Save all stats into a namespace
     stats = argparse.Namespace()
-    stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
+    stats.loss, stats.ptloss                    = AverageMeter(), AverageMeter()
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
-    stats.consiserr                             = AverageMeter()
     stats.maskconsisloss                        = AverageMeter()
     stats.data_ids = []
     if mode == 'test':
         # Save the flow errors and poses if in "testing" mode
         stats.motion_err, stats.motion_npt, stats.still_err, stats.still_npt = [], [], [], []
-        stats.predposes, stats.predtransposes, stats.preddeltas, stats.ctrls = [], [], [], []
-        stats.poses = []
 
     # Switch model modes
     train = (mode == 'train')
@@ -399,7 +359,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
+    pt_wt = args.pt_wt * args.loss_scale
     mask_consis_wt = args.mask_consis_wt * args.loss_scale
     tfmlayer = se3nn.NTfm3D()
     for i in xrange(num_iters):
@@ -414,7 +374,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Get inputs and targets (as variables)
         # Currently batchsize is the outer dimension
         pts      = util.req_grad(sample['points'].to(device), train) # Need gradients
-        ctrls    = util.req_grad(sample['controls'].to(device), train) # Need gradients
         fwdflows = util.req_grad(sample['fwdflows'].to(device), False) # No gradients
         fwdvis   = util.req_grad(sample['fwdvisibilities'].float().to(device), False)
 
@@ -422,9 +381,6 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.use_xyzrgb:
             rgb = util.req_grad(sample['rgbs'].type_as(pts)/255.0, train) # Normalize RGB to 0-1
             netinput = torch.cat([pts, rgb], 2) # Concat along channels dimension
-        elif args.use_xyzhue:
-            hue = util.req_grad(sample['rgbs'].narrow(2,0,1).type_as(pts)/179.0, train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
-            netinput = torch.cat([pts, hue], 2) # Concat along channels dimension
         else:
             netinput = pts # XYZ
 
@@ -432,7 +388,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         fwdpixelassocs = util.req_grad(sample['fwdassocpixelids'].to(device), False)
 
         # Get jt angles
-        jtangles = util.req_grad(sample['actctrlconfigs'].to(device), train) #[:, :, args.ctrlids_in_state].to(device), requires_grad=train)
+        states = util.req_grad(sample['states'].to(device), train) #[:, :, args.ctrlids_in_state].to(device), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -443,65 +399,70 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         ####### Run a FWD pass through the network (multi-step)
         # Predict the poses and masks
-        pose0, mask0 = model.forward_pose_mask([netinput[:,0], jtangles[:,0]], train_iter=num_train_iter)
-        mask0pre = model.posemaskmodel.pre_sharpen_mask.clone()
-        pose1, mask1 = model.forward_pose_mask([netinput[:,1], jtangles[:,1]], train_iter=num_train_iter)
-        mask1pre = model.posemaskmodel.pre_sharpen_mask.clone()
+        predposes, predmasks, predpremasks, preddeltas, predpts = [], [], [], [], []
+        for k in xrange(pts.size(1)):
+            # Predict the current pose and mask
+            inp = [netinput[:,k], states[:,k]] if args.use_jt_angles else netinput[:,k]
+            currpose, currmask = model(inp, train_iter=num_train_iter, predict_masks=True)
+            currpremask        = model.pre_sharpen_mask.clone()
 
-        # Predict next pose based on pose & ctrl
-        deltapose01, transpose1 = model.forward_next_pose(pose0, ctrls[:,0])
+            # Compute the deltas and predict pts forward in time
+            if (k > 0):
+                # Compute the deltas between t=0 and t=k - two ways: compose the deltas or compute difference to t0 each time
+                if args.compose_deltas:
+                    currdelta = se3.ComposeRtPair(currpose, se3.RtInverse(predposes[-1])) # p_k * p_(k-1)^-1
+                    currdeltapose = currdelta if (k == 1) else se3.ComposeRtPair(currdelta, preddeltas[-1]) # p_k * p_(k-1)^-1 * p_(k-1) * p_0^-1
+                else:
+                    currdeltapose = se3.ComposeRtPair(currpose, se3.RtInverse(predposes[0])) # p_k * p_0^-1
+                preddeltas.append(currdeltapose) # Save deltas
 
-        # Predict transformed 3D points
-        predpts = tfmlayer(pts[:,0], mask0, deltapose01)
+                # Predict the points forward in time
+                # Takes pts at t = 0 and predicts them forward to time t = k
+                nextpts = tfmlayer(pts[:,0], predmasks[0], currdeltapose)
+                predpts.append(nextpts)
+
+            # Save items
+            predposes.append(currpose)
+            predmasks.append(currmask)
+            predpremasks.append(currpremask)
 
         ####### Compute losses - We use point loss in the FWD dirn and Consistency loss between poses
-        ### 3D loss
-        # If motion-normalized loss, pass in GT flows
-        inputs, targets = predpts - pts[:,0], fwdflows[:,0]
-        if args.motion_norm_loss:
-            motion = targets  # Use either delta-flows or full-flows
-            currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                 loss_type=args.loss_type, wts=fwdvis[:,0])
-        else:
-            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:,0])
-
-        ### Consistency loss (between t & t+1)
-        # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
-        # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
-        if args.local_delta_se3:
-            delta = model.transitionmodel.pred_local_delta.detach() # Break the graph here
-            nextpose_trans = model.transitionmodel.posedecoder(pose0, delta)
-        else:
-            delta = deltapose01.detach()  # Break the graph here
-            nextpose_trans = model.transitionmodel.posedecoder(delta, pose0)
-        currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, pose1)
-
-        ### Mask Consistency Loss (between t & t+1)
-        currmaskconsisloss, maskconsisloss = 0, torch.zeros(1)
-        if mask_consis_wt > 0:
-            if args.pre_mask_consis:
-                if args.mask_consis_loss_type == 'kl':
-                    mask0in, mask1in = F.softmax(mask0pre), F.softmax(mask1pre) # Softmax the pre-sharpening activations
-                elif args.mask_consis_loss_type == 'kllog':
-                    mask0in, mask1in = F.log_softmax(mask0pre), F.log_softmax(mask1pre) # Expects log inputs
-                else:
-                    mask0in, mask1in = mask0pre, mask1pre
+        loss, ptloss, maskconsisloss = 0, torch.zeros(args.seq_len), torch.zeros(args.seq_len)
+        for k in xrange(args.seq_len):
+            ### 3D loss
+            # If motion-normalized loss, pass in GT flows
+            inputs, targets = predpts[k] - pts[:,0], fwdflows[:,k]
+            if args.motion_norm_loss:
+                motion = targets  # Use either delta-flows or full-flows
+                currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
+                                                                     loss_type=args.loss_type, wts=fwdvis[:,k])
             else:
-                assert(args.mask_consis_loss_type is not 'kllog') # We have mask outputs which are not logs
-                mask0in, mask1in = mask0, mask1
-            currmaskconsisloss = mask_consis_wt * ctrlnets.MaskConsistencyLoss(mask0in, mask1in,
-                                                                               fwdpixelassocs[:,0],
-                                                                               args.mask_consis_loss_type)
-            maskconsisloss = torch.Tensor([currmaskconsisloss.item()])
+                currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:,k])
 
-        # Append to total loss
-        loss = currptloss + currconsisloss + currmaskconsisloss
-        ptloss     = torch.Tensor([currptloss.item()])
-        consisloss = torch.Tensor([currconsisloss.item()])
+            ### Mask Consistency Loss (between t & t+1)
+            currmaskconsisloss = 0
+            if mask_consis_wt > 0:
+                if args.pre_mask_consis:
+                    if args.mask_consis_loss_type == 'kl':
+                        mask0in, mask1in = F.softmax(predpremasks[0]), F.softmax(predpremasks[k+1]) # Softmax the pre-sharpening activations
+                    elif args.mask_consis_loss_type == 'kllog':
+                        mask0in, mask1in = F.log_softmax(predpremasks[0]), F.log_softmax(predpremasks[k+1]) # Expects log inputs
+                    else:
+                        mask0in, mask1in = predpremasks[0], predpremasks[k+1]
+                else:
+                    assert(args.mask_consis_loss_type is not 'kllog') # We have mask outputs which are not logs
+                    mask0in, mask1in = predmasks[0], predmasks[k+1]
+                currmaskconsisloss = mask_consis_wt * ctrlnets.MaskConsistencyLoss(mask0in, mask1in,
+                                                                                   fwdpixelassocs[:,k],
+                                                                                   args.mask_consis_loss_type)
+                maskconsisloss[k] = currmaskconsisloss.item()
+
+            # Append to total loss
+            loss     += currptloss + currmaskconsisloss
+            ptloss[k] = currptloss.item()
 
         # Update stats
         stats.ptloss.update(ptloss)
-        stats.consisloss.update(consisloss)
         stats.maskconsisloss.update(maskconsisloss)
         stats.loss.update(loss.item())
 
@@ -534,7 +495,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
             # Compute flow predictions and errors
             # NOTE: I'm using CUDA here to speed up computation by ~4x
-            predflows = torch.cat([(predpts - pts[:,0]).unsqueeze(1)], 1)
+            predflows = torch.cat([(x - pts[:,0]).unsqueeze(1) for x in predpts], 1)
             flows = fwdflows
             if args.use_only_da_for_flows:
                 # If using only DA then pts that are not visible will not have GT flows, so we shouldn't take them into
@@ -559,21 +520,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                 stats.motion_err.append(motion_err); stats.motion_npt.append(motion_npt)
                 stats.still_err.append(still_err); stats.still_npt.append(still_npt)
 
-            # Save poses if in test mode
-            if (mode == 'test') and (args.detailed_test_stats):
-                stats.predposes.append([x.cpu().float() for x in [pose0, pose1]])
-                stats.predtransposes.append([transpose1.cpu().float()])
-                stats.preddeltas.append([deltapose01.cpu().float()])
-                stats.ctrls.append(ctrls.cpu().float())
-                stats.poses.append(sample['poses'])
-
-            ### Pose consistency error
-            # Compute consistency error for display
-            consiserror, consiserrormax = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-            consiserrormax[0] = (pose1 - transpose1).abs().max()
-            consiserror[0]    = ctrlnets.BiAbsLoss(pose1, transpose1)
-            stats.consiserr.update(consiserror)
-
             # Display/Print frequency
             bsz = pts.size(0)
             if i % args.disp_freq == 0:
@@ -583,11 +529,8 @@ def iterate(data_loader, model, tblogger, num_iters,
                             stats=stats, bsz=bsz)
 
                 ### Print stuff if we have weight sharpening enabled
-                if args.use_wt_sharpening and not args.use_gt_masks:
-                    try:
-                        noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
-                    except:
-                        noise_std, pow = model.maskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
+                if args.use_wt_sharpening:
+                    noise_std, pow = model.compute_wt_sharpening_stats(train_iter=num_train_iter)
                     print('\tWeight sharpening => Num training iters: {}, Noise std: {:.4f}, Power: {:.3f}'.format(
                         num_train_iter, noise_std, pow))
 
@@ -604,9 +547,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                 info = {
                     mode+'-loss': loss.item(),
                     mode+'-pt3dloss': ptloss.sum(),
-                    mode+'-consisloss': consisloss.sum(),
-                    mode+'-consiserr': consiserror.sum(),
-                    mode+'-consiserrmax': consiserrormax.sum(),
                     mode+'-flowerrsum': flowerr_sum.sum()/bsz,
                     mode+'-flowerravg': flowerr_avg.sum()/bsz,
                     mode+'-motionerrsum': motionerr_sum.sum()/bsz,
@@ -621,7 +561,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                     tblogger.scalar_summary(tag, value, iterct)
 
                 # (2) Log images & print predicted SE3s
-                # TODO: Numpy or matplotlib
                 if i % args.imgdisp_freq == 0:
 
                     ## Log the images (at a lower rate for now)
@@ -629,20 +568,16 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                     # Render the predicted and GT poses onto the depth
                     depths = []
-                    poses, transposes = [pose0, pose1], \
-                                        [transpose1]
+                    cam_intrinsics = data_loader.data.dataset.datasets[0]['camera_intrinsics']
                     for k in xrange(args.seq_len+1):
                         gtpose    = sample['poses'][id, k]
-                        predpose  = poses[k][id].cpu().float()
-                        predposet = transposes[k-1][id].cpu().float() if (k > 0) else None
+                        predpose  = predposes[k][id].cpu().float()
                         gtdepth   = helpers.normalize_img(sample['points'][id,k,2:].expand(3,args.img_ht,args.img_wd).permute(1,2,0), min=0, max=3)
-                        for n in xrange(args.num_se3):
+                        for n in xrange(gtpose.size(0)):
                             # Pose_1 (GT/Pred)
-                            if n < gtpose.size(0):
-                                util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], args.cam_intrinsics[0], pixlength=15.0) # GT pose: Blue
-                            util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], args.cam_intrinsics[0], pixlength=15.0) # Pred pose: Green
-                            if predposet is not None:
-                                util.draw_3d_frame(gtdepth, predposet[n], [1,0,0], args.cam_intrinsics[0], pixlength=15.0)  # Transition model pred pose: Red
+                            util.draw_3d_frame(gtdepth, gtpose[n], [0,0,1], cam_intrinsics, pixlength=15.0) # GT pose: Blue
+                            if n < args.num_se3:
+                                util.draw_3d_frame(gtdepth, predpose[n], [0,1,0], cam_intrinsics, pixlength=15.0) # Pred pose: Green
                         depths.append(gtdepth)
                     depthdisp = torch.cat(depths, 1).permute(2,0,1) # Concatenate along columns (3 x 240 x 320*seq_len+1 image)
 
@@ -651,23 +586,20 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                                        predflows.narrow(0,id,1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
                                                             nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                     #depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
-                    maskdisp  = torchvision.utils.make_grid(torch.cat([mask0.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
+                    maskdisp  = torchvision.utils.make_grid(torch.cat([predmasks[0].narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                             nrow=args.num_se3, normalize=True, range=(0,1))
 
                     # Display RGB
                     if args.use_xyzrgb:
                         rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
                                                                 nrow=args.seq_len, normalize=True, range=(0.0,255.0))
-                    elif args.use_xyzhue:
-                        rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id,:,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                                nrow=args.seq_len, normalize=True, range=(0.0, 179.0)) # Show only hue, goes from 0-179 in OpenCV
 
                     # Show as an image summary
                     info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                              mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                              mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                     }
-                    if args.use_xyzrgb or args.use_xyzhue:
+                    if args.use_xyzrgb:
                         info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                     for tag, images in info.items():
                         tblogger.image_summary(tag, images, iterct)
@@ -677,6 +609,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     #print('\tPredicted delta-SE3s from t=0-1:', deltase3s)
 
                     ## Print the predicted mask values
+                    mask0 = predmasks[0]
                     print('\tPredicted mask stats:')
                     for k in xrange(args.num_se3):
                         print('\tMax: {:.4f}, Min: {:.4f}, Mean: {:.4f}, Std: {:.4f}, Median: {:.4f}, Pred 1: {}'.format(
@@ -711,15 +644,12 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
         print('\tStep: {}, Pt: {:.3f} ({:.3f}), '
-              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
-              'Mask-Consis: {:.3f} ({:.4f}),'
+              'Mask-Consis: {:.3f} ({:.4f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
-            stats.consisloss.val[k], stats.consisloss.avg[k],
-            stats.consiserr.val[k], stats.consiserr.avg[k],
             stats.maskconsisloss.val[k], stats.maskconsisloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
@@ -731,7 +661,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
 def adjust_learning_rate(optimizer, epoch, decay_rate=0.1, decay_epochs=10, min_lr=1e-5):
     """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
     lr = args.lr * (decay_rate ** (epoch // decay_epochs))
-    lr = min_lr if (args.lr < min_lr) else lr # Clamp at min_lr
+    lr = min_lr if (args.lr < min_lr) else lr  # Clamp at min_lr
     print("======== Epoch: {}, Initial learning rate: {}, Current: {}, Min: {} =========".format(
         epoch, args.lr, lr, min_lr))
     for param_group in optimizer.param_groups:

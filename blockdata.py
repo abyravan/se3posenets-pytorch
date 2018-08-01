@@ -1,17 +1,20 @@
 # General imports
 import h5py
-import matplotlib.pyplot as plt
+import os
 import numpy as np
 import io
 from PIL import Image
-import sys
-import cv2
 
 # Torch imports
 import torch
+import torch.utils.data
 
-opengl = False
+# Local import
+import se3
+import data
 
+############
+##### Helper functions for loading images
 def RGBToDepth(img):
     return img[:,:,0]+.01*img[:,:,1]+.0001*img[:,:,2]
 
@@ -20,7 +23,6 @@ def RGBAToMask(img):
     buf = img.astype(np.int32)
     for i, dim in enumerate([3,2,1,0]):
         shift = 8*i
-        #print(i, dim, shift, buf[0,0,dim], np.left_shift(buf[0,0,dim], shift))
         mask += np.left_shift(buf[:,:, dim], shift)
     return mask
 
@@ -37,253 +39,299 @@ def PNGToNumpy(png):
     im = Image.open(stream)
     return np.asarray(im, dtype=np.uint8)
 
-def ConvertPNGListToNumpy(data):
-    length = len(data)
+def ConvertPNGListToNumpy(inputs):
     imgs = []
-    for raw in data:
+    for raw in inputs:
         imgs.append(PNGToNumpy(raw))
     arr = np.array(imgs)
     return arr
 
-def ConvertDepthPNGListToNumpy(data):
-    length = len(data)
+def ConvertDepthPNGListToNumpy(inputs):
     imgs = []
-    for raw in data:
+    for raw in inputs:
         imgs.append(RGBToDepth(PNGToNumpy(raw)))
     arr = np.array(imgs)
     return arr
 
+def NumpyBHWCToTorchBCHW(array):
+    return torch.from_numpy(array).permute(0,3,1,2).contiguous()
+
+def NumpyBHWToTorchBCHW(array):
+    return torch.from_numpy(array).unsqueeze(1).contiguous()
+
+# Rotation about the Y-axis by theta
+# From Barfoot's book: http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf (6.6)
+def create_roty_np(theta):
+    rot = np.eye(4,4)
+    rot[0, 0] = np.cos(theta)
+    rot[2, 2] = rot[0, 0]
+    rot[2, 0] = np.sin(theta)
+    rot[0, 2] = -rot[2, 0]
+    return rot
+
+# Rotation about the Z-axis by theta
+# From Barfoot's book: http://asrl.utias.utoronto.ca/~tdb/bib/barfoot_ser15.pdf (6.5)
+def create_rotz_np(theta):
+    rot = np.eye(4,4)
+    rot[0, 0] = np.cos(theta)
+    rot[1, 1] = rot[0, 0]
+    rot[0, 1] = np.sin(theta)
+    rot[1, 0] = -rot[0, 1]
+    return rot
 
 ############
-### Helper functions for reading baxter data
+##### Helper functions for reading the data directories & loading train/test files
+def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=0.15,
+                           use_failures=True):
+    # Get all the load directories
+    assert (train_per + val_per <= 1)  # Train + val + test <= 1
 
-try:
-    a = xrange(1)
-except NameError: # Not defined in Python 3.x
-    def xrange(*args):
-        return iter(range(*args))
+    # Iterate over each load directory to find the datasets
+    datasets = []
+    for load_dir in load_dirs:
+        # Get h5 file names & number of examples
+        files = os.listdir(load_dir)
+        filenames, numdata, numvalid = [], [], 0
+        for file in files:
+            # Discard non-valid files
+            if file.find('.h5') == -1:
+                continue # Skip non h5 files
+            if (not use_failures) and (file.find('failure') != -1):
+                continue # Skip failures
 
-### Load baxter sequence from disk
-def read_block_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                   ctrl_type='actdiffvel', num_ctrl=7,
-                                   # num_state=7,
-                                   mesh_ids=torch.Tensor(),
-                                   # ctrl_ids=torch.LongTensor(),
-                                   # camera_extrinsics={}, camera_intrinsics=[],
-                                   compute_bwdflows=True, load_color=None, num_tracker=0,
-                                   dathreshold=0.01, dawinsize=5, use_only_da=False,
-                                   noise_func=None, compute_normals=False, maxdepthdiff=0.05,
-                                   bismooth_depths=False, bismooth_width=9, bismooth_std=0.001,
-                                   compute_bwdnormals=False, supervised_seg_loss=False):
+            # Read number of example images in the file
+            max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows
+            with h5py.File(os.path.join(load_dir, file), 'r') as h5data:
+                # Get number of examples from that h5
+                nexamples = len(h5data['images_rgb']) - max_flow_step # We only have flows for these many images!
+                if (nexamples < 1):
+                    continue
+                # Valid training motion
+                numdata.append(nexamples)
+                filenames.append(file)
+
+        # Print stats
+        print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), len(files), # -1 for .DS_Store
+                                                                              sum(numdata), load_dir))
+
+        # Setup training and test splits in the dataset, here we actually split based on the h5s
+        nfiles = len(filenames)
+        nfilestrain, nfilesval = int(train_per * nfiles), int(val_per * nfiles) # First train_per datasets for training, next val_per for validation
+        nfilestest = int(nfiles - (nfilestrain + nfilesval)) # Rest files are for testing
+
+        # Get number of images in the datasets
+        nexamples = sum(numdata)
+        ntrain = sum(numdata[:nfilestrain]) # Num images for training
+        nval   = sum(numdata[nfilestrain:nfilestrain+nfilesval]) # Validation
+        ntest  = nexamples - (ntrain + nval) # Number of test images
+        print('\tNum train: {} ({}), val: {} ({}), test: {} ({})'.format(
+            nfilestrain, ntrain, nfilesval, nval, nfilestest, ntest))
+
+        # Setup the dataset structure
+        numdata.insert(0, 0)  # Add a zero in front for the cumsum
+        dataset = {'path'   : load_dir,
+                   'step'   : step_len,
+                   'seq'    : seq_len,
+                   'numdata': nexamples,
+                   'train'  : [0, ntrain - 1],
+                   'val'    : [ntrain, ntrain + nval - 1],
+                   'test'   : [ntrain + nval, nexamples - 1],
+                   'files'  : {'names': filenames,
+                               'datahist': np.cumsum(numdata),
+                               'train': [0, nfilestrain - 1],
+                               'val': [nfilestrain, nfilestrain + nfilesval - 1],
+                               'test': [nfilestrain + nfilesval, nfiles - 1]},
+                   }
+
+        ##### Setup camera intrinsics and extrinsics
+        ##### ASSUME: Intrinsics and extrinsics are the same for a given dataset directory
+        # Load a single h5 example
+        with h5py.File(os.path.join(load_dir, dataset['files']['names'][0]), 'r') as h5data:
+            # Load a single RGB image
+            rgb = np.array(PNGToNumpy(h5data['images_rgb'][0])) / 255. #
+
+            # Figure out camera intrinsics
+            img_height, img_width = rgb.shape[0], rgb.shape[1]
+            vfov = (np.pi / 180.) * float(np.array(h5data['camera_fov']))
+            fx = fy = img_height / (2 * np.tan(vfov / 2))
+            cx, cy = 0.5 * img_width, 0.5 * img_height
+            camera_intrinsics = {'fx': fx, 'fy': fy, 'cx': cx, 'cy': cy,
+                                 'width': img_width, 'height': img_height}
+
+            # Compute xygrid and add to intrinsics
+            camera_intrinsics['xygrid'] = data.compute_camera_xygrid_from_intrinsics(img_height, img_width,
+                                                                                     camera_intrinsics)
+
+            # Figure out camera extrinsics
+            # Rotate the modelview from the simulated datasets to match with our assumptions
+            # of x to right and y down and z pointed forward in camera frame.
+            modelview = np.array(h5data['camera_view_matrix']).reshape(4, 4).transpose()  # Global to Camera transform
+            roty_pi, rotz_pi = create_roty_np(np.pi), create_rotz_np(np.pi)
+            modelview_c = rotz_pi.dot(roty_pi.dot(modelview)) # rotz_pi * roty_pi * modelview
+            camera_extrinsics = {'modelView': torch.from_numpy(modelview_c).clone().float()}
+
+            # Add to dataset
+            dataset['camera_intrinsics'] = camera_intrinsics
+            dataset['camera_extrinsics'] = camera_extrinsics
+
+        # Append to list of all datasets
+        datasets.append(dataset)
+
+    # Return
+    return datasets
+
+##### Generate the data files (with all the depth, flow etc.) for each sequence
+def generate_block_sequence(dataset, idx):
+    # Get stuff from the dataset
+    step, seq = dataset['step'], dataset['seq']
+    # If the dataset has files, find the proper file to use
+    did = 0
+    if ('files' in dataset):
+        # Find the sub-directory the data falls into
+        assert (idx < dataset['numdata'])  # Check if we are within limits
+        did = np.searchsorted(dataset['files']['datahist'], idx, 'right') - 1  # ID of file. If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
+        # Update the ID and path so that we get the correct images
+        id   = idx - dataset['files']['datahist'][did] # ID of "first" image within the file
+        path = dataset['path'] + '/' + dataset['files']['names'][did] # Get the path of the file
+    else:
+        assert(False) # TODO: For real data, check this to make sure things are right
+        id   = dataset['ids'][idx] # Select from the list of valid ids
+        path = dataset['path'] # Root of dataset
+    # Setup start/end IDs of the sequence
+    st, ed = id, id + (step * seq)
+    sequence = list(np.arange(st, ed+1, step))
+    return sequence, path, int(did)
+
+##### Load block sequence from disk
+def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yumi',
+                                  gripper_ctrl_type = 'vel', compute_bwdflows=True, load_color=False,
+                                  dathreshold=0.01, dawinsize=5, use_only_da=False,
+                                  noise_func=None):
     # Setup vars
-    num_meshes = mesh_ids.nelement()  # Num meshes
     seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
-    camera_intrinsics, camera_extrinsics, ctrl_ids = dataset['camintrinsics'], dataset['camextrinsics'], dataset[
-        'ctrlids']
+    camera_intrinsics, camera_extrinsics = dataset['camera_intrinsics'], \
+                                           dataset['camera_extrinsics']
 
     # Setup memory
-    sequence, path, folid = generate_baxter_sequence(dataset, id)  # Get the file paths
-    points = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    # actconfigs = torch.FloatTensor(seq_len + 1, num_state) # Actual data is same as state dimension
-    actctrlconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Ids in actual data belonging to commanded data
-    comconfigs = torch.FloatTensor(seq_len + 1, num_ctrl)  # Commanded data is same as control dimension
-    controls = torch.FloatTensor(seq_len, num_ctrl)  # Commanded data is same as control dimension
-    poses = torch.FloatTensor(seq_len + 1, mesh_ids.nelement() + 1, 3, 4).zero_()
+    seq, path, fileid = generate_block_sequence(dataset, id)  # Get the file paths
 
-    # For computing FWD/BWD visibilities and FWD/BWD flows
-    allposes = torch.FloatTensor()
-    labels = torch.ByteTensor(seq_len + 1, 1, img_ht, img_wd)  # intially save labels in channel 0 of masks
-
-    # Setup temp var for depth
-    depths = points.narrow(1, 2, 1)  # Last channel in points is the depth
-
-    # Setup vars for BWD flow computation
-    if compute_bwdflows or supervised_seg_loss:
-        masks = torch.ByteTensor(seq_len + 1, num_meshes + 1, img_ht, img_wd)
-
-    # Setup vars for color image
-    if load_color:
-        rgbs = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)
-        # actctrlvels = torch.FloatTensor(seq_len + 1, num_ctrl)     # Actual data is same as state dimension
-        # comvels = torch.FloatTensor(seq_len + 1, num_ctrl)         # Commanded data is same as control dimension
-
-    # Setup vars for tracker data
-    if num_tracker > 0:
-        trackerconfigs = torch.FloatTensor(seq_len + 1, num_tracker)  # Tracker data is same as tracker dimension
-
-    ## Read camera extrinsics (can be separate per dataset now!)
-    try:
-        camera_extrinsics = read_cameradata_file(path + '/cameradata.txt')
-    except:
-        pass  # Can use default cam extrinsics for the entire dataset
-
-    #####
-    # Load sequence
-    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
-    for k in xrange(len(sequence)):
-        # Get data table
-        s = sequence[k]
-
-        # Load depth
-        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale)  # Third channel is depth (x,y,z)
-
-        # Load label
-        # labels[k] = torch.ByteTensor(cv2.imread(s['label'], -1)) # Put the masks in the first channel
-        labels[k] = read_label_image(s['label'], img_ht, img_wd)
-
-        # Load configs
-        state = read_baxter_state_file(s['state1'])
-        # actconfigs[k] = state['actjtpos'] # state dimension
-        comconfigs[k] = state['comjtpos']  # ctrl dimension
-        actctrlconfigs[k] = state['actjtpos'][ctrl_ids]  # Get states for control IDs
-        if state['timestamp'] is not None:
-            t[k] = state['timestamp']
-
-        # Load RGB
+    ### Load data from the h5 file
+    # Get depth, RGB, labels and poses
+    with h5py.File(path, 'r') as h5data:
+        ##### Read image data
+        # Get RGB images
+        rgbs = None
         if load_color:
-            rgbs[k] = read_color_image(s['color'], img_ht, img_wd, colormap=load_color)
-            # actctrlvels[k] = state['actjtvel'][ctrl_ids] # Get vels for control IDs
-            # comvels[k] = state['comjtvel']
+            rgbs = NumpyBHWCToTorchBCHW(ConvertPNGListToNumpy(h5data['images_rgb'][seq]))
 
-        # Load tracker data
-        if num_tracker > 0:
-            trackerconfigs[k] = state['trackerjtpos']
+        # Get depth images
+        depths = NumpyBHWToTorchBCHW(ConvertDepthPNGListToNumpy(h5data['images_depth'][seq])).float()
 
-        # Load SE3 state & get all poses
-        se3state = read_baxter_se3state_file(s['se3state1'])
-        if allposes.nelement() == 0:
-            allposes.resize_(seq_len + 1, len(se3state) + 1, 3, 4).fill_(0)  # Setup size
-        allposes[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
-        for id, tfm in se3state.items():
-            se3tfm = torch.mm(camera_extrinsics['modelView'],
-                              tfm)  # NOTE: Do matrix multiply, not * (cmul) here. Camera data is part of options
-            allposes[k][id] = se3tfm[0:3, :]  # 3 x 4 transform (id is 1-indexed already, 0 is BG)
+        # Get segmentation label images (numpy)
+        labels  = RGBAArrayToMasks(ConvertPNGListToNumpy(h5data['images_mask'][seq]))
 
-        # Get poses of meshes we are moving
-        poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
-        for j in xrange(num_meshes):
-            meshid = mesh_ids[j]
-            poses[k][j + 1] = allposes[k][meshid][0:3, :]  # 3 x 4 transform
+        ##### Get object poses
+        # Find unique object IDs and poses (assumes quaternion representation)
+        # Make sure that the BG poses are initialized to identity
+        poses, objids = [], {}
+        for key in h5data.keys():
+            if (key.find("pose") != -1):
+                if (h5data[key].shape[0] != 0):
+                    poses.append(np.array(h5data[key])[seq])
+                else:
+                    poses.append(np.zeros((len(seq), 7))) # Empty array
+                    poses[-1][:,-1] = 1. # Unit quaternion for identity rotation
+                objids[int(key[4:])] = len(objids)
+        poses = torch.Tensor(poses).permute(1,0,2).clone().float() # Setup poses (S x NPOSES X 7)
 
-        # Load controls and FWD flows (for the first "N" items)
-        if k < seq_len:
-            # Load controls
-            if ctrl_type == 'comvel':  # Right arm joint velocities
-                controls[k] = state['comjtvel']  # ctrl dimension
+        # Convert quaternions to rotation matrices (basically get 3x4 matrices)
+        rtposes = se3.SE3ToRt(poses, 'se3quat', False)
+
+        # Transform all points from the object's local frame of reference to camera frame
+        rtposes_cam = se3.ComposeRtPair(camera_extrinsics['modelView'][:-1].view(1,1,3,4).expand_as(rtposes),
+                                        rtposes)
+
+        ##### Relabel segmentation mask to agree with the new pose ids
+        # remap mask values
+        labels_remapped = np.copy(labels)
+        for ky, vl in objids.items():
+            labels_remapped[labels == ky] = vl # Remap to values from 0 -> num_poses
+        labels_remapped = NumpyBHWToTorchBCHW(labels_remapped).byte()
+
+        ##### Get joint state and controls
+        dt = step_len * (1.0/30.0)
+        if robot == 'yumi':
+            # Indices for extracting current position with gripper, arm, etc. when
+            # computing the state and controls for YUMI robot.
+            arm_l_idx = [0, 2, 4, 6, 8, 10, 12, 15] # Last ID is gripper (left)
+            arm_r_idx = [1, 3, 5, 7, 9, 11, 13, 14] # Last ID is gripper (right)
+
+            # Get joint angles of right arm and gripper
+            states   = torch.from_numpy(h5data['robot_positions'][seq][:, arm_r_idx]).float()
+            if ctrl_type == 'actdiffvel':
+                controls = (states[1:] - states[:-1]) / dt
             elif ctrl_type == 'actvel':
-                controls[k] = state['actjtvel'][ctrl_ids]  # state -> ctrl dimension
-            elif ctrl_type == 'comacc':  # Right arm joint accelerations
-                controls[k] = state['comjtacc']  # ctrl dimension
+                # THIS IS NOT A GOOD IDEA AS I'VE SEEN CASES WHERE THE VELOCITIES ARE ZERO AT T BUT THERE IS A CHANGE
+                # IN CONFIGURATION @ T + STEP (IF STEP IS LARGE ENOUGH)
+                controls = torch.from_numpy(h5data['robot_positions'][seq[:-1]][:, arm_r_idx]).float()
+            else:
+                assert False, "Unknown control type input for the YUMI: {}".format(ctrl_type)
 
-    # Add noise to the depths before we compute the point cloud
-    if (noise_func is not None) and dataset['addnoise']:
-        assert (ctrl_type == 'actdiffvel')  # Since we add noise only to the configs
-        depths_n = noise_func(depths)
-        depths.copy_(depths_n)  # Replace by noisy depths
-        # noise_func(depths, actctrlconfigs)
-
-    # Different control types
-    dt = t[1:] - t[:-1]  # Get proper dt which can vary between consecutive frames
-    if ctrl_type == 'actdiffvel':
-        controls = (actctrlconfigs[1:seq_len + 1] - actctrlconfigs[0:seq_len]) / dt  # state -> ctrl dimension
-    elif ctrl_type == 'comdiffvel':
-        controls = (comconfigs[1:seq_len + 1, :] - comconfigs[0:seq_len, :]) / dt  # ctrl dimension
-
-    # Compute x & y values for the 3D points (= xygrid * depths)
-    xy = points[:, 0:2]
-    xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
-    xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
-
-    # Compute masks
-    if compute_bwdflows or supervised_seg_loss:
-        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
-        # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
-        for j in xrange(num_meshes):
-            masks[:, j + 1] = labels.eq(mesh_ids[j])  # Mask out that mesh ID
-            if (j == num_meshes - 1):
-                masks[:, j + 1] = labels.ge(mesh_ids[j])  # Everything in the end-effector
-        masks[:, 0] = masks.narrow(1, 1, num_meshes).sum(1).eq(0)  # All other masks are BG
-
-    # Compute the flows and visibility
-    tarpts = points[1:]  # t+1, t+2, t+3, ....
-    initpt = points[0:1].expand_as(tarpts)
-    tarlabels = labels[1:]  # t+1, t+2, t+3, ....
-    initlabel = labels[0:1].expand_as(tarlabels)
-    tarposes = allposes[1:]  # t+1, t+2, t+3, ....
-    initpose = allposes[0:1].expand_as(tarposes)
-
-    # Compute flow and visibility
-    fwdflows, bwdflows, \
-    fwdvisibilities, bwdvisibilities, \
-    fwdassocpixelids, bwdassocpixelids = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
-                                                                  initpose, tarposes, camera_intrinsics,
-                                                                  dathreshold, dawinsize, use_only_da)
-
-    # Compute normal maps & target normal maps (rot/trans of init ones)
-    if compute_normals:
-        # If asked to do bilateral depth smoothing, do it afresh here
-        if bismooth_depths:
-            # Compute smoothed depths
-            depths_s = BilateralDepthSmoothing(depths, bismooth_width, bismooth_std)
-            points_s = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)  # Create "smoothed" pts
-            points_s[:, 2].copy_(depths_s)  # Copy smoothed depths
-
-            # Compute x & y values for the 3D points (= xygrid * depths)
-            xy_s = points_s[:, 0:2]
-            xy_s.copy_(camera_intrinsics['xygrid'].expand_as(xy_s))  # = xygrid
-            xy_s.mul_(depths_s.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
-
-            # Get init and tar pts
-            initpt_s = points_s[0:1].expand_as(tarpts)
-            tarpts_s = points_s[1:]  # t+1, t+2, t+3, ....
+            # Gripper control
+            if gripper_ctrl_type == 'vel':
+                pass # This is what we have already
+            elif gripper_ctrl_type == 'compos':
+                ming, maxg = 0.015, 0.025 # Min/Max gripper positions
+                gripper_cmds = (torch.from_numpy(h5data['right_gripper_cmd'][seq[:-1]]) - ming) / (maxg - ming)
+                gripper_cmds.clamp_(0,1) # Normalize and clamp to 0/1
+                controls[:,-1] = gripper_cmds # Update the gripper controls to be the actual position commands
+            else:
+                assert False, "Unknown gripper control type input for the YUMI: {}".format(gripper_ctrl_type)
         else:
-            initpt_s = initpt  # Use unsmoothed init pts
-            tarpts_s = tarpts  # Use unsmoothed tar pts
+            assert False, "Unknown robot type input: {}".format(robot)
 
-        tardeltas = ComposeRtPair(tarposes, RtInverse(initpose.clone()))  # Pose_t+1 * Pose_t^-1
-        initnormals, tarnormals, \
-        validinitnormals, validtarnormals = ComputeNormals(initpt_s, tarpts_s, initlabel, tardeltas,
-                                                           maxdepthdiff=maxdepthdiff)
+        ##### Compute 3D point cloud from depth using camera intrinsics
+        # Add noise to the depths before we compute the point cloud
+        if (noise_func is not None):
+            depths_n = noise_func(depths)
+            depths.copy_(depths_n)  # Replace by noisy depths
 
-        # Compute normals in the BWD dirn (along with their transformed versions)
-        if compute_bwdnormals:
-            initdeltas = ComposeRtPair(initpose.clone(), RtInverse(tarposes))  # Pose_t+1 * Pose_t^-1
-            bwdinitnormals, bwdtarnormals, \
-            validbwdinitnormals, validbwdtarnormals = ComputeNormals(tarpts_s, initpt_s, tarlabels, initdeltas,
-                                                                     maxdepthdiff=maxdepthdiff)
+        # Compute x & y values for the 3D points (= xygrid * depths)
+        points = torch.zeros(seq_len+1, 3, camera_intrinsics['height'], camera_intrinsics['width'])
+        xy = points[:, 0:2]
+        xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
+        xy.mul_(depths.expand(seq_len + 1, 2, camera_intrinsics['height'], camera_intrinsics['width'])) # = xy * z
+        points[:, 2:].copy_(depths) # Copy depths to 3D points
+
+        # Compute the flows and visibility
+        tarpts = points[1:]  # t+1, t+2, t+3, ....
+        initpt = points[0:1].expand_as(tarpts)
+        tarlabels = labels_remapped[1:]  # t+1, t+2, t+3, ....
+        initlabel = labels_remapped[0:1].expand_as(tarlabels)
+        tarposes = rtposes_cam[1:]  # t+1, t+2, t+3, ....
+        initpose = rtposes_cam[0:1].expand_as(tarposes)
+
+        # Compute flow and visibility
+        fwdflows, bwdflows, \
+        fwdvisibilities, bwdvisibilities, \
+        fwdassocpixelids, bwdassocpixelids = data.ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
+                                                                           initpose, tarposes, camera_intrinsics,
+                                                                           dathreshold, dawinsize, use_only_da)
 
     # Return loaded data
-    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities, 'folderid': int(folid),
-            'fwdassocpixelids': fwdassocpixelids, 'controls': controls, 'comconfigs': comconfigs,
-            'poses': poses, 'dt': dt, 'actctrlconfigs': actctrlconfigs}
+    output = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
+              'fwdassocpixelids': fwdassocpixelids, 'controls': controls, 'states': states,
+              'labels': labels_remapped, 'poses': rtposes_cam, 'dt': dt, 'fileid': int(fileid)}
     if compute_bwdflows:
-        data['masks'] = masks
-        data['bwdflows'] = bwdflows
-        data['bwdvisibilities'] = bwdvisibilities
-        data['bwdassocpixelids'] = bwdassocpixelids
-    if supervised_seg_loss:
-        data['labels'] = masks.max(dim=1)[1]  # Get label image for supervised classification
-    if compute_normals:
-        data['initnormals'] = initnormals
-        data['tarnormals'] = tarnormals
-        data['validinitnormals'] = validinitnormals
-        data['validtarnormals'] = validtarnormals
-        if compute_bwdnormals:
-            data['bwdinitnormals'] = bwdinitnormals
-            data['bwdtarnormals'] = bwdtarnormals
-            data['validbwdinitnormals'] = validbwdinitnormals
-            data['validbwdtarnormals'] = validbwdtarnormals
+        output['bwdflows'] = bwdflows
+        output['bwdvisibilities'] = bwdvisibilities
+        output['bwdassocpixelids'] = bwdassocpixelids
     if load_color:
-        data['rgbs'] = rgbs
-        # data['labels'] = labels
-        # data['actctrlvels'] = actctrlvels
-        # data['comvels'] = comvels
-    if num_tracker > 0:
-        data['trackerconfigs'] = trackerconfigs
+        output['rgbs'] = rgbs
 
-    return data
+    return output
 
-
+#####
 def filter_func(batch, mean_dt, std_dt):
     # Check if there are any nans in the sampled poses. If there are, then discard the sample
     filtered_batch = []
@@ -298,147 +346,10 @@ def filter_func(batch, mean_dt, std_dt):
     # Return
     return filtered_batch
 
-
-###### BOX DATA LOADER
-### Load box sequence from disk
-def read_box_sequence_from_disk(dataset, id, img_ht=240, img_wd=320, img_scale=1e-4,
-                                ctrl_type='ballposforce', num_ctrl=6,
-                                compute_bwdflows=True, dathreshold=0.01, dawinsize=5,
-                                use_only_da=False, noise_func=None,
-                                load_color=False, mesh_ids=torch.Tensor()):  # mesh_ids unused
-    # Setup vars
-    seq_len, step_len = dataset['seq'], dataset['step']  # Get sequence & step length
-    camera_intrinsics = dataset['camintrinsics']
-
-    # Setup memory
-    sequence, path = generate_box_sequence(dataset, id)  # Get the file paths
-    points = torch.FloatTensor(seq_len + 1, 3, img_ht, img_wd)
-    states = torch.FloatTensor(seq_len + 1, num_ctrl).zero_()  # All zeros currently
-    controls = torch.FloatTensor(seq_len, num_ctrl).zero_()  # Commanded data is same as control dimension
-    poses = torch.FloatTensor(seq_len + 1, 3, 3, 4).zero_()
-
-    # For computing FWD/BWD visibilities and FWD/BWD flows
-    rgbs = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)  # rgbs
-    labels = torch.ByteTensor(seq_len + 1, 1, img_ht, img_wd).zero_()  # labels (BG = 0)
-
-    # Setup temp var for depth
-    depths = points.narrow(1, 2, 1)  # Last channel in points is the depth
-
-    # Setup vars for BWD flow computation
-    if compute_bwdflows:
-        masks = torch.ByteTensor(seq_len + 1, 3, img_ht, img_wd)  # BG | Ball | Box
-
-    #####
-    # Load sequence
-    t = torch.linspace(0, seq_len * step_len * (1.0 / 30.0), seq_len + 1).view(seq_len + 1, 1)  # time stamp
-    for k in xrange(len(sequence)):
-        # Get data table
-        s = sequence[k]
-
-        # Load depth
-        depths[k] = read_depth_image(s['depth'], img_ht, img_wd, img_scale)  # Third channel is depth (x,y,z)
-
-        # Load force file
-        forcedata = read_forcedata_file(s['force'])
-        tarobj = forcedata['targetObject']
-        force = forcedata['axis'] * forcedata['magnitude']  # Axis * magnitude
-
-        # Load objectdata file
-        objects = read_objectdata_file(s['objects'])
-        ballcolor, boxcolor = objects['bullet']['color'], objects[forcedata['targetObject'].split("::")[0]]['color']
-
-        # Load state file
-        state = read_box_state_file(s['state'])
-        if k < controls.size(0):  # 1 less control than states
-            if ctrl_type == 'ballposforce':
-                controls[k] = torch.cat([state['bullet::link']['pose'][0:3], force])  # 6D
-            elif ctrl_type == 'ballposeforce':
-                controls[k] = torch.cat([state['bullet::link']['pose'], force])  # 10D
-            elif ctrl_type == 'ballposvelforce':
-                controls[k] = torch.cat(
-                    [state['bullet::link']['pose'][0:3], state['bullet::link']['vel'][0:3], force])  # 9D
-            elif ctrl_type == 'ballposevelforce':
-                controls[k] = torch.cat(
-                    [state['bullet::link']['pose'], state['bullet::link']['vel'][0:3], force])  # 13D
-            else:
-                assert False, "Unknown control type: {}".format(ctrl_type)
-
-        # Compute poses (BG | Ball | Box)
-        poses[k, 0, :, 0:3] = torch.eye(3).float()  # Identity transform for BG
-        campose_w, ballpose_w, boxpose_w = u3d.se3quat_to_rt(
-            state['kinect::kinect_camera_depth_optical_frame']['pose']), \
-                                           u3d.se3quat_to_rt(state['bullet::link']['pose']), \
-                                           u3d.se3quat_to_rt(state[tarobj]['pose'])
-        ballpose_c = ComposeRtPair(RtInverse(campose_w[:, 0:3, :].unsqueeze(0)),
-                                   ballpose_w[:, 0:3, :].unsqueeze(0))  # Ball in cam = World in cam * Ball in world
-        boxpose_c = ComposeRtPair(RtInverse(campose_w[:, 0:3, :].unsqueeze(0)),
-                                  boxpose_w[:, 0:3, :].unsqueeze(0))  # Box in cam  = World in cam * Box in world
-        poses[k, 1] = ballpose_c;
-        poses[k, 1, 0:3, 0:3] = torch.eye(3)  # Ball has identity pose (no rotation for the ball itself)
-        poses[k, 2] = boxpose_c  # Box orientation does change
-
-        # Load rgbs & compute labels (0 = BG, 1 = Ball, 2 = Box)
-        # NOTE: RGB is loaded BGR so when comparing colors we need to handle it properly
-        rgbs[k] = read_color_image(s['color'], img_ht, img_wd)
-        ballpix = (((rgbs[k][0] == ballcolor[2]) + (rgbs[k][1] == ballcolor[1]) + (
-        rgbs[k][2] == ballcolor[0])) == 3)  # Ball pixels
-        boxpix = (
-        ((rgbs[k][0] == boxcolor[2]) + (rgbs[k][1] == boxcolor[1]) + (rgbs[k][2] == boxcolor[0])) == 3)  # Box pixels
-        labels[k][ballpix], labels[k][boxpix] = 1, 2  # Label all pixels of ball as 1, box as 2
-
-    # Add noise to the depths before we compute the point cloud
-    if (noise_func is not None) and dataset['addnoise']:
-        depths_n = noise_func(depths)
-        depths.copy_(depths_n)  # Replace by noisy depths
-
-    # Different control types
-    dt = t[1:] - t[:-1]  # Get proper dt which can vary between consecutive frames
-
-    # Compute x & y values for the 3D points (= xygrid * depths)
-    xy = points[:, 0:2]
-    xy.copy_(camera_intrinsics['xygrid'].expand_as(xy))  # = xygrid
-    xy.mul_(depths.expand(seq_len + 1, 2, img_ht, img_wd))  # = xygrid * depths
-
-    # Compute masks
-    if compute_bwdflows:
-        # Compute masks based on the labels and mesh ids (BG is channel 0, and so on)
-        # Note, we have saved labels in channel 0 of masks, so we update all other channels first & channel 0 (BG) last
-        for j in xrange(3):
-            masks[:, j] = labels.eq(j)  # Mask out that mesh ID
-
-    # Compute the flows and visibility
-    tarpts = points[1:]  # t+1, t+2, t+3, ....
-    initpt = points[0:1].expand_as(tarpts)
-    tarlabels = labels[1:]  # t+1, t+2, t+3, ....
-    initlabel = labels[0:1].expand_as(tarlabels)
-    tarposes = poses[1:]  # t+1, t+2, t+3, ....
-    initpose = poses[0:1].expand_as(tarposes)
-
-    # Compute flow and visibility
-    fwdflows, bwdflows, \
-    fwdvisibilities, bwdvisibilities, \
-    fwdassocpixelids, bwdassocpixelids = ComputeFlowAndVisibility(initpt, tarpts, initlabel, tarlabels,
-                                                                  initpose, tarposes, camera_intrinsics,
-                                                                  dathreshold, dawinsize, use_only_da)
-
-    # Return loaded data
-    data = {'points': points, 'fwdflows': fwdflows, 'fwdvisibilities': fwdvisibilities,
-            'fwdassocpixelids': fwdassocpixelids,
-            'states': states, 'controls': controls, 'poses': poses, 'dt': dt}
-    if compute_bwdflows:
-        data['masks'] = masks
-        data['bwdflows'] = bwdflows
-        data['bwdvisibilities'] = bwdvisibilities
-        data['bwdassocpixelids'] = bwdassocpixelids
-    if load_color:
-        data['rgbs'] = rgbs
-
-    return data
-
 ###################### DATASET
-### Dataset for Baxter Sequences
-class BaxterSeqDataset(Dataset):
-    ''' Datasets for training SE3-Nets based on Baxter Sequential data '''
+##### Dataset for Block Sequences
+class BlockSeqDataset(torch.utils.data.Dataset):
+    ''' Datasets for training SE3-Pose-Nets based on Block Sequential data '''
 
     def __init__(self, datasets, load_function, dtype='train', filter_func=None):
         '''
@@ -471,12 +382,10 @@ class BaxterSeqDataset(Dataset):
     def __getitem__(self, idx):
         # Find which dataset to sample from
         assert (idx < self.numdata);  # Check if we are within limits
-        did = np.digitize(idx,
-                          self.datahist) - 1  # If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
+        did = np.digitize(idx, self.datahist) - 1  # If [0, 10, 20] & we get 10, this will be bin 2 (10-20), so we reduce by 1 to get ID
 
         # Find ID of sample in that dataset (not the same as idx as we might have multiple datasets)
-        start = self.datasets[did][self.dtype][
-            0]  # This is the ID of the starting sample of the train/test/val part in the entire dataset
+        start = self.datasets[did][self.dtype][0]  # This is the ID of the starting sample of the train/test/val part in the entire dataset
         diff = (idx - self.datahist[did])  # This will be from 0 - size for either train/test/val part of that dataset
         sid = int(start + diff)
 
@@ -495,18 +404,257 @@ class BaxterSeqDataset(Dataset):
         if self.filter_func is not None:
             filtered_batch = self.filter_func(batch)
         else:
-            # Check if there are NaNs in the poses (BWDs compatibility)
-            filtered_batch = []
-            for sample in batch:
-                if sample['poses'].eq(sample['poses']).all():
-                    filtered_batch.append(sample)
-
-            ### In case all these samples have NaN poses, the batch is bad!
-            if len(filtered_batch) == 0:
-                return None
+            filtered_batch = batch
 
         # Collate the other samples together using the default collate function
         collated_batch = torch.utils.data.dataloader.default_collate(filtered_batch)
 
         # Return post-processed batch
         return collated_batch
+
+###################### DATA LOADER SETUP
+##### Setup the data loaders for the block datasets
+def parse_options_and_setup_block_dataset_loader(args):
+    # SE3 stuff
+    assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat',
+                              'se3aar']), 'Unknown SE3 type: ' + args.se3_type
+
+    # Sequence stuff
+    print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
+
+    # Loss parameters
+    print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
+        args.loss_scale, args.pt_wt, args.consis_wt))
+
+    # Weight sharpening stuff
+    if args.use_wt_sharpening:
+        print('Using weight sharpening to encourage binary mask prediction. '
+              'Start iter: {}, Rate: {}, Noise stop iter: {}'.format(
+              args.sharpen_start_iter, args.sharpen_rate, args.noise_stop_iter))
+
+    # Loss type
+    norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
+    print('3D loss type: ' + args.loss_type + norm_motion)
+
+    # Wide model
+    if args.wide_model:
+        print('Using a wider network!')
+
+    if args.use_jt_angles:
+        print("Using Jt angles as input to the pose encoder")
+
+    # SE3NN model
+    if args.use_se3nn:
+        print('Using SE3NNs SE3ToRt layer implementation')
+    else:
+        print('Using the SE3ToRt implementation in se3.py')
+
+    # DA threshold / winsize
+    print("Flow/visibility computation. DA threshold: {}, DA winsize: {}".format(args.da_threshold,
+                                                                                 args.da_winsize))
+    if args.use_only_da_for_flows:
+        print("Computing flows using only data-associations. Flows can only be computed for visible points")
+    else:
+        print("Computing flows using tracker poses. Can get flows for all input points")
+
+    # YUMI robot
+    if args.robot == "yumi":
+        args.num_ctrl = 8
+        args.img_ht, args.img_wd = 240, 320
+        print("Img ht: {}, Img wd: {}, Num ctrl: {}".format(args.img_ht, args.img_wd, args.num_ctrl))
+    else:
+        assert False, "Unknown robot type input: {}".format(args.robot)
+
+    ########################
+    ############ Load datasets
+    # XYZ-RGB
+    load_color = args.use_xyzrgb
+    if args.use_xyzrgb:
+        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
+
+    # Noise addition
+    noise_func = None
+    if args.add_noise:
+        print("Adding noise to the depths")
+        noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
+                                                         defprob=0.005, noisestd=0.005)
+    # TODO: Validity checking (dt threshold, right/left still stuff for real data)
+
+    ### Load functions
+    block_data = read_block_sim_dataset(args.data,
+                                        step_len=args.step_len,
+                                        seq_len=args.seq_len,
+                                        train_per=args.train_per,
+                                        val_per=args.val_per,
+                                        use_failures=args.use_failures)
+    disk_read_func = lambda d, i: read_block_sequence_from_disk(d, i, ctrl_type=args.ctrl_type, robot=args.robot,
+                                                                gripper_ctrl_type=args.gripper_ctrl_type,
+                                                                compute_bwdflows=False,
+                                                                dathreshold=args.da_threshold,
+                                                                dawinsize=args.da_winsize,
+                                                                use_only_da=args.use_only_da_for_flows,
+                                                                noise_func=noise_func,
+                                                                load_color=load_color)
+    train_dataset = BlockSeqDataset(block_data, disk_read_func, 'train')  # Train dataset
+    val_dataset   = BlockSeqDataset(block_data, disk_read_func, 'val')  # Val dataset
+    test_dataset  = BlockSeqDataset(block_data, disk_read_func, 'test')  # Test dataset
+    print('Dataset size => Train: {}, Validation: {}, Test: {}'.format(len(train_dataset),
+                                                                       len(val_dataset),
+                                                                       len(test_dataset)))
+
+    # Return
+    return train_dataset, val_dataset, test_dataset
+
+
+################ TEST
+if __name__ == '__main__':
+
+    ########
+    import cv2
+
+    # Project a 3D point to an image using the pinhole camera model (perspective transform)
+    # Given a camera matrix of the form [fx 0 cx; 0 fy cy; 0 0 1] (x = cols, y = rows) and a 3D point (x,y,z)
+    # We do: x' = x/z, y' = y/z, [px; py] = cameraMatrix * [x'; y'; 1]
+    # Returns a 2D pixel (px, py)
+    def project_to_image(camera_intrinsics, point):
+        # Project to (0,0,0) if z = 0
+        pointv = point.view(4)  # 3D point
+        if pointv[2] == 0:
+            return torch.zeros(2).type_as(point)
+
+        # Perspective projection
+        c = camera_intrinsics['fx'] * (pointv[0] / pointv[2]) + camera_intrinsics['cx']  # fx * (x/z) + cx
+        r = camera_intrinsics['fy'] * (pointv[1] / pointv[2]) + camera_intrinsics['cy']  # fy * (y/z) + cy
+        return torch.Tensor([c, r]).type_as(point)
+
+    # Transform a point through the given pose (point in pose's frame of reference to global frame of reference)
+    # Pose: (3x4 matrix) [R | t]
+    # Point: (position) == torch.Tensor(3)
+    # Returns: R*p + t == torch.Tensor(3)
+    def transform(pose, point):
+        pt = torch.mm(pose.view(4, 4), point.view(4, 1))
+        return pt
+        # posev, pointv = pose.view(3,4), point.view(3,1)
+        # return torch.mm(posev[:,0:3], pointv).view(3) + posev[:,3] # R*p + t
+
+    # Plot a 3d frame (X,Y,Z axes) of an object on a qt window
+    # given the 6d pose of the object (3x4 matrix) in the camera frame of reference,
+    # and the camera's projection matrix (3x3 matrix of form [fx 0 cx; 0 fy cy; 0 0 1])
+    # Img represented as H x W x 3 (numpy array) & Pose is a 3 x 4 torch tensor
+    def draw_3d_frame(img, pose, camera_intrinsics={}, pixlength=10.0, thickness=2):
+        # Project the principal vectors (3 columns which denote the {X,Y,Z} vectors of the object) into the global (camera frame)
+        dv = 0.2  # Length of 3D vector
+        poset = torch.eye(4); poset[:3] = pose
+        X = transform(poset, torch.FloatTensor([dv, 0, 0, 1]))
+        Y = transform(poset, torch.FloatTensor([0, dv, 0, 1]))
+        Z = transform(poset, torch.FloatTensor([0, 0, dv, 1]))
+        O = transform(poset, torch.FloatTensor([0, 0, 0, 1]))
+        # Project the end-points of the vectors and the frame origin to the image to get the corresponding pixels
+        Xp = project_to_image(camera_intrinsics, X)
+        Yp = project_to_image(camera_intrinsics, Y)
+        Zp = project_to_image(camera_intrinsics, Z)
+        Op = project_to_image(camera_intrinsics, O)
+        # Maintain a specific length in pixel space by changing the tips of the frames to match correspondingly
+        unitdirX = (Xp - Op).div_((Xp - Op).norm(2) + 1e-12)  # Normalize it
+        unitdirY = (Yp - Op).div_((Yp - Op).norm(2) + 1e-12)  # Normalize it
+        unitdirZ = (Zp - Op).div_((Zp - Op).norm(2) + 1e-12)  # Normalize it
+        Xp = Op + pixlength * unitdirX
+        Yp = Op + pixlength * unitdirY
+        Zp = Op + pixlength * unitdirZ
+        # Draw lines on the image
+        cv2.line(img, tuple(Op.numpy()), tuple(Xp.numpy()), [1, 0, 0], thickness)
+        cv2.line(img, tuple(Op.numpy()), tuple(Yp.numpy()), [0, 1, 0], thickness)
+        cv2.line(img, tuple(Op.numpy()), tuple(Zp.numpy()), [0, 0, 1], thickness)
+
+    ### Normalize image
+    def normalize_img(img, min=-0.01, max=0.01):
+        return (img - min) / (max - min)
+
+    # Get data directories
+    import sys
+    import argparse
+    args = argparse.Namespace()
+    args.data = sys.argv[1].split(',') # Get inut data directories
+
+    # Setup other options
+    args.se3_type = 'se3aa'
+    args.use_wt_sharpening = False
+    args.loss_type, args.motion_norm_loss = 'mse', True
+    args.step_len, args.seq_len = 2, 2
+    args.loss_scale, args.pt_wt, args.consis_wt = 1.0, 1.0, 1.0
+    args.wide_model = True
+    args.use_se3nn = True
+    args.use_jt_angles = True
+    args.da_threshold = 0.015
+    args.da_winsize = 5
+    args.use_only_da_for_flows = False
+    args.use_xyzrgb = True
+    args.add_noise = False
+    args.train_per, args.val_per = 0.6, 0.15
+    args.use_failures = False
+    args.ctrl_type, args.robot, args.gripper_ctrl_type = 'actdiffvel', 'yumi', 'compos'
+
+    # Setup datasets
+    train_dataset, val_dataset, test_dataset = parse_options_and_setup_block_dataset_loader(args)
+
+    # Load examples and visualize them
+    import matplotlib.pyplot as plt
+
+    # Display the data
+    plt.ion()
+    fig = plt.figure(100)
+
+    # Render
+    nimgs = 500
+    for k in range(0, nimgs, 4):
+        # Get sample
+        sample = train_dataset[k]
+        rgbs, poses = sample['rgbs'], sample['poses']
+
+        # Project poses onto RGB images
+        rgb1, rgb2 = sample['rgbs'][0].permute(1,2,0).clone().numpy() / 255.0, \
+                     sample['rgbs'][1].permute(1,2,0).clone().numpy() / 255.0
+        depth1, depth2 = sample['points'][0,2].clone().numpy(), \
+                         sample['points'][1,2].clone().numpy()
+        mask1, mask2 = sample['labels'][0,0].clone().numpy(), \
+                       sample['labels'][1,0].clone().numpy()
+        flow1 = sample['fwdflows'][0].permute(1,2,0).clone().numpy()
+
+        # Project poses onto the RGB images
+        poses = sample['poses']
+        for j in range(poses.size(1)):
+            draw_3d_frame(rgb1, poses[0,j],
+                          camera_intrinsics=train_dataset.datasets[0]['camera_intrinsics'])
+            draw_3d_frame(rgb2, poses[1,j],
+                          camera_intrinsics=train_dataset.datasets[0]['camera_intrinsics'])
+
+        # Show rgb, depth, masks
+        plt.figure(100)
+        fig.suptitle("Image: {}/{}".format(k, nimgs))
+        plt.subplot(331)
+        plt.imshow(rgb1)
+        plt.title("RGB-1")
+        plt.subplot(332)
+        plt.imshow(rgb2)
+        plt.title("RGB-2")
+        plt.subplot(334)
+        plt.imshow(normalize_img(depth1, 0.0, 3.0))
+        plt.title("Depth-1")
+        plt.subplot(335)
+        plt.imshow(normalize_img(depth2, 0.0, 3.0))
+        plt.title("Depth-2")
+        plt.subplot(336)
+        plt.imshow(normalize_img(flow1, -0.03, 0.03))
+        plt.title("Flow-1-2")
+        plt.subplot(337)
+        plt.imshow(mask1)
+        plt.title("Mask-1")
+        plt.subplot(338)
+        plt.imshow(mask2)
+        plt.title("Mask-2")
+        plt.draw()
+        plt.pause(0.02)
+
+        # Clear occasionally
+        if k % 5 == 0:
+            plt.clf()

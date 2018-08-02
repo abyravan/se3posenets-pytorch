@@ -325,7 +325,7 @@ def iterate(dataset, model, mode='test'):
     print('========== Dataset: {}, Num iters: {} =========='.format(mode, len(dataset)))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     total_start = time.time()
-    for i in xrange(1000):
+    for i in xrange(len(dataset)):
         # ============ Load data ============ #
         # Start timer
         start = time.time()

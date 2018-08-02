@@ -5,3 +5,10 @@ build
 _ext
 .DS_Store
 *.cu.o
+lib/torchviz/compviz.cpp
+lib/torchviz/pangodataviz.cpp
+lib/torchviz/pangoposeviz.cpp
+lib/torchviz/pangoviz.cpp
+lib/torchviz/realctrlcompviz.cpp
+lib/torchviz/realctrlviz.cpp
+lib/torchviz/simctrlviz.cpp

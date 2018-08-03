@@ -24,6 +24,8 @@ def get_nonlinearity(nonlinearity):
         return nn.ELU(inplace=True)
     elif nonlinearity == 'selu':
         return nn.SELU()
+    elif nonlinearity == 'none':
+        return lambda x: x # Return input as is
     else:
         assert False, "Unknown non-linearity: {}".format(nonlinearity)
 

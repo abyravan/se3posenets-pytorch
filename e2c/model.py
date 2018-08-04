@@ -52,7 +52,7 @@ class Encoder(nn.Module):
         # 5x5, 60x80 -> 30x40
         # 3x3, 30x40 -> 15x20
         # 3x3, 15x20 -> 7x10
-        chn = [input_channels, 32, 64, 128, 256, 256] if wide else [input_channels, 8, 16, 32, 64, 128]  # Num channels
+        chn = [input_channels, 32, 64, 128, 256, 256] if wide else [input_channels, 16, 32, 64, 128, 128]  # Num channels
         kern = [9,7,5,3,3] # Kernel sizes
         self.imgencoder = nn.Sequential(
             *[ConvType(chn[k], chn[k+1], kernel_size=kern[k], stride=1, padding=kern[k]//2,
@@ -81,7 +81,7 @@ class Encoder(nn.Module):
             # 1x1, 3x5 -> 3x5, 64
             # 1x1, 3x5 -> 3x5, 32
             print("Using convolutional output encoder with 1x1 convolutions")
-            chn_out = [sdim[-1]+chn[-1], 256, 128, 64, 32]
+            chn_out = [sdim[-1]+chn[-1], 256, 128, 64, 32] if wide else [sdim[-1]+chn[-1], 128, 64, 32, 16]
             pool = [True, False, False, False] # Pooling only for first layer to bring to 3x5
             nonlin = [nonlinearity, nonlinearity, nonlinearity, 'none'] # No non linearity for last layer
             bn = [use_bn, use_bn, use_bn, False] # No batch norm for last layer
@@ -161,7 +161,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         # Normalization
-        assert norm_type == 'bn', "Unknown normalization type input: {}".format(norm_type)
+        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
         use_bn = (norm_type == 'bn')
 
         # Coordinate convolution
@@ -192,7 +192,7 @@ class Decoder(nn.Module):
         # 6x6, 30x40 -> 60x80
         # 6x6, 60x80 -> 120x160
         # 8x8, 120x160 -> 240x320
-        chn = [128, 128, 64, 32, 32, output_channels] if wide else [64, 32, 16, 8, 8, output_channels]  # Num channels
+        chn = [128, 128, 64, 32, 32, output_channels] if wide else [64, 64, 32, 16, 16, output_channels]  # Num channels
         kern = [(3,4), 4, 6, 6, 8]  # Kernel sizes
         padd = [(0,1), 1, 2, 2, 3]  # Padding
         bn   = [use_bn, use_bn, use_bn, use_bn, False] # No batch norm for last layer (output)
@@ -228,7 +228,7 @@ class Decoder(nn.Module):
             # 1x1, 3x5 -> 3x5, 64 -> 128
             # 1x1, 3x5 -> 7x10, 128 -> 128 + 4 (4 extra channels are inputs to the joint encoder)
             print("Using convolutional decoder with 1x1 convolutions")
-            chn_in = [16, 32, 64, 128, chn[0]]
+            chn_in = [16, 32, 64, 128, chn[0]] if wide else [8, 16, 32, 64, chn[0]]
             self.hsdecoder = nn.Sequential(
                 *[ConvType(chn_in[k], chn_in[k+1], kernel_size=1, stride=1, padding=0,
                            use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity) for k in range(len(chn_in)-2)], # Leave out last layer
@@ -273,8 +273,16 @@ class Decoder(nn.Module):
         return output
 
 ##### Create Transition Model
-class Decoder(nn.Module):
-    def __init__(self, img_type='rgbd', norm_type='bn', nonlinearity='prelu', wide=False,
-                 pred_state=False, num_state=7, coord_conv=False,
-                 conv_decode=False, rgb_normalize=False):
+# todo: convolutional transition model
+class NonLinearTransitionModel(nn.Module):
+    def __init__(self, state_dim, ctrl_dim, norm_type='none', nonlinearity='prelu',
+                 wide=False, conv_net=False):
+        super(LocallyLinearTransitionModel, self).__init__()
+
+        # Normalization
+        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
+        use_bn = (norm_type == 'bn')
+
+        #
+
 

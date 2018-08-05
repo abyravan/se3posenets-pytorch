@@ -234,13 +234,16 @@ def create_rotz(theta):
 
 #data = h5py.File("blocks_babble01336_2018-07-18_09-45-01_arm=right_obj=blue00.failure.h5")
 #data = h5py.File("blocks_babble01333_2018-07-18_09-43-20_arm=right_obj=yellow00.success.h5")
-import time
-tt = []
-for k in range(100):
-    st = time.time()
-    data = h5py.File("/home/barun/Projects/blocks/data/blocks_data_v2/blocks_babble00007_2018-07-17_15-39-39_arm=right_obj=yellow00.success.h5") #h5py.File(sys.argv[1])
-    tt.append(time.time() - st)
-print("Loading data from file: {}, Avg time: {}".format(data, sum(tt)/len(tt)))
+import os
+files = os.listdir(sys.argv[1])
+np.random.seed(1500)
+perm = np.random.permutation(len(files))
+for k in range(len(perm)):
+    filename = os.path.join(sys.argv[1], files[perm[k]])
+    if (filename.find(".h5") != -1) and (filename.find("success") != -1):
+        print("Loading data from file: {}".format(filename))
+        break
+data = h5py.File(filename) #h5py.File(sys.argv[1])
 
 num_imgs = len(data['images_rgb'])
 max_rgb, max_depth = 255., 2.
@@ -347,6 +350,10 @@ fig = plt.figure(100)
 # fig1.hold(True)
 
 # Render
+try:
+    os.makedirs(sys.argv[1] + "/test/")
+except:
+    pass
 for k in range(0,len(rgbs),4):
 
     # # Plot 3D poses
@@ -361,6 +368,8 @@ for k in range(0,len(rgbs),4):
     #     ax.quiver(o[0], o[1], o[2], z[0], z[1], z[2])
 
     # Project poses onto RGB images
+    rgbout = np.concatenate([rgbs[k][:,:,2:], rgbs[k][:,:,1:2], rgbs[k][:,:,0:1]], -1)
+    cv2.imwrite(sys.argv[1] + "/test/rgb{}.png".format(k), rgbout * 255.0)
     for j in range(len(poses)):
         if opengl:
             opengl_draw_3d_frame(torch.from_numpy(rgbs[k]), rtposes_cam_f[j][k])
@@ -375,6 +384,9 @@ for k in range(0,len(rgbs),4):
     plt.subplot(132); plt.imshow(depths[k]); plt.title("Depth")
     plt.subplot(133); plt.imshow(masksc[k]); plt.title("Segmentation Mask")
     #cv2.imwrite("/Users/barun/Desktop/Research/Projects/gazebo-learning-planning/data/masks{}.png".format(k), masksc[k])
+
+    rgbout = np.concatenate([rgbs[k][:,:,2:], rgbs[k][:,:,1:2], rgbs[k][:,:,0:1]], -1)
+    cv2.imwrite(sys.argv[1] + "/test/rgbp{}.png".format(k), rgbout * 255.0)
 
     # Show rgb, depth, obj ids, link ids
     # plt.subplot(141)

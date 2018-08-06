@@ -7,6 +7,7 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.distributions
 
 # Local imports
 add_path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -15,6 +16,15 @@ if add_path not in sys.path:
 import ctrlnets
 
 ## todo: concat rgb/depth to pass through one conv layer, pass depth/rgb through separate conv layers & concat features
+
+##### Override the normal distribution to add a distribution with v & r terms for the E2C transition model
+##### predictions: A = I + vr^T
+class MVNormal(torch.distributions.MultivariateNormal):
+    def __init__(self, *args, v=None, r=None, **kwargs):
+        super(MVNormal, self).__init__(*args, **kwargs)
+        self.v, self.r = v, r
+
+    ## todo: override KL divergence?
 
 ##### Create Encoder
 class Encoder(nn.Module):
@@ -89,7 +99,7 @@ class Encoder(nn.Module):
                 *[ConvType(chn_out[k], chn_out[k+1], kernel_size=1, stride=1, padding=0,
                            use_pool=pool[k], use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
             )
-            self.outdim = (chn_out[-1]//2, 3, 5)
+            self.outdim = [chn_out[-1]//2, 3, 5]
         else:
             # Fully connected output network
             print("Using fully-connected output encoder")
@@ -101,7 +111,7 @@ class Encoder(nn.Module):
                 ctrlnets.get_nonlinearity(nonlinearity),
                 nn.Linear(odim[2], odim[3]),
             )
-            self.outdim = (odim[3]//2)
+            self.outdim = [odim[3]//2]
 
     def forward(self, img, state=None):
         # Encode the image data
@@ -143,15 +153,11 @@ class Encoder(nn.Module):
         mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
 
         # Create the co-variance matrix (as a diagonal matrix with predicted stds along the diagonal)
-        stddev = torch.exp(logstd).view(bsz,-1)
-        covar  = torch.stack([torch.diag(stddev[k]) for k in range(bsz)], 0) # B x N x N matrix
-
-        # Save predictions internally
-        self.predmean, self.predlogstd, self.predstd = mean, logstd, stddev
+        var    = torch.exp(logstd).pow(2).view(bsz,-1)
+        covar  = torch.stack([torch.diag(var[k]) for k in range(bsz)], 0) # B x N x N matrix
 
         # Return a Multi-variate normal distribution
-        return torch.distributions.MultivariateNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
-
+        return MVNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
 
 ##### Create Decoder
 class Decoder(nn.Module):
@@ -236,7 +242,7 @@ class Decoder(nn.Module):
                 ConvType(chn_in[3], chn_in[4], kernel_size=1, stride=1, padding=0,
                          use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity), # 128 x 7 x 10
             )
-            self.hsdim = (chn_in[0], 3, 5)
+            self.hsdim = [chn_in[0], 3, 5]
         else:
             # Fully connected output network
             print("Using fully-connected output encoder")
@@ -248,7 +254,7 @@ class Decoder(nn.Module):
                 ctrlnets.get_nonlinearity(nonlinearity),
                 nn.Linear(odim[2], odim[3]),
             )
-            self.hsdim = (odim[0])
+            self.hsdim = [odim[0]]
 
     def forward(self, hidden_state):
         # Reshape hidden state to right shape
@@ -273,16 +279,159 @@ class Decoder(nn.Module):
         return output
 
 ##### Create Transition Model
-# todo: convolutional transition model
+# types:
+# 1) sample -> delta/full sample
+# 2) sample -> delta/full mean, delta/full var
+# 3) mean, var -> delta/full mean, delta/full var
 class NonLinearTransitionModel(nn.Module):
-    def __init__(self, state_dim, ctrl_dim, norm_type='none', nonlinearity='prelu',
-                 wide=False, conv_net=False):
-        super(LocallyLinearTransitionModel, self).__init__()
+    def __init__(self, state_dim, ctrl_dim, setting='dist2dist',
+                 predict_deltas=False, wide=False, nonlinearity='prelu',
+                 conv_net=False, norm_type='none', coord_conv=False):
+        super(NonLinearTransitionModel, self).__init__()
 
-        # Normalization
-        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        ### Allowed settings
+        self.setting = setting
+        assert (setting in ['samp2samp', 'samp2dist', 'dist2dist']), \
+            "Unknown setting {} for the transition model".format(setting)
+        assert(type(state_dim) == list)
+        if setting == 'samp2samp':
+            in_dim, out_dim = state_dim, state_dim
+        elif setting == 'samp2dist':
+            in_dim, out_dim = state_dim, state_dim
+            out_dim[0] *= 2 # Predict both mean/var
+        else: #setting == 'dist2dist':
+            in_dim, out_dim = state_dim, state_dim
+            in_dim[0]  *= 2
+            out_dim[0] *= 2
 
-        #
+        # Setup encoder for ctrl input
+        cdim = [ctrl_dim, 64, 128, 128] if wide else [ctrl_dim, 32, 64, 64]
+        self.ctrlencoder = nn.Sequential(
+            nn.Linear(cdim[0], cdim[1]),
+            ctrlnets.get_nonlinearity(nonlinearity),
+            nn.Linear(cdim[1], cdim[2]),
+            ctrlnets.get_nonlinearity(nonlinearity),
+            nn.Linear(cdim[2], cdim[3])
+        )
+
+        # Coordinate convolution
+        if coord_conv:
+            print('Using co-ordinate convolutional layers')
+        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
+                                                          coord_conv=coord_conv, **v)
+
+        # Setup state encoder and decoder (conv vs FC)
+        self.conv_net       = conv_net
+        self.state_dim      = state_dim
+        self.predict_deltas = predict_deltas
+        if conv_net:
+            # Normalization
+            assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
+            use_bn = (norm_type == 'bn')
+
+            # Create 1x1 conv state encoder
+            sedim = [in_dim[0], 32, 64, 128] if wide else [in_dim[0], 16, 32, 64]
+            self.stateencoder = nn.Sequential(
+                *[ConvType(sedim[k], sedim[k+1], kernel_size=1, stride=1, padding=0,
+                           use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity) for k in range(len(sedim)-1)],
+            )
+
+            # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
+            sddim = [sedim[-1]+cdim[-1], 128, 64, 32, out_dim[0]] if wide else [sedim[-1]+cdim[-1], 64, 32, 16, out_dim[0]]
+            nonlin = [nonlinearity, nonlinearity, nonlinearity, 'none']  # No non linearity for last layer
+            bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer
+            self.statedecoder = nn.Sequential(
+                *[ConvType(sddim[k], sddim[k+1], kernel_size=1, stride=1, padding=0,
+                           use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+            )
+        else:
+            # Create FC state encoder
+            sedim = [in_dim[0], 512, 512, 512] if wide else [in_dim[0], 256, 256, 256]
+            self.stateencoder = nn.Sequential(
+                nn.Linear(sedim[0], sedim[1]),
+                ctrlnets.get_nonlinearity(nonlinearity),
+                nn.Linear(sedim[1], sedim[2]),
+                ctrlnets.get_nonlinearity(nonlinearity),
+                nn.Linear(sedim[2], sedim[3]),
+            )
+
+            # Create FC state decoder
+            sddim = [sedim[-1]+cdim[-1], 512, 512, out_dim[0]] if wide else [sedim[-1]+cdim[-1], 256, 256, out_dim[0]]
+            self.statedecoder = nn.Sequential(
+                nn.Linear(sddim[0], sddim[1]),
+                ctrlnets.get_nonlinearity(nonlinearity),
+                nn.Linear(sddim[1], sddim[2]),
+                ctrlnets.get_nonlinearity(nonlinearity),
+                nn.Linear(sddim[2], sddim[3]),
+            )
+
+    def forward(self, ctrl, inpsample=None, inpdist=None):
+        # Generate the state input based on the setting
+        if (self.setting == 'samp2samp'):
+            assert(inpsample is not None)
+            bsz   = inpsample.size(0)
+            state = inpsample.view(bsz, *self.state_dim)
+            mean, var = None, None
+        elif (self.setting == 'samp2dist'):
+            assert((inpsample is not None) and (inpdist is not None))
+            bsz       = inpsample.size(0)
+            state     = inpsample.view(bsz, *self.state_dim) # Use sample as state
+            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k:k+1]) for k in range(bsz)], 0)
+        else:
+            assert(inpdist is not None)
+            # Get the mean & variance from the input distribution
+            assert(isinstance(inpdist, MVNormal))
+            bsz       = inpdist.mean.size(0)
+            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k:k+1]) for k in range(bsz)], 0)
+            state     = torch.cat([mean, var], 0).view(bsz, *self.state_dim)
+
+        # Run control through encoder
+        h_ctrl  = self.ctrlencoder(ctrl)
+
+        # Run state through encoder
+        h_state = self.stateencoder(state)
+
+        # Based on conv net vs not, reshape hidden state of the ctrl encoder as a 4D tensor
+        if self.conv_net:
+            # Reshape the output of the ctrl encoder as an image (repeat along image dims)
+            _, ndim      = h_ctrl.size()
+            _, _, ht, wd = h_state.size()
+            h_ctrl       = h_ctrl.view(bsz, ndim, 1, 1).expand_as(bsz, ndim, ht, wd)
+
+        # Concat hidden states along channels dimension
+        h_both = torch.cat([h_state, h_ctrl], 1)
+
+        # Generate decoded output from state decoder (either deltas or full output)
+        h_out = self.statedecoder(h_both)
+
+        # Run through state decoder to predict output, return output sample/dist (if asked)
+        if (self.setting == 'samp2samp'):
+            # Since it is a sample, we can just add the deltas (no need to worry about -ves)
+            if self.predict_deltas:
+                nextstate = (state + h_out)
+            else:
+                nextstate = h_out
+
+            # Return
+            return nextstate.view_as(inpsample)
+        else:
+            # Predict distributions in other two cases
+            pred_mean, pred_logstd = h_out.split(h_out.size(1)//2, dim=1)
+            pred_var = torch.exp(pred_logstd).pow(2)
+
+            # Add deltas in mean/var space (if predicting deltas)
+            if self.predict_deltas:
+                next_mean, next_var = mean + pred_mean.view(bsz,-1), \
+                                      var + pred_var.view(bsz,-1)
+            else:
+                next_mean, next_var = pred_mean.view(bsz,-1), \
+                                      pred_var.view(bsz,-1)
+
+            # Create the covariance matrix
+            next_covar = torch.stack([torch.diag(next_var[k]) for k in range(bsz)], 0) # B x N x N matrix
+
+            # Return distribution
+            return MVNormal(loc=next_mean, covariance_matrix=next_covar)
 
 
+# todo: locally linear transition model

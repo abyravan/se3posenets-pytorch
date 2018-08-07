@@ -480,7 +480,7 @@ class E2CModel(nn.Module):
 
         # Setup transition model
         if trans_model_type == 'nonlin':
-            print("Using non-linear transition model")
+            print("[Transition] Using non-linear transition model")
             self.transition = NonLinearTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
                                                        setting=trans_setting, predict_deltas=trans_pred_deltas,
                                                        wide_model=wide_model, nonlin_type=nonlin_type,

@@ -142,7 +142,7 @@ def main():
     train_ids, val_ids = [], []
     for epoch in range(args.start_epoch, args.epochs):
         # Adjust learning rate
-        e2chelpers.adjust_learning_rate(optimizer, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
+        e2chelpers.adjust_learning_rate(optimizer, args, epoch, args.lr_decay, args.decay_epochs, args.min_lr)
 
         # Train for one epoch
         train_stats = iterate(train_loader, model, tblogger, args.train_ipe,

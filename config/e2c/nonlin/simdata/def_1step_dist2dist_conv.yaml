@@ -1,0 +1,61 @@
+---
+# Dataset options
+data:         [/home/barun/Projects/blocks/data/simdata/blocks_data_v2/]
+batch-size:   16
+num-workers:  8
+train-per:    0.6
+val-per:      0.15
+step-len:     2
+seq-len:      1
+ctrl-type:    actdiffvel
+use-failures: True
+robot:        yumi
+gripper-ctrl-type: vel
+
+# Encoder/Decoder options
+enc-img-type:      rgbd
+dec-img-type:      rgbd
+enc-inp-state:     True
+dec-pred-state:    False
+dec-pred-norm-rgb: True
+conv-enc-dec:      True
+
+# Transition model options
+trans-setting:     dist2dist
+trans-pred-deltas: True
+trans-model-type:  nonlin
+
+# General model options
+norm-type:    bn
+nonlin-type:  prelu
+wide-model:   False
+coord-conv:   False
+
+# Loss options
+recons-loss-type: mse
+recons-wt:        1.0
+varkl-wt:         1.0
+transenckl-wt:    1.0
+loss-scale:       1000.0
+
+# Training options
+no-cuda:        False
+epochs:         20
+start-epoch:    0
+train-ipe:      5000
+val-ipe:        2000
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-4
+momentum:     0
+weight-decay: 1e-4
+lr-decay:     0.1
+decay-epochs: 15
+min-lr:       1e-5
+
+# Display/Save options
+disp-freq: 50
+save-dir:  trained_nets/e2c/nonlin/simdata/def_step2_seq1_dist2dist_conv

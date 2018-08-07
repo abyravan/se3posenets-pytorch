@@ -1,8 +1,3 @@
-# Global stuff
-import numpy as np
-import sys
-import os
-
 # Torch stuff
 import torch
 import torch.nn as nn
@@ -10,9 +5,6 @@ import torch.nn.functional as F
 import torch.distributions
 
 # Local imports
-add_path = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-if add_path not in sys.path:
-    sys.path.insert(0, add_path)
 import ctrlnets
 
 ## todo: concat rgb/depth to pass through one conv layer, pass depth/rgb through separate conv layers & concat features
@@ -26,9 +18,17 @@ class MVNormal(torch.distributions.MultivariateNormal):
 
     ## todo: override KL divergence?
 
+@torch.distributions.kl.register_kl(MVNormal, MVNormal)
+def kl_mvnormal_mvnormal(p, q):
+    if (p.v is not None): # Covar of p is A*\sigma*A^T where A = I + vr^T (special expression for KL from E2C paper)
+        raise NotImplementedError # todo
+    else:
+        return torch.distributions.kl._kl_multivariatenormal_multivariatenormal(p, q)
+
+#############################
 ##### Create Encoder
 class Encoder(nn.Module):
-    def __init__(self, img_type='rgbd', norm_type='bn', nonlinearity='prelu', wide=False,
+    def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu', wide_model=False,
                  use_state=False, num_state=7, coord_conv=False,
                  conv_encode=False):
         super(Encoder, self).__init__()
@@ -39,11 +39,13 @@ class Encoder(nn.Module):
 
         # Coordinate convolution
         if coord_conv:
-            print('Using co-ordinate convolutional layers')
+            print('[Encoder] Using co-ordinate convolutional layers')
         ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
                                                           coord_conv=coord_conv, **v)
 
         # Input type
+        print("[Encoder] Input image type: {}, Normalization type: {}, Nonliearity: {}".format(
+            img_type, norm_type, nonlin_type))
         if img_type == 'rgb' or img_type == 'xyz':
             input_channels = 3
         elif img_type == 'd':
@@ -62,22 +64,23 @@ class Encoder(nn.Module):
         # 5x5, 60x80 -> 30x40
         # 3x3, 30x40 -> 15x20
         # 3x3, 15x20 -> 7x10
-        chn = [input_channels, 32, 64, 128, 256, 256] if wide else [input_channels, 16, 32, 64, 128, 128]  # Num channels
+        chn = [input_channels, 32, 64, 128, 256, 256] if wide_model else [input_channels, 16, 32, 64, 128, 128]  # Num channels
         kern = [9,7,5,3,3] # Kernel sizes
         self.imgencoder = nn.Sequential(
             *[ConvType(chn[k], chn[k+1], kernel_size=kern[k], stride=1, padding=kern[k]//2,
-                      use_pool=True, use_bn=use_bn, nonlinearity=nonlinearity) for k in range(len(chn)-1)]
+                      use_pool=True, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
         )
 
         ###### Encode state information (jt angles, gripper position)
         self.use_state = use_state
         if self.use_state:
+            print("[Encoder] Using state as input")
             sdim = [num_state, 32, 64, 64]
             self.stateencoder = nn.Sequential(
                 nn.Linear(sdim[0], sdim[1]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sdim[1], sdim[2]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sdim[2], sdim[3]),
             )
         else:
@@ -90,10 +93,10 @@ class Encoder(nn.Module):
             # 1x1, 3x5 -> 3x5, 128
             # 1x1, 3x5 -> 3x5, 64
             # 1x1, 3x5 -> 3x5, 32
-            print("Using convolutional output encoder with 1x1 convolutions")
-            chn_out = [sdim[-1]+chn[-1], 256, 128, 64, 32] if wide else [sdim[-1]+chn[-1], 128, 64, 32, 16]
+            print("[Encoder] Using convolutional network with 1x1 convolutions for state prediction")
+            chn_out = [sdim[-1]+chn[-1], 256, 128, 64, 32] if wide_model else [sdim[-1]+chn[-1], 128, 64, 32, 16]
             pool = [True, False, False, False] # Pooling only for first layer to bring to 3x5
-            nonlin = [nonlinearity, nonlinearity, nonlinearity, 'none'] # No non linearity for last layer
+            nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none'] # No non linearity for last layer
             bn = [use_bn, use_bn, use_bn, False] # No batch norm for last layer
             self.outencoder = nn.Sequential(
                 *[ConvType(chn_out[k], chn_out[k+1], kernel_size=1, stride=1, padding=0,
@@ -102,13 +105,13 @@ class Encoder(nn.Module):
             self.outdim = [chn_out[-1]//2, 3, 5]
         else:
             # Fully connected output network
-            print("Using fully-connected output encoder")
-            odim = [sdim[-1]+(chn[-1]*7*10), 512, 512, 512] if wide else [sdim[-1]+(chn[-1]*7*10), 256, 256, 256]
+            print("[Encoder] Using fully-connected network for state prediction")
+            odim = [sdim[-1]+(chn[-1]*7*10), 512, 512, 512] if wide_model else [sdim[-1]+(chn[-1]*7*10), 256, 256, 256]
             self.outencoder = nn.Sequential(
                 nn.Linear(odim[0], odim[1]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(odim[1], odim[2]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(odim[2], odim[3]),
             )
             self.outdim = [odim[3]//2]
@@ -159,9 +162,10 @@ class Encoder(nn.Module):
         # Return a Multi-variate normal distribution
         return MVNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
 
+#############################
 ##### Create Decoder
 class Decoder(nn.Module):
-    def __init__(self, img_type='rgbd', norm_type='bn', nonlinearity='prelu', wide=False,
+    def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu', wide_model=False,
                  pred_state=False, num_state=7, coord_conv=False,
                  conv_decode=False, rgb_normalize=False):
         super(Decoder, self).__init__()
@@ -172,13 +176,15 @@ class Decoder(nn.Module):
 
         # Coordinate convolution
         if coord_conv:
-            print('Using co-ordinate convolutional layers')
+            print('[Decoder] Using co-ordinate convolutional layers')
         ConvType   = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
                                                             coord_conv=coord_conv, **v)
         DeconvType = lambda x, y, **v: ctrlnets.BasicDeconv2D(in_channels=x, out_channels=y,
                                                               coord_conv=coord_conv, **v)
 
         # Output type
+        print("[Decoder] Output image type: {}, Normalization type: {}, Nonliearity: {}".format(
+            img_type, norm_type, nonlin_type))
         self.img_type, self.rgb_normalize = img_type, rgb_normalize
         if img_type == 'rgb' or img_type == 'xyz':
             output_channels = 3
@@ -191,6 +197,10 @@ class Decoder(nn.Module):
         else:
             assert False, "Unknown image type input: {}".format(img_type)
 
+        # RGB normalization
+        if self.rgb_normalize:
+            print('[Decoder] RGB output from the decoder is normalized to go from 0-1')
+
         ###### Decode XYZ-RGB images (half-size since we are using half size of inputs compared to before)
         # Create conv-decoder (large net => 5 conv layers with pooling)
         # 3x4, 7x10 -> 15x20
@@ -198,11 +208,11 @@ class Decoder(nn.Module):
         # 6x6, 30x40 -> 60x80
         # 6x6, 60x80 -> 120x160
         # 8x8, 120x160 -> 240x320
-        chn = [128, 128, 64, 32, 32, output_channels] if wide else [64, 64, 32, 16, 16, output_channels]  # Num channels
+        chn = [128, 128, 64, 32, 32, output_channels] if wide_model else [64, 64, 32, 16, 16, output_channels]  # Num channels
         kern = [(3,4), 4, 6, 6, 8]  # Kernel sizes
         padd = [(0,1), 1, 2, 2, 3]  # Padding
         bn   = [use_bn, use_bn, use_bn, use_bn, False] # No batch norm for last layer (output)
-        nonlin = [nonlinearity, nonlinearity, nonlinearity, nonlinearity, 'none'] # No non-linearity last layer (output)
+        nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none'] # No non-linearity last layer (output)
         self.imgdecoder = nn.Sequential(
             *[DeconvType(chn[k], chn[k+1], kernel_size=kern[k], stride=2, padding=padd[k],
                          use_bn= bn[k], nonlinearity=nonlin[k])
@@ -213,12 +223,13 @@ class Decoder(nn.Module):
         ## todo: Add decoding of state
         # self.pred_state = pred_state
         # if self.pred_state:
+        #     print('[Decoder] Predicting state output using the decoder')
         #     sdim = [self.state_chn*self.indim[1]*self.indim[2], 64, 32, num_state]
         #     self.statedecoder = nn.Sequential(
         #         nn.Linear(sdim[0], sdim[1]),
-        #         ctrlnets.get_nonlinearity(nonlinearity),
+        #         ctrlnets.get_nonlinearity(nonlin_type),
         #         nn.Linear(sdim[1], sdim[2]),
-        #         ctrlnets.get_nonlinearity(nonlinearity),
+        #         ctrlnets.get_nonlinearity(nonlin_type),
         #         nn.Linear(sdim[2], sdim[3]),
         #     )
         # else:
@@ -233,25 +244,25 @@ class Decoder(nn.Module):
             # 1x1, 3x5 -> 3x5, 32 -> 64
             # 1x1, 3x5 -> 3x5, 64 -> 128
             # 1x1, 3x5 -> 7x10, 128 -> 128 + 4 (4 extra channels are inputs to the joint encoder)
-            print("Using convolutional decoder with 1x1 convolutions")
-            chn_in = [16, 32, 64, 128, chn[0]] if wide else [8, 16, 32, 64, chn[0]]
+            print("[Decoder] Using convolutional network with 1x1 convolutions for predicting output image")
+            chn_in = [16, 32, 64, 128, chn[0]] if wide_model else [8, 16, 32, 64, chn[0]]
             self.hsdecoder = nn.Sequential(
                 *[ConvType(chn_in[k], chn_in[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity) for k in range(len(chn_in)-2)], # Leave out last layer
+                           use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn_in)-2)], # Leave out last layer
                 nn.UpsamplingBilinear2d((7, 10)), # Upsample to (7,10)
                 ConvType(chn_in[3], chn_in[4], kernel_size=1, stride=1, padding=0,
-                         use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity), # 128 x 7 x 10
+                         use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type), # 128 x 7 x 10
             )
             self.hsdim = [chn_in[0], 3, 5]
         else:
             # Fully connected output network
-            print("Using fully-connected output encoder")
-            odim = [256, 256, 256, chn[0]*7*10] if wide else [128, 128, 128, chn[0]*7*10]
+            print("[Decoder] Using fully-connected network for predicting output image")
+            odim = [256, 256, 256, chn[0]*7*10] if wide_model else [128, 128, 128, chn[0]*7*10]
             self.hsdecoder = nn.Sequential(
                 nn.Linear(odim[0], odim[1]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(odim[1], odim[2]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(odim[2], odim[3]),
             )
             self.hsdim = [odim[0]]
@@ -278,6 +289,7 @@ class Decoder(nn.Module):
         # Return
         return output
 
+#############################
 ##### Create Transition Model
 # types:
 # 1) sample -> delta/full sample
@@ -285,7 +297,7 @@ class Decoder(nn.Module):
 # 3) mean, var -> delta/full mean, delta/full var
 class NonLinearTransitionModel(nn.Module):
     def __init__(self, state_dim, ctrl_dim, setting='dist2dist',
-                 predict_deltas=False, wide=False, nonlinearity='prelu',
+                 predict_deltas=False, wide_model=False, nonlin_type='prelu',
                  conv_net=False, norm_type='none', coord_conv=False):
         super(NonLinearTransitionModel, self).__init__()
 
@@ -303,20 +315,22 @@ class NonLinearTransitionModel(nn.Module):
             in_dim, out_dim = state_dim, state_dim
             in_dim[0]  *= 2
             out_dim[0] *= 2
+        print('[Transition] Setting: {}, Nonlinearity: {}, Normalization type: {}'.format(
+            setting, nonlin_type, norm_type))
 
         # Setup encoder for ctrl input
-        cdim = [ctrl_dim, 64, 128, 128] if wide else [ctrl_dim, 32, 64, 64]
+        cdim = [ctrl_dim, 64, 128, 128] if wide_model else [ctrl_dim, 32, 64, 64]
         self.ctrlencoder = nn.Sequential(
             nn.Linear(cdim[0], cdim[1]),
-            ctrlnets.get_nonlinearity(nonlinearity),
+            ctrlnets.get_nonlinearity(nonlin_type),
             nn.Linear(cdim[1], cdim[2]),
-            ctrlnets.get_nonlinearity(nonlinearity),
+            ctrlnets.get_nonlinearity(nonlin_type),
             nn.Linear(cdim[2], cdim[3])
         )
 
         # Coordinate convolution
         if coord_conv:
-            print('Using co-ordinate convolutional layers')
+            print('[Transition] Using co-ordinate convolutional layers')
         ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
                                                           coord_conv=coord_conv, **v)
 
@@ -326,19 +340,20 @@ class NonLinearTransitionModel(nn.Module):
         self.predict_deltas = predict_deltas
         if conv_net:
             # Normalization
+            print('[Transition] Using fully-convolutional transition network')
             assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
             use_bn = (norm_type == 'bn')
 
             # Create 1x1 conv state encoder
-            sedim = [in_dim[0], 32, 64, 128] if wide else [in_dim[0], 16, 32, 64]
+            sedim = [in_dim[0], 32, 64, 128] if wide_model else [in_dim[0], 16, 32, 64]
             self.stateencoder = nn.Sequential(
                 *[ConvType(sedim[k], sedim[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, use_bn=use_bn, nonlinearity=nonlinearity) for k in range(len(sedim)-1)],
+                           use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(sedim)-1)],
             )
 
             # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
-            sddim = [sedim[-1]+cdim[-1], 128, 64, 32, out_dim[0]] if wide else [sedim[-1]+cdim[-1], 64, 32, 16, out_dim[0]]
-            nonlin = [nonlinearity, nonlinearity, nonlinearity, 'none']  # No non linearity for last layer
+            sddim = [sedim[-1]+cdim[-1], 128, 64, 32, out_dim[0]] if wide_model else [sedim[-1]+cdim[-1], 64, 32, 16, out_dim[0]]
+            nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none']  # No non linearity for last layer
             bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer
             self.statedecoder = nn.Sequential(
                 *[ConvType(sddim[k], sddim[k+1], kernel_size=1, stride=1, padding=0,
@@ -346,24 +361,29 @@ class NonLinearTransitionModel(nn.Module):
             )
         else:
             # Create FC state encoder
-            sedim = [in_dim[0], 512, 512, 512] if wide else [in_dim[0], 256, 256, 256]
+            print('[Transition] Using fully-connected transition network')
+            sedim = [in_dim[0], 512, 512, 512] if wide_model else [in_dim[0], 256, 256, 256]
             self.stateencoder = nn.Sequential(
                 nn.Linear(sedim[0], sedim[1]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sedim[1], sedim[2]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sedim[2], sedim[3]),
             )
 
             # Create FC state decoder
-            sddim = [sedim[-1]+cdim[-1], 512, 512, out_dim[0]] if wide else [sedim[-1]+cdim[-1], 256, 256, out_dim[0]]
+            sddim = [sedim[-1]+cdim[-1], 512, 512, out_dim[0]] if wide_model else [sedim[-1]+cdim[-1], 256, 256, out_dim[0]]
             self.statedecoder = nn.Sequential(
                 nn.Linear(sddim[0], sddim[1]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sddim[1], sddim[2]),
-                ctrlnets.get_nonlinearity(nonlinearity),
+                ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(sddim[2], sddim[3]),
             )
+
+        # Prints
+        if predict_deltas:
+            print('[Transition] Model predicts deltas, not full state')
 
     def forward(self, ctrl, inpsample=None, inpdist=None):
         # Generate the state input based on the setting
@@ -435,3 +455,78 @@ class NonLinearTransitionModel(nn.Module):
 
 
 # todo: locally linear transition model
+
+##########################################################
+##### Create E2C model
+class E2CModel(nn.Module):
+    def __init__(self, enc_img_type='rgbd', dec_img_type='rgbd',
+                 enc_inp_state=True, dec_pred_state=False,
+                 conv_enc_dec=True, dec_pred_norm_rgb=True,
+                 trans_setting='dist2dist', trans_pred_deltas=True,
+                 trans_model_type='nonlin', state_dim=8, ctrl_dim=8,
+                 wide_model=False, nonlin_type='prelu',
+                 norm_type='bn', coord_conv=False):
+        super(E2CModel, self).__init__()
+
+        # Setup encoder
+        self.encoder = Encoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                               wide_model=wide_model, use_state=enc_inp_state, num_state=state_dim,
+                               coord_conv=coord_conv, conv_encode=conv_enc_dec)
+
+        # Setup decoder
+        self.decoder = Decoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                               wide_model=wide_model, pred_state=dec_pred_state, num_state=state_dim,
+                               coord_conv=coord_conv, conv_decode=conv_enc_dec, rgb_normalize=dec_pred_norm_rgb)
+
+        # Setup transition model
+        if trans_model_type == 'nonlin':
+            print("Using non-linear transition model")
+            self.transition = NonLinearTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
+                                                       setting=trans_setting, predict_deltas=trans_pred_deltas,
+                                                       wide_model=wide_model, nonlin_type=nonlin_type,
+                                                       conv_net=conv_enc_dec, norm_type=norm_type,
+                                                       coord_conv=coord_conv)
+        else:
+            assert False, "Unknown transition model type: {}".format(trans_model_type)
+
+    def forward(self, imgs, states, ctrls):
+        # Encode the images and states through the encoder
+        encdists, encsamples = [], []
+        for k in range(imgs.size(1)): # imgs is B x (S+1) x C x H x W
+            dist = self.encoder.forward(imgs[:,k], states[:,k]) # Predict the hidden state distribution
+            samp = dist.rsample() # Generate a sample from the predicted distribution
+
+            # Save the predictions
+            encdists.append(dist)
+            encsamples.append(samp)
+
+        # Predict a sequence of next states using the transition model
+        transdists, transsamples = [], []
+        setting = self.transition.setting
+        for k in range(ctrls.size(1)): # ctrls is B x S x NCTRL
+            # Get the inputs
+            transinpsample = encsamples[0] if (k == 0) else transsamples[-1] # @t=0 use encoder input, else use own prediction
+            transinpdist   = encdists[0] if (k == 0) else transdists[-1] # @t=0 use encoder input, else use own prediction
+
+            # Make a prediction through the transition model
+            transout = self.transition.forward(ctrls[:,k], transinpsample, transinpdist)
+
+            # Get the output distribution & sample
+            if (setting.find('2dist') != -1): # Predicting a distributional output
+                transdists.append(transout)
+                transsamples.append(transout.rsample()) # Sample from next state distribution
+            else:
+                transdists.append(None) # We are predicting a sample, no distribution here
+                transsamples.append(transout)
+
+        # Decode the frames based on the encoder and transition model
+        # Encoder sample is used to generate frame @ t = 0, transition model samples are used for t = 1 to N
+        # todo: do we need to reconstruct from all encoded state samples too?
+        decimgs = []
+        for k in range(imgs.size(1)):
+            decinp = encsamples[0] if (k == 0) else transsamples[k-1] # @ t = 0 reconstruct from encoder, rest from transition
+            decimg = self.decoder.forward(decinp)
+            decimgs.append(decimg)
+
+        # Return stuff
+        return encdists, encsamples, transdists, transsamples, decimgs

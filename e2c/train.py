@@ -320,7 +320,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             # If transition model predicts the next sample, compute error between sample & mean of encoder distribution
             if (k < args.seq_len):
                 if transdists[k] is None:
-                    currtransencklloss = transenckl_wt * nn.MSELoss()(transsamples[k], encdists[k+1].mean)
+                    currtransencklloss = transenckl_wt * (transsamples[k] - encdists[k+1].mean).pow(2).mean()
                 else:
                     currtransencklloss = transenckl_wt * torch.distributions.kl.kl_divergence(transdists[k],
                                                                                               encdists[k+1]).mean()

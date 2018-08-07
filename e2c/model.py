@@ -213,6 +213,7 @@ class Decoder(nn.Module):
         padd = [(0,1), 1, 2, 2, 3]  # Padding
         bn   = [use_bn, use_bn, use_bn, use_bn, False] # No batch norm for last layer (output)
         nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none'] # No non-linearity last layer (output)
+        self.idecdim = [chn[0], 7, 10]
         self.imgdecoder = nn.Sequential(
             *[DeconvType(chn[k], chn[k+1], kernel_size=kern[k], stride=2, padding=padd[k],
                          use_bn= bn[k], nonlinearity=nonlin[k])
@@ -273,7 +274,7 @@ class Decoder(nn.Module):
         h_state = hidden_state.view(bsz, *self.hsdim)
 
         # Pass it through the indecoder
-        h_img = self.hsdecoder(h_state)
+        h_img = self.hsdecoder(h_state).view(bsz, *self.idecdim)
 
         # Pass it through the image decoder
         imgout = self.imgdecoder(h_img)

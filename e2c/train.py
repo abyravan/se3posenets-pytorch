@@ -85,6 +85,10 @@ def main():
     if args.cuda:
         model.cuda()  # Convert to CUDA if enabled
 
+    # Print number of trainable parameters in model
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print('Number of trainable parameters in model: {}'.format(num_params))
+
     ### Load optimizer
     optimizer = e2chelpers.load_optimizer(args.optimization, model.parameters(), lr=args.lr,
                                           momentum=args.momentum, weight_decay=args.weight_decay)

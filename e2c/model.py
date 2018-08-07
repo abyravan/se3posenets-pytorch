@@ -490,6 +490,8 @@ class E2CModel(nn.Module):
         else:
             assert False, "Unknown transition model type: {}".format(trans_model_type)
 
+    # Inputs are (B x (S+1) x C x H x W), (B x (S+1) x NDIM), (B x S x NDIM)
+    # Outputs are lists of length (S+1) or (S) with dimensions being (B x NDIM) or (B x C x H x W)
     def forward(self, imgs, states, ctrls):
         # Encode the images and states through the encoder
         encdists, encsamples = [], []

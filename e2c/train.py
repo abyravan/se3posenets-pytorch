@@ -279,13 +279,13 @@ def iterate(data_loader, model, tblogger, num_iters,
         j, sample = data_loader.next()
         stats.data_ids.append(sample['id'].clone())
 
-        # Get inputs and targets
+        # Get inputs and targets (B x S x C x H x W), (B x S x NDIM)
         pts      = util.req_grad(sample['points'].to(device), train) # Need gradients
         rgbs     = util.req_grad(sample['rgbs'].type_as(pts) / 255.0, train)  # Normalize RGB to 0-1
         states   = util.req_grad(sample['states'].to(device), train) # Joint angles, gripper states
         ctrls    = util.req_grad(sample['controls'].to(device), train) # Controls
 
-        # Setup image inputs/outputs based on provided type
+        # Setup image inputs/outputs based on provided type (B x S x C x H x W)
         inputimgs  = e2chelpers.concat_image_data(pts, rgbs, args.enc_img_type)
         outputimgs = e2chelpers.concat_image_data(pts, rgbs, args.dec_img_type).detach() # No gradients needed w.r.t these
 
@@ -305,7 +305,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                               torch.zeros(args.seq_len+1), torch.zeros(args.seq_len)
         for k in range(args.seq_len+1):
             # Reconstruction loss between decoded images & true images
-            currreconsloss = recons_wt * recons_loss_fn(decimgs[k], outputimgs[k])
+            currreconsloss = recons_wt * recons_loss_fn(decimgs[k], outputimgs[:,k]) # Output imgs are B x (S+1)
             reconsloss[k]  = currreconsloss.item()
 
             # Variational KL loss between encoder distribution & standard normal distribution
@@ -416,9 +416,10 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                     if preddepths[0] is not None:
                         preddepths = torch.cat(preddepths, 0).cpu().float() # (S+1) x 1 x ht x wd
-                        gtdepths   = pts[id,2:].cpu().float()               # (S+1) x 1 x ht x wd
+                        gtdepths   = pts[id,:,2:].cpu().float()             # (S+1) x 1 x ht x wd
                         catdepths  = torchvision.utils.make_grid(
-                            torch.cat([preddepths, gtdepths],0).view(-1,1,args.img_ht,args.img_wd),
+                            torch.cat([preddepths, gtdepths],0).view(-1,1,args.img_ht,args.img_wd).expand(
+                                args.seq_len+1,3,args.img_ht, args.img_wd),
                             nrow=args.seq_len+1, normalize=True, range=(0.0, 3.0))
                         imginfo[mode + '-depths'] = util.to_np(catdepths.unsqueeze(0))
 

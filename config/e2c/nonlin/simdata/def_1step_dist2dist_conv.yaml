@@ -33,10 +33,10 @@ coord-conv:   False
 
 # Loss options
 recons-loss-type: mse
-recons-wt:        1.0
+recons-wt:        10.0
 varkl-wt:         1.0
-transenckl-wt:    1.0
-loss-scale:       1000.0
+transenckl-wt:    0.1
+loss-scale:       1.0
 
 # Training options
 no-cuda:        False

@@ -287,8 +287,7 @@ def iterate(data_loader, model, tblogger, num_iters,
 
         # Setup image inputs/outputs based on provided type
         inputimgs  = e2chelpers.concat_image_data(pts, rgbs, args.enc_img_type)
-        outputimgs = e2chelpers.concat_image_data(pts, rgbs, args.dec_img_type)
-        outputimgs.requires_grad = False # No gradient for output images
+        outputimgs = e2chelpers.concat_image_data(pts, rgbs, args.dec_img_type).detach() # No gradients needed w.r.t these
 
         # Measure data loading time
         data_time.update(time.time() - start)

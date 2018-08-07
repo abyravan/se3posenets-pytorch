@@ -18,7 +18,7 @@ dec-img-type:      rgbd
 enc-inp-state:     True
 dec-pred-state:    False
 dec-pred-norm-rgb: False
-conv-enc-dec:      True
+conv-enc-dec:      False
 
 # Transition model options
 trans-setting:     dist2dist

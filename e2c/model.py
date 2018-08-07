@@ -417,7 +417,7 @@ class NonLinearTransitionModel(nn.Module):
             # Reshape the output of the ctrl encoder as an image (repeat along image dims)
             _, ndim      = h_ctrl.size()
             _, _, ht, wd = h_state.size()
-            h_ctrl       = h_ctrl.view(bsz, ndim, 1, 1).expand_as(bsz, ndim, ht, wd)
+            h_ctrl       = h_ctrl.view(bsz, ndim, 1, 1).expand(bsz, ndim, ht, wd)
 
         # Concat hidden states along channels dimension
         h_both = torch.cat([h_state, h_ctrl], 1)

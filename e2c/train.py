@@ -319,7 +319,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     currtransencklloss = transenckl_wt * nn.MSELoss()(transsamples[k], encdists[k+1].mean)
                 else:
                     currtransencklloss = transenckl_wt * torch.distributions.kl.kl_divergence(transdists[k],
-                                                                                              encdists[k+1])
+                                                                                              encdists[k+1]).mean()
                 transencklloss[k] = currtransencklloss.item()
             else:
                 currtransencklloss = 0

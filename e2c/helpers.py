@@ -294,8 +294,8 @@ def variational_mvnormal_kl_loss(p, size_average=True):
 
     # Create a 0-mean, 1-std deviation distribution
     bsz, ndim = p.mean.size() # 2D
-    q = e2cmodel.MVNormal(loc=torch.zeros(bsz,ndim),
-                          covariance_matrix=torch.eye(ndim).unsqueeze(0).repeat(bsz,ndim,ndim))
+    q = e2cmodel.MVNormal(loc=torch.zeros(bsz,ndim).type_as(p.mean),
+                          covariance_matrix=torch.eye(ndim).unsqueeze(0).repeat(bsz,1,1).type_as(p.mean))
 
     # Return KL between p and q
     kl_loss = torch.distributions.kl.kl_divergence(p, q)

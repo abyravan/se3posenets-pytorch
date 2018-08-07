@@ -307,12 +307,12 @@ class NonLinearTransitionModel(nn.Module):
             "Unknown setting {} for the transition model".format(setting)
         assert(type(state_dim) == list)
         if setting == 'samp2samp':
-            in_dim, out_dim = state_dim, state_dim
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
         elif setting == 'samp2dist':
-            in_dim, out_dim = state_dim, state_dim
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
             out_dim[0] *= 2 # Predict both mean/var
         else: #setting == 'dist2dist':
-            in_dim, out_dim = state_dim, state_dim
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
             in_dim[0]  *= 2
             out_dim[0] *= 2
         print('[Transition] Setting: {}, Nonlinearity: {}, Normalization type: {}'.format(
@@ -404,7 +404,6 @@ class NonLinearTransitionModel(nn.Module):
             assert(isinstance(inpdist, MVNormal))
             bsz       = inpdist.mean.size(0)
             mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
-            print(mean.size(), var.size(), bsz, self.in_dim)
             state     = torch.cat([mean, var], 0).view(bsz, *self.in_dim)
 
         # Run control through encoder

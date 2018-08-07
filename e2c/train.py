@@ -24,7 +24,7 @@ import e2c.model as e2cmodel
 import e2c.helpers as e2chelpers
 
 #### Setup options
-parser = e2chelpers.setup_comon_options()
+parser = e2chelpers.setup_common_options()
 
 ################ MAIN
 #@profile
@@ -470,3 +470,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.transencklloss.val[k] if (k < args.seq_len) else 0,
             stats.transencklloss.avg[k] if (k < args.seq_len) else 0,
         ))
+
+################ RUN MAIN
+if __name__ == '__main__':
+    main()

@@ -419,7 +419,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                         gtdepths   = pts[id,:,2:].cpu().float()             # (S+1) x 1 x ht x wd
                         catdepths  = torchvision.utils.make_grid(
                             torch.cat([preddepths, gtdepths],0).view(-1,1,args.img_ht,args.img_wd).expand(
-                                args.seq_len+1,3,args.img_ht, args.img_wd),
+                                (args.seq_len+1)*2,3,args.img_ht, args.img_wd),
                             nrow=args.seq_len+1, normalize=True, range=(0.0, 3.0))
                         imginfo[mode + '-depths'] = util.to_np(catdepths.unsqueeze(0))
 

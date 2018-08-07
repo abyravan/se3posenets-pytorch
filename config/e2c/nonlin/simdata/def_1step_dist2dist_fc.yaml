@@ -35,7 +35,7 @@ coord-conv:   False
 recons-loss-type: mse
 recons-wt:        10.0
 varkl-wt:         1.0
-transenckl-wt:    0.1
+transenckl-wt:    1.0
 loss-scale:       1.0
 
 # Training options

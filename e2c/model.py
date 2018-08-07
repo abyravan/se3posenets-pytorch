@@ -221,6 +221,7 @@ class Decoder(nn.Module):
 
         # ###### Decode state information (jt angles, gripper position)
         ## todo: Add decoding of state
+        assert(not pred_state)
         # self.pred_state = pred_state
         # if self.pred_state:
         #     print('[Decoder] Predicting state output using the decoder')
@@ -235,7 +236,6 @@ class Decoder(nn.Module):
         # else:
         #     sdim = [0]
         # self.state_chn = 4 if pred_state else 0 # Add a few extra channels if we are also predicting state
-        assert(not self.pred_state)
 
         ###### If we are using conv output (fully-conv basically), we can do 1x1 conv stuff
         self.conv_decode = conv_decode

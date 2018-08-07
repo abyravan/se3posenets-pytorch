@@ -467,8 +467,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             1 + k * args.step_len,
             stats.reconsloss.val[k], stats.reconsloss.avg[k],
             stats.varklloss.val[k], stats.varklloss.avg[k],
-            stats.transencklloss.val[k] if (k > 0) else 0,
-            stats.transencklloss.avg[k] if (k > 0) else 0,
+            stats.transencklloss.val[k-1] if (k > 0) else 0,
+            stats.transencklloss.avg[k-1] if (k > 0) else 0,
         ))
 
 ################ RUN MAIN

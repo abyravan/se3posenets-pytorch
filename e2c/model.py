@@ -133,7 +133,7 @@ class Encoder(nn.Module):
                 # Reshape the output of the state encoder (repeat along image dims)
                 _, ndim = h_state.size()
                 _, _, ht, wd = h_img.size()
-                h_state = h_state.view(bsz, ndim, 1, 1).expand_as(bsz, ndim, ht, wd)
+                h_state = h_state.view(bsz, ndim, 1, 1).expand(bsz, ndim, ht, wd)
 
                 # Concat along channels dimension
                 h_both = torch.cat([h_img, h_state], 1)
@@ -396,14 +396,16 @@ class NonLinearTransitionModel(nn.Module):
             assert((inpsample is not None) and (inpdist is not None))
             bsz       = inpsample.size(0)
             state     = inpsample.view(bsz, *self.state_dim) # Use sample as state
-            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k:k+1]) for k in range(bsz)], 0)
+            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
         else:
             assert(inpdist is not None)
             # Get the mean & variance from the input distribution
             assert(isinstance(inpdist, MVNormal))
             bsz       = inpdist.mean.size(0)
-            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k:k+1]) for k in range(bsz)], 0)
-            state     = torch.cat([mean, var], 0).view(bsz, *self.state_dim)
+            mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+            print(mean.size(), var.size())
+            state_dim = self.state_dim; state_dim[0] *= 2 # We have both mean/var as inputs now
+            state     = torch.cat([mean, var], 0).view(bsz, *state_dim)
 
         # Run control through encoder
         h_ctrl  = self.ctrlencoder(ctrl)

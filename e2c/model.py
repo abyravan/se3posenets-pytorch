@@ -336,7 +336,8 @@ class NonLinearTransitionModel(nn.Module):
 
         # Setup state encoder and decoder (conv vs FC)
         self.conv_net       = conv_net
-        self.state_dim      = state_dim
+        self.in_dim         = in_dim
+        self.out_dim        = out_dim
         self.predict_deltas = predict_deltas
         if conv_net:
             # Normalization
@@ -390,12 +391,12 @@ class NonLinearTransitionModel(nn.Module):
         if (self.setting == 'samp2samp'):
             assert(inpsample is not None)
             bsz   = inpsample.size(0)
-            state = inpsample.view(bsz, *self.state_dim)
+            state = inpsample.view(bsz, *self.in_dim)
             mean, var = None, None
         elif (self.setting == 'samp2dist'):
             assert((inpsample is not None) and (inpdist is not None))
             bsz       = inpsample.size(0)
-            state     = inpsample.view(bsz, *self.state_dim) # Use sample as state
+            state     = inpsample.view(bsz, *self.in_dim) # Use sample as state
             mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
         else:
             assert(inpdist is not None)
@@ -403,9 +404,8 @@ class NonLinearTransitionModel(nn.Module):
             assert(isinstance(inpdist, MVNormal))
             bsz       = inpdist.mean.size(0)
             mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
-            print(mean.size(), var.size())
-            state_dim = self.state_dim; state_dim[0] *= 2 # We have both mean/var as inputs now
-            state     = torch.cat([mean, var], 0).view(bsz, *state_dim)
+            print(mean.size(), var.size(), bsz, self.in_dim)
+            state     = torch.cat([mean, var], 0).view(bsz, *self.in_dim)
 
         # Run control through encoder
         h_ctrl  = self.ctrlencoder(ctrl)

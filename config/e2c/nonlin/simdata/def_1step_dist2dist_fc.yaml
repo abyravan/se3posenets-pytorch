@@ -58,4 +58,4 @@ min-lr:       1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/e2c/nonlin/simdata/def_step2_seq1_dist2dist_conv
+save-dir:  trained_nets/e2c/nonlin/simdata/def_step2_seq1_dist2dist_fc

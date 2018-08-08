@@ -427,7 +427,6 @@ class NonLinearTransitionModel(nn.Module):
         else:
             assert(inpdist is not None)
             # Get the mean & variance from the input distribution
-            assert(isinstance(inpdist, MVNormal))
             bsz       = inpdist.mean.size(0)
             mean, std = inpdist.mean, inpdist.stddev
             #mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)

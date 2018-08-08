@@ -313,7 +313,7 @@ def iterate(data_loader, model, tblogger, num_iters,
             reconsloss[k]  = currreconsloss.item()
 
             # Variational KL loss between encoder distribution & standard normal distribution
-            currvarklloss  = varkl_wt * e2chelpers.variational_mvnormal_kl_loss(encdists[k])
+            currvarklloss  = varkl_wt * e2chelpers.variational_normal_kl_loss(encdists[k])
             varklloss[k]   = currvarklloss.item()
 
             # KL loss between encoder predictions @ t+1 & transition model predictions @ t+1

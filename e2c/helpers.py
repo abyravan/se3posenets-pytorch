@@ -289,13 +289,17 @@ def get_loss_function(loss_func_type, size_average=True):
 
 # Variational KL loss, loss between the predicted encoder distribution and
 # a 0 mean, 1-std deviation multivariate normal distribution
-def variational_mvnormal_kl_loss(p, size_average=True):
-    assert(isinstance(p, e2cmodel.MVNormal)) #or isinstance(p, torch.distributions.MultivariateNormal))
-
+def variational_normal_kl_loss(p, size_average=True):
     # Create a 0-mean, 1-std deviation distribution
     bsz, ndim = p.mean.size() # 2D
-    q = e2cmodel.MVNormal(loc=torch.zeros(bsz,ndim).type_as(p.mean),
-                          covariance_matrix=torch.eye(ndim).unsqueeze(0).repeat(bsz,1,1).type_as(p.mean))
+    if isinstance(p, e2cmodel.MVNormal):
+        q = e2cmodel.MVNormal(loc=torch.zeros(bsz,ndim).type_as(p.mean),
+                              covariance_matrix=torch.eye(ndim).unsqueeze(0).repeat(bsz,1,1).type_as(p.mean))
+    elif isinstance(p, e2cmodel.Normal):
+        q = e2cmodel.Normal(loc=torch.zeros(bsz,ndim).type_as(p.mean),
+                            scale=torch.ones(bsz,ndim).type_as(p.mean))
+    else:
+        assert False, 'Input distribution p is instance of class: {}'.format(type(p))
 
     # Return KL between p and q
     kl_loss = torch.distributions.kl.kl_divergence(p, q)

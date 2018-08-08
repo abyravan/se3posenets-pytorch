@@ -9,14 +9,14 @@ import ctrlnets
 
 ## todo: concat rgb/depth to pass through one conv layer, pass depth/rgb through separate conv layers & concat features
 
-##### Override the normal distribution to add a distribution with v & r terms for the E2C transition model
-##### predictions: A = I + vr^T
+##### Override the multi-variate normal distribution to add a distribution with v & r terms for the E2C transition model
 class MVNormal(torch.distributions.MultivariateNormal):
     def __init__(self, *args, v=None, r=None, **kwargs):
         super(MVNormal, self).__init__(*args, **kwargs)
         self.v, self.r = v, r
 
-    ## todo: override KL divergence?
+    def rsample_e2c(self, sample_shape=torch.Size()):
+        return self.rsample(sample_shape=sample_shape)
 
 @torch.distributions.kl.register_kl(MVNormal, MVNormal)
 def kl_mvnormal_mvnormal(p, q):
@@ -24,6 +24,27 @@ def kl_mvnormal_mvnormal(p, q):
         raise NotImplementedError # todo
     else:
         return torch.distributions.kl._kl_multivariatenormal_multivariatenormal(p, q)
+
+##### Override the independent normal distribution to add a distribution with v & r terms for the E2C transition model
+class Normal(torch.distributions.Normal):
+    def __init__(self, *args, v=None, r=None, **kwargs):
+        super(Normal, self).__init__(*args, **kwargs)
+        self.v, self.r = v, r
+
+    def rsample_e2c(self, sample_shape=torch.Size()):
+        # Use torch.distributions.normal rsample if not E2C style distribution
+        if (self.v is not None):
+            # todo: compute sig_1 = A * sig * A^T where A = I + vr^T and sample from MVNormal(mean, sig_1)
+            raise NotImplementedError
+        else:
+            return self.rsample(sample_shape=sample_shape)
+
+@torch.distributions.kl.register_kl(Normal, Normal)
+def kl_normal_normal(p, q):
+    if (p.v is not None):  # Covar of p is A*\sigma*A^T where A = I + vr^T (special expression for KL from E2C paper)
+        raise NotImplementedError  # todo
+    else:
+        return torch.distributions.kl._kl_normal_normal(p, q)
 
 #############################
 ##### Create Encoder
@@ -155,12 +176,15 @@ class Encoder(nn.Module):
         # Get mean & log(std) output
         mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
 
+        # Create a independent diagonal Gaussian
+        return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
+
         # Create the co-variance matrix (as a diagonal matrix with predicted stds along the diagonal)
-        var    = torch.exp(logstd).pow(2).view(bsz,-1)
-        covar  = torch.stack([torch.diag(var[k]) for k in range(bsz)], 0) # B x N x N matrix
+        #var    = torch.exp(logstd).pow(2).view(bsz,-1)
+        #covar  = torch.stack([torch.diag(var[k]) for k in range(bsz)], 0) # B x N x N matrix
 
         # Return a Multi-variate normal distribution
-        return MVNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
+        #return MVNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
 
 #############################
 ##### Create Decoder
@@ -398,14 +422,16 @@ class NonLinearTransitionModel(nn.Module):
             assert((inpsample is not None) and (inpdist is not None))
             bsz       = inpsample.size(0)
             state     = inpsample.view(bsz, *self.in_dim) # Use sample as state
-            mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+            mean, std = inpdist.mean, inpdist.stddev
+            #mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
         else:
             assert(inpdist is not None)
             # Get the mean & variance from the input distribution
             assert(isinstance(inpdist, MVNormal))
             bsz       = inpdist.mean.size(0)
-            mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
-            state     = torch.cat([mean, var], 0).view(bsz, *self.in_dim)
+            mean, std = inpdist.mean, inpdist.stddev
+            #mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+            state     = torch.cat([mean, std], 0).view(bsz, *self.in_dim)
 
         # Run control through encoder
         h_ctrl  = self.ctrlencoder(ctrl)
@@ -439,21 +465,33 @@ class NonLinearTransitionModel(nn.Module):
         else:
             # Predict distributions in other two cases
             pred_mean, pred_logstd = h_out.split(h_out.size(1)//2, dim=1)
-            pred_var = torch.exp(pred_logstd).pow(2)
+            pred_std = torch.exp(pred_logstd)
+            #pred_var = torch.exp(pred_logstd).pow(2)
 
-            # Add deltas in mean/var space (if predicting deltas)
+            # Add deltas in mean/std space (if predicting deltas)
             if self.predict_deltas:
-                next_mean, next_var = mean + pred_mean.view(bsz,-1), \
-                                      var + pred_var.view(bsz,-1)
+                next_mean, next_std   = mean + pred_mean.view(bsz,-1), \
+                                        std + pred_std.view(bsz,-1)
             else:
-                next_mean, next_var = pred_mean.view(bsz,-1), \
-                                      pred_var.view(bsz,-1)
-
-            # Create the covariance matrix
-            next_covar = torch.stack([torch.diag(next_var[k]) for k in range(bsz)], 0) # B x N x N matrix
+                next_mean, next_std   = pred_mean.view(bsz,-1), \
+                                        pred_std.view(bsz,-1)
 
             # Return distribution
-            return MVNormal(loc=next_mean, covariance_matrix=next_covar)
+            return Normal(loc=next_mean, scale=next_std)
+
+            # # Add deltas in mean/var space (if predicting deltas)
+            # if self.predict_deltas:
+            #     next_mean, next_var = mean + pred_mean.view(bsz,-1), \
+            #                           var + pred_var.view(bsz,-1)
+            # else:
+            #     next_mean, next_var = pred_mean.view(bsz,-1), \
+            #                           pred_var.view(bsz,-1)
+            #
+            # # Create the covariance matrix
+            # next_covar = torch.stack([torch.diag(next_var[k]) for k in range(bsz)], 0) # B x N x N matrix
+            #
+            # # Return distribution
+            # return MVNormal(loc=next_mean, covariance_matrix=next_covar)
 
 
 # todo: locally linear transition model
@@ -498,7 +536,7 @@ class E2CModel(nn.Module):
         encdists, encsamples = [], []
         for k in range(imgs.size(1)): # imgs is B x (S+1) x C x H x W
             dist = self.encoder.forward(imgs[:,k], states[:,k]) # Predict the hidden state distribution
-            samp = dist.rsample() # Generate a sample from the predicted distribution
+            samp = dist.rsample_e2c() # Generate a sample from the predicted distribution
 
             # Save the predictions
             encdists.append(dist)
@@ -518,7 +556,7 @@ class E2CModel(nn.Module):
             # Get the output distribution & sample
             if (setting.find('2dist') != -1): # Predicting a distributional output
                 transdists.append(transout)
-                transsamples.append(transout.rsample()) # Sample from next state distribution
+                transsamples.append(transout.rsample_e2c()) # Sample from next state distribution
             else:
                 transdists.append(None) # We are predicting a sample, no distribution here
                 transsamples.append(transout)

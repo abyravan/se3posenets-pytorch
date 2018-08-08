@@ -423,7 +423,7 @@ class NonLinearTransitionModel(nn.Module):
             bsz       = inpsample.size(0)
             state     = inpsample.view(bsz, *self.in_dim) # Use sample as state
             mean, std = inpdist.mean, inpdist.stddev
-            #mean, var = inpdist.mean, torch.cat([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+            #mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
         else:
             assert(inpdist is not None)
             # Get the mean & variance from the input distribution

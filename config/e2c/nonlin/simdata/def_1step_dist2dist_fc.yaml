@@ -1,8 +1,8 @@
 ---
 # Dataset options
 data:         [/home/barun/Projects/blocks/data/simdata/blocks_data_v2/]
-batch-size:   16
-num-workers:  8
+batch-size:   4
+num-workers:  4
 train-per:    0.6
 val-per:      0.15
 step-len:     2
@@ -40,10 +40,10 @@ loss-scale:       1.0
 
 # Training options
 no-cuda:        False
-epochs:         20
+epochs:         40
 start-epoch:    0
-train-ipe:      5000
-val-ipe:        2000
+train-ipe:      10000
+val-ipe:        4000
 evaluate:       False
 seed:           100
 

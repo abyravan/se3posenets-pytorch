@@ -260,9 +260,9 @@ def concat_image_data(pts, rgbs, img_type):
     elif img_type == 'xyz':
         return pts
     elif img_type == 'd':
-        return pts.narrow(2,2,1).contiguous() # Get the depth channel
+        return pts.narrow(2,2,1).contiguous() / 3.0 # Get the depth channel
     elif img_type == 'rgbd':
-        return torch.cat([rgbs, pts.narrow(2,2,1)], 2) # Concat along channels dimension
+        return torch.cat([rgbs, (pts.narrow(2,2,1)/3.0)], 2) # Concat along channels dimension
     elif img_type == 'rgbxyz':
         return torch.cat([rgbs, pts], 2) # Concat along channels dimension
     else:

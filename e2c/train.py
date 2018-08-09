@@ -420,11 +420,11 @@ def iterate(data_loader, model, tblogger, num_iters,
 
                     if preddepths[0] is not None:
                         preddepths = torch.cat(preddepths, 0).cpu().float() # (S+1) x 1 x ht x wd
-                        gtdepths   = pts[id,:,2:].cpu().float()             # (S+1) x 1 x ht x wd
+                        gtdepths   = pts[id,:,2:].cpu().float() / 3.0       # (S+1) x 1 x ht x wd
                         catdepths  = torchvision.utils.make_grid(
                             torch.cat([preddepths, gtdepths],0).view(-1,1,args.img_ht,args.img_wd).expand(
                                 (args.seq_len+1)*2,3,args.img_ht, args.img_wd),
-                            nrow=args.seq_len+1, normalize=True, range=(0.0, 3.0))
+                            nrow=args.seq_len+1, normalize=True, range=(0.0, 1.0))
                         imginfo[mode + '-depths'] = util.to_np(catdepths.unsqueeze(0))
 
                     if predpts[0] is not None:

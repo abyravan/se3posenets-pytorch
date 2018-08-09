@@ -313,12 +313,15 @@ def iterate(data_loader, model, tblogger, num_iters,
             reconsloss[k]  = currreconsloss.item()
 
             # Variational KL loss between encoder distribution & standard normal distribution
-            currvarklloss  = varkl_wt * e2chelpers.variational_normal_kl_loss(encdists[k])
-            varklloss[k]   = currvarklloss.item()
+            if (varkl_wt > 0):
+                currvarklloss  = varkl_wt * e2chelpers.variational_normal_kl_loss(encdists[k])
+                varklloss[k]   = currvarklloss.item()
+            else:
+                currvarklloss  = 0
 
             # KL loss between encoder predictions @ t+1 & transition model predictions @ t+1
             # If transition model predicts the next sample, compute error between sample & mean of encoder distribution
-            if (k < args.seq_len):
+            if (k < args.seq_len) and (transenckl_wt > 0):
                 if transdists[k] is None:
                     currtransencklloss = transenckl_wt * (transsamples[k] - encdists[k+1].mean).pow(2).mean()
                 else:

@@ -504,29 +504,48 @@ class E2CModel(nn.Module):
                  trans_setting='dist2dist', trans_pred_deltas=True,
                  trans_model_type='nonlin', state_dim=8, ctrl_dim=8,
                  wide_model=False, nonlin_type='prelu',
-                 norm_type='bn', coord_conv=False):
+                 norm_type='bn', coord_conv=False, img_size=(240,320)):
         super(E2CModel, self).__init__()
 
-        # Setup encoder
-        self.encoder = Encoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
-                               wide_model=wide_model, use_state=enc_inp_state, num_state=state_dim,
-                               coord_conv=coord_conv, conv_encode=conv_enc_dec)
+        # Use different encoder/decoder/trans model functions for conv_enc_dec
+        if conv_enc_dec:
+            # Setup encoder
+            self.encoder = ConvEncoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                       use_state=enc_inp_state, num_state=state_dim,
+                                       coord_conv=coord_conv, img_size=img_size)
 
-        # Setup decoder
-        self.decoder = Decoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
-                               wide_model=wide_model, pred_state=dec_pred_state, num_state=state_dim,
-                               coord_conv=coord_conv, conv_decode=conv_enc_dec, rgb_normalize=dec_pred_norm_rgb)
+            # Setup decoder
+            self.decoder = ConvDecoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                       pred_state=dec_pred_state, num_state=state_dim,
+                                       coord_conv=coord_conv, rgb_normalize=dec_pred_norm_rgb,
+                                       img_size=img_size, input_size=self.encoder.outdim)
 
-        # Setup transition model
-        if trans_model_type == 'nonlin':
-            print("[Transition] Using non-linear transition model")
-            self.transition = NonLinearTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
-                                                       setting=trans_setting, predict_deltas=trans_pred_deltas,
-                                                       wide_model=wide_model, nonlin_type=nonlin_type,
-                                                       conv_net=conv_enc_dec, norm_type=norm_type,
-                                                       coord_conv=coord_conv)
+            # Setup transition model
+            self.transition = ConvTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
+                                                  setting=trans_setting, predict_deltas=trans_pred_deltas,
+                                                  nonlin_type=nonlin_type, norm_type=norm_type,
+                                                  coord_conv=coord_conv)
         else:
-            assert False, "Unknown transition model type: {}".format(trans_model_type)
+            # Setup encoder
+            self.encoder = Encoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                   wide_model=wide_model, use_state=enc_inp_state, num_state=state_dim,
+                                   coord_conv=coord_conv, conv_encode=False)
+
+            # Setup decoder
+            self.decoder = Decoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                   wide_model=wide_model, pred_state=dec_pred_state, num_state=state_dim,
+                                   coord_conv=coord_conv, conv_decode=False, rgb_normalize=dec_pred_norm_rgb)
+
+            # Setup transition model
+            if trans_model_type == 'nonlin':
+                print("[Transition] Using non-linear transition model")
+                self.transition = NonLinearTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
+                                                           setting=trans_setting, predict_deltas=trans_pred_deltas,
+                                                           wide_model=wide_model, nonlin_type=nonlin_type,
+                                                           conv_net=False, norm_type=norm_type,
+                                                           coord_conv=coord_conv)
+            else:
+                assert False, "Unknown transition model type: {}".format(trans_model_type)
 
     # Inputs are (B x (S+1) x C x H x W), (B x (S+1) x NDIM), (B x S x NDIM)
     # Outputs are lists of length (S+1) or (S) with dimensions being (B x NDIM) or (B x C x H x W)
@@ -571,3 +590,374 @@ class E2CModel(nn.Module):
 
         # Return stuff
         return encdists, encsamples, transdists, transsamples, decimgs
+
+#######################################################################################
+##### Create Convolutional encoder
+class ConvEncoder(nn.Module):
+    def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu',
+                 use_state=False, num_state=7, coord_conv=False,
+                 img_size=(240,320)):
+        super(ConvEncoder, self).__init__()
+
+        # Normalization
+        assert norm_type == 'bn', "Unknown normalization type input: {}".format(norm_type)
+        use_bn = (norm_type == 'bn')
+
+        # Coordinate convolution
+        if coord_conv:
+            print('[Encoder] Using co-ordinate convolutional layers')
+        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
+                                                          coord_conv=coord_conv, **v)
+
+        # Input type
+        print("[Encoder] Input image type: {}, Normalization type: {}, Nonliearity: {}".format(
+            img_type, norm_type, nonlin_type))
+        if img_type == 'rgb' or img_type == 'xyz':
+            input_channels = 3
+        elif img_type == 'd':
+            input_channels = 1
+        elif img_type == 'rgbd':
+            input_channels = 4
+        elif img_type == 'rgbxyz':
+            input_channels = 6
+        else:
+            assert False, "Unknown image type input: {}".format(img_type)
+
+        ###### Encode XYZ-RGB images
+        # Create conv-encoder, stride 1, 7x7/5x5 convs with max pooling & BN
+        # 4/5-conv layers, final output is size: 128x8x8
+        self.img_size = img_size
+        if self.img_size == (240,320):
+            print('[Encoder] Image size: {}, Using 5-conv layers'.format(self.img_size))
+            chn  = [input_channels, 32, 64, 64, 128, 128] # Num channels
+            kern = [7,7,5,(4,5),(4,5)] # Kernel sizes
+            pad  = [3,3,2,(2,1),(2,1)] # Padding
+        elif self.img_size == (128,128):
+            print('[Encoder] Image size: {}, Using 4-conv layers'.format(self.img_size))
+            chn  = [input_channels, 32, 64, 64, 128]  # Num channels
+            kern = [7,7,5,5] # Kernel sizes
+            pad  = [3,3,2,2] # Padding
+        else:
+            assert False, "Unknown image size input: {}".format(self.img_size)
+        self.imgencoder = nn.Sequential(
+            *[ConvType(chn[k], chn[k+1], kernel_size=kern[k], stride=1, padding=pad[k],
+                      use_pool=True, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
+        )
+
+        ###### Encode state information (jt angles, gripper position)
+        self.use_state = use_state
+        if self.use_state:
+            print("[Encoder] Using state as input")
+            sdim = [num_state, 32, 64]
+            self.stateencoder = nn.Sequential(
+                nn.Linear(sdim[0], sdim[1]),
+                ctrlnets.get_nonlinearity(nonlin_type),
+                nn.Linear(sdim[1], sdim[2])
+            )
+        else:
+            sdim = [0]
+
+        ###### Concat img + state information and get encoded outputs
+        # Convolutional network with 5x5 convolutions to get some global information
+        print("[Encoder] Using convolutional network for state prediction")
+        chn_out = [sdim[-1]+chn[-1], 128, 128]
+        nonlin  = [nonlin_type, 'none'] # No non linearity for last layer
+        bn      = [use_bn, False]       # No batch norm for last layer
+        self.outencoder = nn.Sequential(
+            *[ConvType(chn_out[k], chn_out[k+1], kernel_size=5, stride=1, padding=2,
+                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
+        )
+        self.outdim = [chn_out[-1]//2, 8, 8]
+
+    def forward(self, img, state=None):
+        # Encode the image data
+        bsz = img.size(0)
+        h_img = self.imgencoder(img)
+
+        # Encode state information
+        h_state = None
+        if (state is not None) and self.use_state:
+            h_state = self.stateencoder(state)
+
+        # Convert the state encoding to an image representation (if present)
+        if (h_state is not None):
+            # Reshape the output of the state encoder (repeat along image dims)
+            _, ndim = h_state.size()
+            _, _, ht, wd = h_img.size()
+            h_state = h_state.view(bsz, ndim, 1, 1).expand(bsz, ndim, ht, wd)
+
+            # Concat along channels dimension
+            h_both = torch.cat([h_img, h_state], 1)
+        else:
+            h_both = h_img
+
+        # Get output
+        h_out = self.outencoder(h_both)
+
+        # Get mean & log(std) output
+        mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
+
+        # Create a independent diagonal Gaussian
+        return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
+
+        # Create the co-variance matrix (as a diagonal matrix with predicted stds along the diagonal)
+        #var    = torch.exp(logstd).pow(2).view(bsz,-1)
+        #covar  = torch.stack([torch.diag(var[k]) for k in range(bsz)], 0) # B x N x N matrix
+
+        # Return a Multi-variate normal distribution
+        #return MVNormal(loc=mean.view(bsz,-1), covariance_matrix=covar)
+
+#############################
+##### Create Decoder
+class ConvDecoder(nn.Module):
+    def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu',
+                 pred_state=False, num_state=7, coord_conv=False,
+                 rgb_normalize=False, input_size=(64,8,8), img_size=(240,320)):
+        super(ConvDecoder, self).__init__()
+
+        # Normalization
+        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
+        use_bn = (norm_type == 'bn')
+
+        # Coordinate convolution
+        if coord_conv:
+            print('[Decoder] Using co-ordinate convolutional layers')
+        DeconvType = lambda x, y, **v: ctrlnets.BasicDeconv2D(in_channels=x, out_channels=y,
+                                                              coord_conv=coord_conv, **v)
+
+        # Output type
+        print("[Decoder] Output image type: {}, Normalization type: {}, Nonliearity: {}".format(
+            img_type, norm_type, nonlin_type))
+        self.img_type, self.rgb_normalize = img_type, rgb_normalize
+        if img_type == 'rgb' or img_type == 'xyz':
+            output_channels = 3
+        elif img_type == 'd':
+            output_channels = 1
+        elif img_type == 'rgbd':
+            output_channels = 4
+        elif img_type == 'rgbxyz':
+            output_channels = 6
+        else:
+            assert False, "Unknown image type input: {}".format(img_type)
+
+        # RGB normalization
+        if self.rgb_normalize:
+            print('[Decoder] RGB output from the decoder is normalized to go from 0-1')
+
+        ###### Decode XYZ-RGB images
+        # Create conv-decoder, 7x7/5x5 strided deconvs with BN
+        # 4/5-conv layers, initial input is size: 64x8x8, output is image size
+        self.img_size = img_size
+        self.inp_size = input_size
+        if self.img_size == (240,320):
+            print('[Decoder] Image size: {}, Using 5-deconv layers'.format(self.img_size))
+            chn = [64, 64, 64, 32, 32, output_channels] # Num channels
+            kern = [(3,6), (4,6), 6, 6, 6] # Kernel sizes
+            padd = [1, (1,0), 2, 2, 2] # Padding
+            bn = [use_bn, use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
+            nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none']  # No non-linearity last layer
+        elif self.img_size == (128,128):
+            print('[Decoder] Image size: {}, Using 4-deconv layers'.format(self.img_size))
+            chn = [64, 64, 64, 32, output_channels] # Num channels
+            kern = [4, 4, 6, 6] # Kernel sizes
+            padd = [1, 1, 2, 2] # Padding
+            bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
+            nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none']  # No non-linearity last layer
+        else:
+            assert False, "Unknown image size input: {}".format(self.img_size)
+        self.imgdecoder = nn.Sequential(
+            *[DeconvType(chn[k], chn[k+1], kernel_size=kern[k], stride=2, padding=padd[k],
+                         use_bn= bn[k], nonlinearity=nonlin[k])
+              for k in range(len(chn)-1)]
+        )
+
+        # ###### Decode state information (jt angles, gripper position)
+        ## todo: Add decoding of state - 1/2 conv layers to get to small num values & then FC
+        assert(not pred_state)
+        # self.pred_state = pred_state
+        # if self.pred_state:
+        #     print('[Decoder] Predicting state output using the decoder')
+        #     sdim = [self.state_chn*self.indim[1]*self.indim[2], 64, 32, num_state]
+        #     self.statedecoder = nn.Sequential(
+        #         nn.Linear(sdim[0], sdim[1]),
+        #         ctrlnets.get_nonlinearity(nonlin_type),
+        #         nn.Linear(sdim[1], sdim[2]),
+        #         ctrlnets.get_nonlinearity(nonlin_type),
+        #         nn.Linear(sdim[2], sdim[3]),
+        #     )
+        # else:
+        #     sdim = [0]
+        # self.state_chn = 4 if pred_state else 0 # Add a few extra channels if we are also predicting state
+
+    def forward(self, hidden_state):
+        # Reshape hidden state to right shape
+        bsz = hidden_state.size(0)
+        h_state = hidden_state.view(bsz, *self.inp_size)
+
+        # Pass it through the image decoder
+        imgout = self.imgdecoder(h_state)
+
+        # If we have RGB images & are asked to normalize the output, push it through a sigmoid to get vals from 0->1
+        if (self.img_type.find('rgb') != -1) and self.rgb_normalize:
+            splits = imgout.split(3, dim=1) # RGB is first element
+            rgb    = F.sigmoid(splits[0]) # First 3 channels
+            output = torch.cat([rgb, *splits[1:]], 1) if len(splits) > 1 else rgb
+        else:
+            output = imgout
+
+        # Return
+        return output
+
+#############################
+##### Create Transition Model
+# types:
+# 1) sample -> delta/full sample
+# 2) sample -> delta/full mean, delta/full var
+# 3) mean, var -> delta/full mean, delta/full var
+class ConvTransitionModel(nn.Module):
+    def __init__(self, state_dim, ctrl_dim, setting='dist2dist',
+                 predict_deltas=False, nonlin_type='prelu',
+                 norm_type='none', coord_conv=False):
+        super(ConvTransitionModel, self).__init__()
+
+        ### Allowed settings
+        self.setting = setting
+        assert (setting in ['samp2samp', 'samp2dist', 'dist2dist']), \
+            "Unknown setting {} for the transition model".format(setting)
+        assert(type(state_dim) == list)
+        if setting == 'samp2samp':
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+        elif setting == 'samp2dist':
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+            out_dim[0] *= 2 # Predict both mean/var
+        else: #setting == 'dist2dist':
+            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+            in_dim[0]  *= 2
+            out_dim[0] *= 2
+        print('[Transition] Setting: {}, Nonlinearity: {}, Normalization type: {}'.format(
+            setting, nonlin_type, norm_type))
+
+        # Setup encoder for ctrl input
+        cdim = [ctrl_dim, 32, 64]
+        self.ctrlencoder = nn.Sequential(
+            nn.Linear(cdim[0], cdim[1]),
+            ctrlnets.get_nonlinearity(nonlin_type),
+            nn.Linear(cdim[1], cdim[2]),
+        )
+
+        # Coordinate convolution
+        if coord_conv:
+            print('[Transition] Using co-ordinate convolutional layers')
+        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
+                                                          coord_conv=coord_conv, **v)
+
+        # Setup state encoder and decoder (conv vs FC)
+        self.in_dim         = in_dim
+        self.out_dim        = out_dim
+        self.predict_deltas = predict_deltas
+
+        # Normalization
+        print('[Transition] Using convolutional transition network')
+        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
+        use_bn = (norm_type == 'bn')
+
+        # Create 1x1 conv state encoder
+        sedim = [in_dim[0], 128, 128]
+        nonlin = [nonlin_type, 'none']
+        bn     = [use_bn, False]
+        self.stateencoder = nn.Sequential(
+            *[ConvType(sedim[k], sedim[k+1], kernel_size=5, stride=1, padding=2,
+                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sedim)-1)],
+        )
+
+        # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
+        sddim = [sedim[-1]+cdim[-1], 128, 128, out_dim[0]]
+        nonlin = [nonlin_type, nonlin_type, 'none']  # No non linearity for last layer
+        bn = [use_bn, use_bn, False]  # No batch norm for last layer
+        self.statedecoder = nn.Sequential(
+            *[ConvType(sddim[k], sddim[k+1], kernel_size=5, stride=1, padding=2,
+                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+        )
+
+        # Prints
+        if predict_deltas:
+            print('[Transition] Model predicts deltas, not full state')
+
+    def forward(self, ctrl, inpsample=None, inpdist=None):
+        # Generate the state input based on the setting
+        if (self.setting == 'samp2samp'):
+            assert(inpsample is not None)
+            bsz   = inpsample.size(0)
+            state = inpsample.view(bsz, *self.in_dim)
+            mean, var = None, None
+        elif (self.setting == 'samp2dist'):
+            assert((inpsample is not None) and (inpdist is not None))
+            bsz       = inpsample.size(0)
+            state     = inpsample.view(bsz, *self.in_dim) # Use sample as state
+            mean, std = inpdist.mean, inpdist.stddev
+            #mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+        else:
+            assert(inpdist is not None)
+            # Get the mean & variance from the input distribution
+            bsz       = inpdist.mean.size(0)
+            mean, std = inpdist.mean, inpdist.stddev
+            #mean, var = inpdist.mean, torch.stack([torch.diag(inpdist.covariance_matrix[k]) for k in range(bsz)], 0)
+            state     = torch.cat([mean, std], 0).view(bsz, *self.in_dim)
+
+        # Run control through encoder
+        h_ctrl  = self.ctrlencoder(ctrl)
+
+        # Run state through encoder
+        h_state = self.stateencoder(state)
+
+        # Reshape the output of the ctrl encoder as an image (repeat along image dims)
+        _, ndim      = h_ctrl.size()
+        _, _, ht, wd = h_state.size()
+        h_ctrl       = h_ctrl.view(bsz, ndim, 1, 1).expand(bsz, ndim, ht, wd)
+
+        # Concat hidden states along channels dimension
+        h_both = torch.cat([h_state, h_ctrl], 1)
+
+        # Generate decoded output from state decoder (either deltas or full output)
+        h_out = self.statedecoder(h_both)
+
+        # Run through state decoder to predict output, return output sample/dist (if asked)
+        if (self.setting == 'samp2samp'):
+            # Since it is a sample, we can just add the deltas (no need to worry about -ves)
+            if self.predict_deltas:
+                nextstate = (state + h_out)
+            else:
+                nextstate = h_out
+
+            # Return
+            return nextstate.view_as(inpsample)
+        else:
+            # Predict distributions in other two cases
+            pred_mean, pred_logstd = h_out.split(h_out.size(1)//2, dim=1)
+            pred_std = torch.exp(pred_logstd)
+            #pred_var = torch.exp(pred_logstd).pow(2)
+
+            # Add deltas in mean/std space (if predicting deltas)
+            if self.predict_deltas:
+                next_mean, next_std   = mean + pred_mean.view(bsz,-1), \
+                                        std + pred_std.view(bsz,-1)
+            else:
+                next_mean, next_std   = pred_mean.view(bsz,-1), \
+                                        pred_std.view(bsz,-1)
+
+            # Return distribution
+            return Normal(loc=next_mean, scale=next_std)
+
+            # # Add deltas in mean/var space (if predicting deltas)
+            # if self.predict_deltas:
+            #     next_mean, next_var = mean + pred_mean.view(bsz,-1), \
+            #                           var + pred_var.view(bsz,-1)
+            # else:
+            #     next_mean, next_var = pred_mean.view(bsz,-1), \
+            #                           pred_var.view(bsz,-1)
+            #
+            # # Create the covariance matrix
+            # next_covar = torch.stack([torch.diag(next_var[k]) for k in range(bsz)], 0) # B x N x N matrix
+            #
+            # # Return distribution
+            # return MVNormal(loc=next_mean, covariance_matrix=next_covar)

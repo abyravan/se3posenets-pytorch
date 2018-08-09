@@ -81,7 +81,7 @@ def main():
         trans_setting=args.trans_setting, trans_pred_deltas=args.trans_pred_deltas,
         trans_model_type=args.trans_model_type, state_dim=args.num_ctrl,
         ctrl_dim=args.num_ctrl, wide_model=args.wide_model, nonlin_type=args.nonlin_type,
-        norm_type=args.norm_type, coord_conv=args.coord_conv)
+        norm_type=args.norm_type, coord_conv=args.coord_conv, img_size=(args.img_ht, args.img_wd))
     if args.cuda:
         model.cuda()  # Convert to CUDA if enabled
 

@@ -44,6 +44,8 @@ def setup_common_options():
                         help='Robot to use: [yumi] | baxter')
     parser.add_argument('--gripper-ctrl-type', default='vel', type=str, metavar='STR',
                         help='Control specification for the gripper: [vel] | compos')
+    parser.add_argument('--half-res-data', action='store_true', default=False,
+                        help='Image data at 128x128 resolution. Default: False')
 
     # Encoder/Decoder options
     parser.add_argument('--enc-img-type', default='rgbd', type=str, metavar='EIMG',
@@ -207,17 +209,26 @@ def parse_options_and_setup_block_dataset_loader(args):
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
-    #print('Loss scale: {}, Loss weights => PT: {}, CONSIS: {}'.format(
-    #    args.loss_scale, args.pt_wt, args.consis_wt))
+    print('Loss scale: {}, Weights => RECONS: {}, VARKL: {}, TRANSENCKL: {}'.format(
+        args.loss_scale, args.recons_wt, args.varkl_wt, args.transenckl_wt))
 
     # Wide model
     if args.wide_model:
         print('Using a wider network')
+        assert (not args.conv_enc_dec), "No wide model option available for the convolutional models"
+
+    # Half res data
+    if args.half_res_data:
+        print("Using data at 128x128 resolution")
+        assert args.conv_enc_dec, "Only the convolutional model can support 128x128 resolution"
 
     # YUMI robot
     if args.robot == "yumi":
         args.num_ctrl = 8
-        args.img_ht, args.img_wd = 240, 320
+        if args.half_res_data:
+            args.img_ht, args.img_wd = 128, 128
+        else:
+            args.img_ht, args.img_wd = 240, 320
         print("Img ht: {}, Img wd: {}, Num ctrl: {}".format(args.img_ht, args.img_wd, args.num_ctrl))
     else:
         assert False, "Unknown robot type input: {}".format(args.robot)

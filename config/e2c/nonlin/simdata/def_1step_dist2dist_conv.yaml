@@ -11,6 +11,7 @@ ctrl-type:    actdiffvel
 use-failures: True
 robot:        yumi
 gripper-ctrl-type: vel
+half-res-data: False
 
 # Encoder/Decoder options
 enc-img-type:      rgbd

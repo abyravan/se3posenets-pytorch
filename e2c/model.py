@@ -51,7 +51,7 @@ def kl_normal_normal(p, q):
 class Encoder(nn.Module):
     def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu', wide_model=False,
                  use_state=False, num_state=7, coord_conv=False,
-                 conv_encode=False):
+                 conv_encode=False, deterministic=False):
         super(Encoder, self).__init__()
 
         # Normalization
@@ -109,6 +109,7 @@ class Encoder(nn.Module):
 
         ###### If we are using conv output (fully-conv basically), we can do 1x1 conv stuff
         self.conv_encode = conv_encode
+        self.deterministic = deterministic
         if self.conv_encode:
             # 1x1, 7x10 -> 3x5, 256
             # 1x1, 3x5 -> 3x5, 128
@@ -123,7 +124,7 @@ class Encoder(nn.Module):
                 *[ConvType(chn_out[k], chn_out[k+1], kernel_size=1, stride=1, padding=0,
                            use_pool=pool[k], use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
             )
-            self.outdim = [chn_out[-1]//2, 3, 5]
+            self.outdim = [chn_out[-1], 3, 5] if self.deterministic else [chn_out[-1]//2, 3, 5]
         else:
             # Fully connected output network
             print("[Encoder] Using fully-connected network for state prediction")
@@ -135,7 +136,12 @@ class Encoder(nn.Module):
                 ctrlnets.get_nonlinearity(nonlin_type),
                 nn.Linear(odim[2], odim[3]),
             )
-            self.outdim = [odim[3]//2]
+            self.outdim = [odim[3]] if self.deterministic else [odim[3]//2]
+
+        # Deterministic model
+        self.deterministic = deterministic
+        if deterministic:
+            print("[Encoder] Prediciting deterministic output state")
 
     def forward(self, img, state=None):
         # Encode the image data
@@ -173,11 +179,15 @@ class Encoder(nn.Module):
         # Get output
         h_out = self.outencoder(h_both)
 
-        # Get mean & log(std) output
-        mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
+        # Distributional vs Deterministic output
+        if self.deterministic:
+            return h_out # Directly return predicted hidden state
+        else:
+            # Get mean & log(std) output
+            mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
 
-        # Create a independent diagonal Gaussian
-        return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
+            # Create a independent diagonal Gaussian
+            return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
 
         # Create the co-variance matrix (as a diagonal matrix with predicted stds along the diagonal)
         #var    = torch.exp(logstd).pow(2).view(bsz,-1)
@@ -596,7 +606,7 @@ class E2CModel(nn.Module):
 class ConvEncoder(nn.Module):
     def __init__(self, img_type='rgbd', norm_type='bn', nonlin_type='prelu',
                  use_state=False, num_state=7, coord_conv=False,
-                 img_size=(240,320)):
+                 img_size=(240,320), deterministic=False):
         super(ConvEncoder, self).__init__()
 
         # Normalization
@@ -660,14 +670,20 @@ class ConvEncoder(nn.Module):
         ###### Concat img + state information and get encoded outputs
         # Convolutional network with 5x5 convolutions to get some global information
         print("[Encoder] Using convolutional network for state prediction")
-        chn_out = [sdim[-1]+chn[-1], 128, 128]
+        out_chn = 64 if deterministic else 128 # Predict mean/var if not deterministic
+        chn_out = [sdim[-1]+chn[-1], 128, out_chn]
         nonlin  = [nonlin_type, 'none'] # No non linearity for last layer
         bn      = [use_bn, False]       # No batch norm for last layer
         self.outencoder = nn.Sequential(
             *[ConvType(chn_out[k], chn_out[k+1], kernel_size=5, stride=1, padding=2,
                        use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
         )
-        self.outdim = [chn_out[-1]//2, 8, 8]
+        self.outdim = [chn_out[-1], 8, 8] if deterministic else [chn_out[-1]//2, 8, 8]
+
+        # Deterministic model
+        self.deterministic = deterministic
+        if deterministic:
+            print("[Encoder] Prediciting deterministic output state")
 
     def forward(self, img, state=None):
         # Encode the image data
@@ -694,11 +710,15 @@ class ConvEncoder(nn.Module):
         # Get output
         h_out = self.outencoder(h_both)
 
-        # Get mean & log(std) output
-        mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
+        # Distributional vs Deterministic output
+        if self.deterministic:
+            return h_out # Directly return predicted hidden state
+        else:
+            # Get mean & log(std) output
+            mean, logstd = h_out.split(h_out.size(1)//2, dim=1) # Split into 2 along channels dim (or hidden state dim)
 
-        # Create a independent diagonal Gaussian
-        return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
+            # Create a independent diagonal Gaussian
+            return Normal(loc=mean.view(bsz,-1), scale=torch.exp(logstd).view(bsz,-1))
 
         # Create the co-variance matrix (as a diagonal matrix with predicted stds along the diagonal)
         #var    = torch.exp(logstd).pow(2).view(bsz,-1)
@@ -751,14 +771,14 @@ class ConvDecoder(nn.Module):
         self.inp_size = input_size
         if self.img_size == (240,320):
             print('[Decoder] Image size: {}, Using 5-deconv layers'.format(self.img_size))
-            chn = [64, 64, 64, 32, 32, output_channels] # Num channels
+            chn = [input_size[0], 64, 64, 32, 32, output_channels] # Num channels
             kern = [(3,6), (4,6), 6, 6, 6] # Kernel sizes
             padd = [1, (1,0), 2, 2, 2] # Padding
             bn = [use_bn, use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
             nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none']  # No non-linearity last layer
         elif self.img_size == (128,128):
             print('[Decoder] Image size: {}, Using 4-deconv layers'.format(self.img_size))
-            chn = [64, 64, 64, 32, output_channels] # Num channels
+            chn = [input_size[0], 64, 64, 32, output_channels] # Num channels
             kern = [4, 4, 6, 6] # Kernel sizes
             padd = [1, 1, 2, 2] # Padding
             bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
@@ -961,3 +981,87 @@ class ConvTransitionModel(nn.Module):
             #
             # # Return distribution
             # return MVNormal(loc=next_mean, covariance_matrix=next_covar)
+
+##########################################################
+##### Create E2C model
+class DeterministicModel(nn.Module):
+    def __init__(self, enc_img_type='rgbd', dec_img_type='rgbd',
+                 enc_inp_state=True, dec_pred_state=False,
+                 conv_enc_dec=True, dec_pred_norm_rgb=True,
+                 trans_setting='samp2samp', trans_pred_deltas=True,
+                 trans_model_type='nonlin', state_dim=8, ctrl_dim=8,
+                 wide_model=False, nonlin_type='prelu',
+                 norm_type='bn', coord_conv=False, img_size=(240,320)):
+        super(DeterministicModel, self).__init__()
+
+        # Use different encoder/decoder/trans model functions for conv_enc_dec
+        assert (trans_setting == 'samp2samp'), "Deterministic model only allows samp2samp transition model setting"
+        if conv_enc_dec:
+            # Setup encoder
+            self.encoder = ConvEncoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                       use_state=enc_inp_state, num_state=state_dim,
+                                       coord_conv=coord_conv, img_size=img_size, deterministic=True)
+
+            # Setup decoder
+            self.decoder = ConvDecoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                       pred_state=dec_pred_state, num_state=state_dim,
+                                       coord_conv=coord_conv, rgb_normalize=dec_pred_norm_rgb,
+                                       img_size=img_size, input_size=self.encoder.outdim)
+
+            # Setup transition model
+            self.transition = ConvTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
+                                                  setting=trans_setting, predict_deltas=trans_pred_deltas,
+                                                  nonlin_type=nonlin_type, norm_type=norm_type,
+                                                  coord_conv=coord_conv)
+        else:
+            # Setup encoder
+            self.encoder = Encoder(img_type=enc_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                   wide_model=wide_model, use_state=enc_inp_state, num_state=state_dim,
+                                   coord_conv=coord_conv, conv_encode=False, deterministic=True)
+
+            # Setup decoder
+            self.decoder = Decoder(img_type=dec_img_type, norm_type=norm_type, nonlin_type=nonlin_type,
+                                   wide_model=wide_model, pred_state=dec_pred_state, num_state=state_dim,
+                                   coord_conv=coord_conv, conv_decode=False, rgb_normalize=dec_pred_norm_rgb)
+
+            # Setup transition model
+            if trans_model_type == 'nonlin':
+                print("[Transition] Using non-linear transition model")
+                self.transition = NonLinearTransitionModel(state_dim=self.encoder.outdim, ctrl_dim=ctrl_dim,
+                                                           setting=trans_setting, predict_deltas=trans_pred_deltas,
+                                                           wide_model=wide_model, nonlin_type=nonlin_type,
+                                                           conv_net=False, norm_type=norm_type,
+                                                           coord_conv=coord_conv)
+            else:
+                assert False, "Unknown transition model type: {}".format(trans_model_type)
+
+    # Inputs are (B x (S+1) x C x H x W), (B x (S+1) x NDIM), (B x S x NDIM)
+    # Outputs are lists of length (S+1) or (S) with dimensions being (B x NDIM) or (B x C x H x W)
+    def forward(self, imgs, states, ctrls):
+        # Encode the images and states through the encoder
+        encstates = []
+        for k in range(imgs.size(1)): # imgs is B x (S+1) x C x H x W
+            encstate = self.encoder.forward(imgs[:,k], states[:,k]) # Predict the hidden state distribution
+            encstates.append(encstate)
+
+        # Predict a sequence of next states using the transition model
+        transstates = []
+        for k in range(ctrls.size(1)): # ctrls is B x S x NCTRL
+            # Get the inputs
+            transinpstate = encstates[0] if (k == 0) else transstates[-1] # @t=0 use encoder input, else use own prediction
+
+            # Make a prediction through the transition model
+            transoutstate = self.transition.forward(ctrls[:,k], transinpstate, None)
+            transstates.append(transoutstate)
+
+        # Decode the frames based on the encoder and transition model
+        # Encoder state is used to generate frame @ t = 0, transition model states are used for t = 1 to N
+        # todo: do we need to reconstruct from all encoded state samples too?
+        decimgs = []
+        for k in range(imgs.size(1)):
+            decinp = encstates[0] if (k == 0) else transstates[k-1] # @ t = 0 reconstruct from encoder, rest from transition
+            decimg = self.decoder.forward(decinp)
+            decimgs.append(decimg)
+
+        # Return stuff
+        return encstates, transstates, decimgs

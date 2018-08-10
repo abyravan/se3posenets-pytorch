@@ -74,7 +74,14 @@ def main():
 
     ### Load the model
     num_train_iter = 0
-    model = e2cmodel.E2CModel(
+    if args.deterministic:
+        print('Using deterministic model')
+        assert (args.varkl_wt == 0), "Deterministic model cannot have varkl-wt > 0"
+        modelfn = e2cmodel.DeterministicModel
+    else:
+        print('Using probabilistic model')
+        modelfn = e2cmodel.E2CModel
+    model = modelfn(
         enc_img_type=args.enc_img_type, dec_img_type=args.dec_img_type,
         enc_inp_state=args.enc_inp_state, dec_pred_state=args.dec_pred_state,
         conv_enc_dec=args.conv_enc_dec, dec_pred_norm_rgb=args.dec_pred_norm_rgb,
@@ -301,8 +308,12 @@ def iterate(data_loader, model, tblogger, num_iters,
         start = time.time()
 
         ### Run a forward pass through the network for predictions
-        encdists, encsamples, transdists, transsamples, decimgs = \
-            model.forward(inputimgs, states, ctrls)
+        if args.deterministic:
+            encstates, transstates, decimgs = \
+                model.forward(inputimgs, states, ctrls)
+        else:
+            encdists, encsamples, transdists, transsamples, decimgs = \
+                model.forward(inputimgs, states, ctrls)
 
         ### Compute losses
         loss, reconsloss, varklloss, transencklloss = 0, torch.zeros(args.seq_len+1), \
@@ -322,11 +333,14 @@ def iterate(data_loader, model, tblogger, num_iters,
             # KL loss between encoder predictions @ t+1 & transition model predictions @ t+1
             # If transition model predicts the next sample, compute error between sample & mean of encoder distribution
             if (k < args.seq_len) and (transenckl_wt > 0):
-                if transdists[k] is None:
-                    currtransencklloss = transenckl_wt * (transsamples[k] - encdists[k+1].mean).pow(2).mean()
+                if args.deterministic:
+                    currtransencklloss = transenckl_wt * (transstates[k] - encstates[k+1]).pow(2).mean()
                 else:
-                    currtransencklloss = transenckl_wt * torch.distributions.kl.kl_divergence(transdists[k],
-                                                                                              encdists[k+1]).mean()
+                    if transdists[k] is None:
+                        currtransencklloss = transenckl_wt * (transsamples[k] - encdists[k+1].mean).pow(2).mean()
+                    else:
+                        currtransencklloss = transenckl_wt * torch.distributions.kl.kl_divergence(transdists[k],
+                                                                                                  encdists[k+1]).mean()
                 transencklloss[k] = currtransencklloss.item()
             else:
                 currtransencklloss = 0

@@ -78,6 +78,8 @@ def setup_common_options():
                         help='Wider network')
     parser.add_argument('--coord-conv', action='store_true', default=False,
                         help='Use co-ordinate convolutions. (Default: False)')
+    parser.add_argument('--deterministic', action='store_true', default=False,
+                        help='Use a deterministic model. (Default: False)')
 
     # Loss options
     parser.add_argument('--recons-loss-type', default='mse', type=str,

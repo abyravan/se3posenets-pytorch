@@ -157,21 +157,21 @@ def main():
                 exampleids.append(id)
                 if (len(exampleids) % 10) == 0:
                     print('Loaded example {}/{}'.format(len(exampleids), vargs.num_examples))
+
+                # Get inputs and targets (B x S x C x H x W), (B x S x NDIM)
+                pts_f.append(sample['points'])
+                rgbs_f.append(sample['rgbs'].type_as(sample['points']) / 255.0)  # Normalize RGB to 0-1
+                states_f.append(sample['states'])  # Joint angles, gripper states
+                ctrls_f.append(sample['controls'])  # Controls
             else:
                 print('Discarding. % mean jt angle diff > {} is {}/0.85. Gripper num: {}/2'.format(
                     vargs.jt_mean_thresh, meanjtper, gripnum))
 
-            # todo: Run FWD pass through the different models (based on type of model)
-            # Get inputs and targets (B x S x C x H x W), (B x S x NDIM)
-            pts_f.append(sample['points'])
-            rgbs_f.append(sample['rgbs'].type_as(sample['points']) / 255.0)  # Normalize RGB to 0-1
-            states_f.append(sample['states'])   # Joint angles, gripper states
-            ctrls_f.append(sample['controls'])  # Controls
-
         # Stack data
         pts_f, rgbs_f, states_f, ctrls_f = torch.stack(pts_f, 0), torch.stack(rgbs_f, 0), \
                                            torch.stack(states_f, 0), torch.stack(ctrls_f, 0)
-
+        print(pts_f.size())
+        
         # Setup image inputs/outputs based on provided type (B x S x C x H x W)
         inputimgs_f  = e2chelpers.concat_image_data(pts_f, rgbs_f, args.enc_img_type)
         outputimgs_f = e2chelpers.concat_image_data(pts_f, rgbs_f, args.dec_img_type)
@@ -217,6 +217,7 @@ def main():
                     encdists, encsamples, transdists, transsamples, decimgs = \
                         model.forward(inputimgs, states, ctrls)
                     encsamples, transsamples = torch.cat(encsamples, 1), torch.cat(transsamples, 1)
+                print(encsamples.size(), transsamples.size())
 
                 ### Get the images from the encoder states & transition model states
                 encdecimgs, transdecimgs = [decimgs[0]], decimgs[1:]

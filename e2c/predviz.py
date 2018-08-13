@@ -274,7 +274,6 @@ def main():
         # todo: print some summary stats for each model
         # todo: create some matplotlib plots from these stats
         plkeys = [key for key, _ in stats[next(iter(stats))].items()]
-        print(plkeys)
         for k in range(len(plkeys)):
             # Setup plot figure
             plt.figure(100+k)
@@ -290,6 +289,9 @@ def main():
                     'vargs': vargs,
                     'exids': exampleids}, vargs.save_dir + "/predvizstats.pth.tar")
 
+        # Sleep for a while
+        sys.sleep(1000)
+        
 ################ RUN MAIN
 if __name__ == '__main__':
     main()

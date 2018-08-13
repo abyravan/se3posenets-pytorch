@@ -180,7 +180,8 @@ def main():
         idseq = list(np.arange(0, vargs.num_examples, vargs.batch_size))
         if idseq[-1] != vargs.num_examples:
             idseq.append(vargs.num_examples)
-        bsz, nex, seq = vargs.batch_size, vargs.num_examples, pts_f.size(1)
+        bsz, nex, seq = min(vargs.batch_size, vargs.num_examples),\
+                        vargs.num_examples, pts_f.size(1)
 
         ####### Run a forward pass through the networks for predictions
         stats = {}

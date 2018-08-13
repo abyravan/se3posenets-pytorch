@@ -202,7 +202,7 @@ def main():
             for j in range(len(idseq)-1):
                 # Choose the examples
                 st, ed = idseq[j], idseq[j+1]
-                bsz = ed-st
+                bsz = int(ed-st)
 
                 # Push to CUDA
                 states, ctrls         = states_f[st:ed].to(device), ctrls_f[st:ed].to(device)

@@ -1,0 +1,9 @@
+---
+# Dataset options
+model-dict:   {"1step": "trained_nets/e2c/nonlin/simdata/deterministic/def_step2_seq1/model_best.pth.tar", "3step": "trained_nets/e2c/nonlin/simdata/deterministic/def_step2_seq3/model_best.pth.tar", "5step": "trained_nets/e2c/nonlin/simdata/deterministic/def_step2_seq5/model_best.pth.tar", "7step": "trained_nets/e2c/nonlin/simdata/deterministic/def_step2_seq7/model_best.pth.tar"}
+batch-size:   16
+num-examples: 100
+seq-len:      25
+data-key:     val
+jt-mean-thresh: 1e-3
+save-dir:     trained_nets/e2c/nonlin/simdata/deterministic/predvizres

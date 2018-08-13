@@ -271,9 +271,13 @@ def main():
             ### Save stats
             stats[key] = MST
 
+        ### Save stuff to disk now
+        torch.save({'stats': stats,
+                    'vargs': vargs,
+                    'exids': exampleids}, vargs.save_dir + "/predvizstats.pth.tar")
+
         # todo: print some summary stats for each model
         plkeys = [key for key, _ in stats[next(iter(stats))].items()]
-        plt.ion()
         for k in range(len(plkeys)):
             # Setup plot figure
             plt.figure(100+k)
@@ -284,14 +288,6 @@ def main():
             plt.legend()
             plt.title(plkeys[k])
         plt.show()
-
-        ### Save stuff to disk now
-        torch.save({'stats': stats,
-                    'vargs': vargs,
-                    'exids': exampleids}, vargs.save_dir + "/predvizstats.pth.tar")
-
-        # Sleep for a while
-        time.sleep(1000)
 
 ################ RUN MAIN
 if __name__ == '__main__':

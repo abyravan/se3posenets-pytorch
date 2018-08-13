@@ -231,8 +231,8 @@ def main():
 
                 ### Measure image errors to target image
                 tarimg = outputimgs[:,-1:]
-                MST['encimgerrs_t'][st:ed] = (encdecimgs - tarimg.expand_as(encdecimgs)).pow(2).view(bsz, seq, -1).mean(2).cpu()
-                MST['transimgerrs'][st:ed] = (transdecimgs - tarimg.expand_as(transdecimgs)).pow(2).view(bsz, seq-1, -1).mean(2).cpu()
+                MST['encimgerrs_t'][st:ed]   = (encdecimgs - tarimg.expand_as(encdecimgs)).pow(2).view(bsz, seq, -1).mean(2).cpu()
+                MST['transimgerrs_t'][st:ed] = (transdecimgs - tarimg.expand_as(transdecimgs)).pow(2).view(bsz, seq-1, -1).mean(2).cpu()
 
                 ### Measure errors between encstates/transstates
                 tarsample           = encsamples[:,-1:]

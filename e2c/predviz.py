@@ -272,8 +272,8 @@ def main():
             stats[key] = MST
 
         # todo: print some summary stats for each model
-        # todo: create some matplotlib plots from these stats
         plkeys = [key for key, _ in stats[next(iter(stats))].items()]
+        plt.ion()
         for k in range(len(plkeys)):
             # Setup plot figure
             plt.figure(100+k)
@@ -283,6 +283,7 @@ def main():
                 plt.plot(mean, label=key)
             plt.legend()
             plt.title(plkeys[k])
+        plt.show()
 
         ### Save stuff to disk now
         torch.save({'stats': stats,

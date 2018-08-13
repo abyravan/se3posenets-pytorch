@@ -170,8 +170,7 @@ def main():
         # Stack data
         pts_f, rgbs_f, states_f, ctrls_f = torch.stack(pts_f, 0), torch.stack(rgbs_f, 0), \
                                            torch.stack(states_f, 0), torch.stack(ctrls_f, 0)
-        print(pts_f.size())
-        
+
         # Setup image inputs/outputs based on provided type (B x S x C x H x W)
         inputimgs_f  = e2chelpers.concat_image_data(pts_f, rgbs_f, args.enc_img_type)
         outputimgs_f = e2chelpers.concat_image_data(pts_f, rgbs_f, args.dec_img_type)
@@ -212,12 +211,11 @@ def main():
                 if args.deterministic:
                     encstates, transstates, decimgs = \
                         model.forward(inputimgs, states, ctrls)
-                    encsamples, transsamples = torch.cat(encstates, 1), torch.cat(transstates, 1) # B x S x H
+                    encsamples, transsamples = torch.stack(encstates, 1), torch.stack(transstates, 1) # B x S x H
                 else:
                     encdists, encsamples, transdists, transsamples, decimgs = \
                         model.forward(inputimgs, states, ctrls)
-                    encsamples, transsamples = torch.cat(encsamples, 1), torch.cat(transsamples, 1)
-                print(encsamples.size(), transsamples.size())
+                    encsamples, transsamples = torch.stack(encsamples, 1), torch.stack(transsamples, 1)
 
                 ### Get the images from the encoder states & transition model states
                 encdecimgs, transdecimgs = [decimgs[0]], decimgs[1:]

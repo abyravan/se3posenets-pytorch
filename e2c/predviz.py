@@ -180,8 +180,7 @@ def main():
         idseq = list(np.arange(0, vargs.num_examples, vargs.batch_size))
         if idseq[-1] != vargs.num_examples:
             idseq.append(vargs.num_examples)
-        bsz, nex, seq = min(vargs.batch_size, vargs.num_examples),\
-                        vargs.num_examples, pts_f.size(1)
+        nex, seq = vargs.num_examples, pts_f.size(1)
 
         ####### Run a forward pass through the networks for predictions
         stats = {}
@@ -203,6 +202,7 @@ def main():
             for j in range(len(idseq)-1):
                 # Choose the examples
                 st, ed = idseq[j], idseq[j+1]
+                bsz = ed-st
 
                 # Push to CUDA
                 states, ctrls         = states_f[st:ed].to(device), ctrls_f[st:ed].to(device)

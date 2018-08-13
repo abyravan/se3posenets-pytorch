@@ -290,8 +290,8 @@ def main():
                     'exids': exampleids}, vargs.save_dir + "/predvizstats.pth.tar")
 
         # Sleep for a while
-        sys.sleep(1000)
-        
+        time.sleep(1000)
+
 ################ RUN MAIN
 if __name__ == '__main__':
     main()

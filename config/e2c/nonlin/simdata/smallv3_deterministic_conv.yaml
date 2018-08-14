@@ -1,0 +1,65 @@
+---
+# Dataset options
+data:         [/home/barun/Projects/blocks/data/simdata/small_blocks_v3/]
+batch-size:   16
+num-workers:  8
+train-per:    0.6
+val-per:      0.15
+step-len:     2
+seq-len:      1
+ctrl-type:    actdiffvel
+use-failures: True
+robot:        yumi
+#gripper-ctrl-type: vel # not used
+half-res-data: True
+remove-static-examples: True
+
+# Encoder/Decoder options
+enc-img-type:      rgbd
+dec-img-type:      rgbd
+enc-inp-state:     True
+dec-pred-state:    False
+dec-pred-norm-rgb: False
+conv-enc-dec:      True
+
+# Transition model options
+trans-setting:     samp2samp
+trans-pred-deltas: True
+trans-model-type:  nonlin
+
+# General model options
+norm-type:    bn
+nonlin-type:  prelu
+wide-model:   False
+coord-conv:   False
+deterministic: True
+
+# Loss options
+recons-loss-type: mse
+recons-wt:        10.0
+varkl-wt:         1.0
+transenckl-wt:    0.1
+aerecons-wt:      0.0
+loss-scale:       1.0
+
+# Training options
+no-cuda:        False
+epochs:         30
+start-epoch:    0
+train-ipe:      5000
+val-ipe:        2500
+evaluate:       False
+seed:           100
+
+# Optimization options
+optimization: rmsprop
+lr:           1e-4
+momentum:     0
+weight-decay: 1e-4
+lr-decay:     0.1
+decay-epochs: 15
+min-lr:       1e-5
+
+# Display/Save options
+disp-freq: 50
+save-dir:  trained_nets/e2c/nonlin/simdata/deterministic_smallv3/step2_seq1_bn

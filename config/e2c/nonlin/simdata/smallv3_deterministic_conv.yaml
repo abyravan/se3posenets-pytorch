@@ -37,8 +37,8 @@ deterministic: True
 # Loss options
 recons-loss-type: mse
 recons-wt:        10.0
-varkl-wt:         1.0
-transenckl-wt:    0.1
+varkl-wt:         0.0
+transenckl-wt:    1.0
 aerecons-wt:      0.0
 loss-scale:       1.0
 
@@ -62,4 +62,4 @@ min-lr:       1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/e2c/nonlin/simdata/deterministic_smallv3/step2_seq1_bn
+save-dir:  trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq1_conv_bn

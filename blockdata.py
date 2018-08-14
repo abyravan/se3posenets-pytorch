@@ -133,7 +133,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
 
         # Print stats
         print('Found {}/{} valid motions ({}/{}, {}% valid examples) in dataset: {}'.format(len(numvaliddata), len(files),
-                       sum(numvaliddata), numdata, sum(numvaliddata) * (1.0/numdata), load_dir))
+                       sum(numvaliddata), numdata, sum(numvaliddata) * (100.0/numdata), load_dir))
 
         # Setup training and test splits in the dataset, here we actually split based on the h5s
         nfiles = len(filenames)

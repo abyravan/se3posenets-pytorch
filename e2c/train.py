@@ -501,7 +501,7 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
         print('\tStep: {}, Recons: {:.3f} ({:.3f}), '
               'Var-KL: {:.3f} ({:.4f}), '
               'TransEnc-KL => {:.3f} ({:.3f}), '
-              'Recons: {:.3f} ({:.3f})'
+              'AE-Recons: {:.3f} ({:.3f})'
             .format(
             1 + k * args.step_len,
             stats.reconsloss.val[k], stats.reconsloss.avg[k],

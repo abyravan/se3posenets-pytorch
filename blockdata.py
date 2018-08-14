@@ -119,7 +119,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
                         st, ed = k, k + int(step_len * seq_len)
                         seq = list(np.arange(st, ed + 1, step_len))
                         statediff = (jtstates[seq[1:]] - jtstates[seq[:-1]]).abs().mean(1).gt(1e-3)
-                        if statediff.sum() < seq_len-1: # Allow for one near zero example in sequence
+                        if statediff.sum() < max(seq_len-1, 1): # Allow for one near zero example in sequence
                             continue
                         validids.append(k) # Accept this example
                 else:

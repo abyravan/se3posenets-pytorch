@@ -261,6 +261,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats = argparse.Namespace()
     stats.loss, stats.reconsloss                = util.AverageMeter(), util.AverageMeter()
     stats.varklloss, stats.transencklloss       = util.AverageMeter(), util.AverageMeter()
+    stats.aereconsloss                          = util.AverageMeter()
     stats.data_ids = []
 
     # Switch model modes
@@ -275,6 +276,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Setup loss weights & functions
     recons_wt, varkl_wt = args.recons_wt * args.loss_scale, args.varkl_wt * args.loss_scale
     transenckl_wt       = args.transenckl_wt * args.loss_scale
+    aerecons_wt         = args.aerecons_wt * args.loss_scale
     recons_loss_fn      = e2chelpers.get_loss_function(args.recons_loss_type)
 
     # Run an epoch
@@ -318,6 +320,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Compute losses
         loss, reconsloss, varklloss, transencklloss = 0, torch.zeros(args.seq_len+1), \
                               torch.zeros(args.seq_len+1), torch.zeros(args.seq_len)
+        aereconsloss = torch.zeros(args.seq_len) # Not for t = 0
         for k in range(args.seq_len+1):
             # Reconstruction loss between decoded images & true images
             currreconsloss = recons_wt * recons_loss_fn(decimgs[k], outputimgs[:,k]) # Output imgs are B x (S+1)
@@ -345,13 +348,26 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 currtransencklloss = 0
 
+            # Auto-encoder reconstruction loss (for encoder states from t=1 to t=N)
+            if (k > 0) and (aerecons_wt > 0):
+                # Decode images from the encoder states (from t = 1 to t = N)
+                aedecinp = encstates[k] if args.deterministic else encsamples[k]
+                aedecimg = model.decoder.forward(aedecinp)
+
+                # Reconstruction loss between auto-encoder style decoded images & true images
+                curraereconsloss = aerecons_wt * recons_loss_fn(aedecimg, outputimgs[:,k])  # Output imgs are B x (S+1)
+                aereconsloss[k-1]  = curraereconsloss.item()
+            else:
+                curraereconsloss = 0
+
             # Append to total loss
-            loss += currreconsloss + currvarklloss + currtransencklloss
+            loss += currreconsloss + currvarklloss + currtransencklloss + curraereconsloss
 
         # Update stats
         stats.reconsloss.update(reconsloss)
         stats.varklloss.update(varklloss)
         stats.transencklloss.update(transencklloss)
+        stats.aereconsloss.update(aereconsloss)
         stats.loss.update(loss.item())
 
         # Measure FWD time
@@ -401,9 +417,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                 iterct = data_loader.iteration_count()  # Get total number of iterations so far
                 info = {
                     mode + '-loss'          : loss.item(),
-                    mode + '-reconsloss'    : reconsloss.sum() / bsz,
-                    mode + '-varklloss'     : varklloss.sum() / bsz,
-                    mode + '-transencklloss': transencklloss.sum() / bsz,
+                    mode + '-reconsloss'    : reconsloss.mean(),
+                    mode + '-varklloss'     : varklloss.mean(),
+                    mode + '-transencklloss': transencklloss.mean(),
+                    mode + '-aereconsloss'  : aereconsloss.mean(),
                 }
                 if mode == 'train':
                     info[mode + '-lr'] = args.curr_lr  # Plot current learning rate
@@ -484,12 +501,15 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
         print('\tStep: {}, Recons: {:.3f} ({:.3f}), '
               'Var-KL: {:.3f} ({:.4f}), '
               'TransEnc-KL => {:.3f} ({:.3f}), '
+              'Recons: {:.3f} ({:.3f})'
             .format(
             1 + k * args.step_len,
             stats.reconsloss.val[k], stats.reconsloss.avg[k],
             stats.varklloss.val[k], stats.varklloss.avg[k],
             stats.transencklloss.val[k-1] if (k > 0) else 0,
             stats.transencklloss.avg[k-1] if (k > 0) else 0,
+            stats.aereconsloss.val[k-1] if (k > 0) else 0,
+            stats.aereconsloss.avg[k-1] if (k > 0) else 0,
         ))
 
 ################ RUN MAIN

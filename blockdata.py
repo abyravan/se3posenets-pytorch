@@ -82,7 +82,7 @@ def create_rotz_np(theta):
 ############
 ##### Helper functions for reading the data directories & loading train/test files
 def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=0.15,
-                           use_failures=True):
+                           use_failures=True, remove_static_examples=False):
     # Get all the load directories
     assert (train_per + val_per <= 1)  # Train + val + test <= 1
 
@@ -91,7 +91,7 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
     for load_dir in load_dirs:
         # Get h5 file names & number of examples
         files = os.listdir(load_dir)
-        filenames, numdata, numvalid = [], [], 0
+        filenames, numvaliddata, validdataids, numdata = [], [], [], 0
         for file in files:
             # Discard non-valid files
             if file.find('.h5') == -1:
@@ -103,16 +103,37 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
             max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows
             with h5py.File(os.path.join(load_dir, file), 'r') as h5data:
                 # Get number of examples from that h5
-                nexamples = len(h5data['images_rgb']) - max_flow_step # We only have flows for these many images!
+                nexamples = len(h5data['images_rgb']) - max_flow_step  # We only have flows for these many images!
                 if (nexamples < 1):
                     continue
+
+                # Get the joint angles and filter examples where the joints don't move
+                # This function checks all examples "apriori" to see if they are valid
+                # and returns a set of ids such that the sequence of examples from that id
+                # to id + seq*step are valid
+                if remove_static_examples:
+                    validids = []
+                    arm_r_idx = [1, 3, 5, 7, 9, 11, 13]  # No gripper (right)
+                    jtstates  = torch.from_numpy(h5data['robot_positions'][:, arm_r_idx]).float()
+                    for k in range(nexamples):
+                        st, ed = k, k + int(step_len * seq_len)
+                        seq = list(np.arange(st, ed + 1, step_len))
+                        statediff = (jtstates[seq[1:]] - jtstates[seq[:-1]]).abs().mean(1).gt(1e-3)
+                        if statediff.sum() < seq_len-1: # Allow for one near zero example in sequence
+                            continue
+                        validids.append(k) # Accept this example
+                else:
+                    validids = range(0, nexamples)  # Is just the same as ids, all samples are valid
+
                 # Valid training motion
-                numdata.append(nexamples)
+                numdata += nexamples
+                numvaliddata.append(len(validids))
+                validdataids.append(validids)
                 filenames.append(file)
 
         # Print stats
-        print('Found {}/{} valid motions ({} examples) in dataset: {}'.format(len(numdata), len(files), # -1 for .DS_Store
-                                                                              sum(numdata), load_dir))
+        print('Found {}/{} valid motions ({}/{}, {}% valid examples) in dataset: {}'.format(len(numvaliddata), len(files),
+                       sum(numvaliddata), numdata, sum(numvaliddata) * (1.0/numdata), load_dir))
 
         # Setup training and test splits in the dataset, here we actually split based on the h5s
         nfiles = len(filenames)
@@ -120,27 +141,28 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
         nfilestest = int(nfiles - (nfilestrain + nfilesval)) # Rest files are for testing
 
         # Get number of images in the datasets
-        nexamples = sum(numdata)
-        ntrain = sum(numdata[:nfilestrain]) # Num images for training
-        nval   = sum(numdata[nfilestrain:nfilestrain+nfilesval]) # Validation
-        ntest  = nexamples - (ntrain + nval) # Number of test images
+        nvalidexamples = sum(numvaliddata)
+        ntrain = sum(numvaliddata[:nfilestrain]) # Num images for training
+        nval   = sum(numvaliddata[nfilestrain:nfilestrain+nfilesval]) # Validation
+        ntest  = nvalidexamples - (ntrain + nval) # Number of test images
         print('\tNum train: {} ({}), val: {} ({}), test: {} ({})'.format(
             nfilestrain, ntrain, nfilesval, nval, nfilestest, ntest))
 
         # Setup the dataset structure
-        numdata.insert(0, 0)  # Add a zero in front for the cumsum
+        numvaliddata.insert(0, 0)  # Add a zero in front for the cumsum
         dataset = {'path'   : load_dir,
                    'step'   : step_len,
                    'seq'    : seq_len,
-                   'numdata': nexamples,
+                   'numdata': nvalidexamples,
                    'train'  : [0, ntrain - 1],
                    'val'    : [ntrain, ntrain + nval - 1],
-                   'test'   : [ntrain + nval, nexamples - 1],
-                   'files'  : {'names': filenames,
-                               'datahist': np.cumsum(numdata),
-                               'train': [0, nfilestrain - 1],
-                               'val': [nfilestrain, nfilestrain + nfilesval - 1],
-                               'test': [nfilestrain + nfilesval, nfiles - 1]},
+                   'test'   : [ntrain + nval, nvalidexamples - 1],
+                   'files'  : {'names'   : filenames,
+                               'ids'     : validdataids,
+                               'datahist': np.cumsum(numvaliddata),
+                               'train'   : [0, nfilestrain - 1],
+                               'val'     : [nfilestrain, nfilestrain + nfilesval - 1],
+                               'test'    : [nfilestrain + nfilesval, nfiles - 1]},
                    }
 
         ##### Setup camera intrinsics and extrinsics
@@ -193,12 +215,16 @@ def generate_block_sequence(dataset, idx):
         # Update the ID and path so that we get the correct images
         id   = idx - dataset['files']['datahist'][did] # ID of "first" image within the file
         path = dataset['path'] + '/' + dataset['files']['names'][did] # Get the path of the file
+        # Valid ID
+        vid = dataset['files']['ids'][did][id] # Start ID (based on valid ids, if all are valid, it will be = id, else different)
+        st, ed = vid, vid + (step * seq)
     else:
         assert(False) # TODO: For real data, check this to make sure things are right
         id   = dataset['ids'][idx] # Select from the list of valid ids
         path = dataset['path'] # Root of dataset
+        st, ed = id, id + (step * seq)
+
     # Setup start/end IDs of the sequence
-    st, ed = id, id + (step * seq)
     sequence = list(np.arange(st, ed+1, step))
     return sequence, path, int(did)
 
@@ -261,10 +287,10 @@ def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yu
         ##### Get joint state and controls
         dt = step_len * (1.0/30.0)
         if robot == 'yumi':
-            # Indices for extracting current position with gripper, arm, etc. when
+            # Indices for extracting current arm position (excluding gripper). When
             # computing the state and controls for YUMI robot.
-            arm_l_idx = [0, 2, 4, 6, 8, 10, 12, 15] # Last ID is gripper (left)
-            arm_r_idx = [1, 3, 5, 7, 9, 11, 13, 14] # Last ID is gripper (right)
+            arm_l_idx = [0, 2, 4, 6, 8, 10, 12] #, 15] # Last ID is gripper (left)
+            arm_r_idx = [1, 3, 5, 7, 9, 11, 13] #, 14] # Last ID is gripper (right)
 
             # Get joint angles of right arm and gripper
             states   = torch.from_numpy(h5data['robot_positions'][seq][:, arm_r_idx]).float()
@@ -277,16 +303,16 @@ def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yu
             else:
                 assert False, "Unknown control type input for the YUMI: {}".format(ctrl_type)
 
-            # Gripper control
-            if gripper_ctrl_type == 'vel':
-                pass # This is what we have already
-            elif gripper_ctrl_type == 'compos':
-                ming, maxg = 0.015, 0.025 # Min/Max gripper positions
-                gripper_cmds = (torch.from_numpy(h5data['right_gripper_cmd'][seq[:-1]]) - ming) / (maxg - ming)
-                gripper_cmds.clamp_(0,1) # Normalize and clamp to 0/1
-                controls[:,-1] = gripper_cmds # Update the gripper controls to be the actual position commands
-            else:
-                assert False, "Unknown gripper control type input for the YUMI: {}".format(gripper_ctrl_type)
+            # # Gripper control
+            # if gripper_ctrl_type == 'vel':
+            #     pass # This is what we have already
+            # elif gripper_ctrl_type == 'compos':
+            #     ming, maxg = 0.015, 0.025 # Min/Max gripper positions
+            #     gripper_cmds = (torch.from_numpy(h5data['right_gripper_cmd'][seq[:-1]]) - ming) / (maxg - ming)
+            #     gripper_cmds.clamp_(0,1) # Normalize and clamp to 0/1
+            #     controls[:,-1] = gripper_cmds # Update the gripper controls to be the actual position commands
+            # else:
+            #     assert False, "Unknown gripper control type input for the YUMI: {}".format(gripper_ctrl_type)
         else:
             assert False, "Unknown robot type input: {}".format(robot)
 
@@ -459,7 +485,7 @@ def parse_options_and_setup_block_dataset_loader(args):
 
     # YUMI robot
     if args.robot == "yumi":
-        args.num_ctrl = 8
+        args.num_ctrl = 7 # Exclude the gripper now
         args.img_ht, args.img_wd = 240, 320
         print("Img ht: {}, Img wd: {}, Num ctrl: {}".format(args.img_ht, args.img_wd, args.num_ctrl))
     else:
@@ -478,7 +504,10 @@ def parse_options_and_setup_block_dataset_loader(args):
         print("Adding noise to the depths")
         noise_func = lambda d: data.add_edge_based_noise(d, zthresh=0.04, edgeprob=0.35,
                                                          defprob=0.005, noisestd=0.005)
-    # TODO: Validity checking (dt threshold, right/left still stuff for real data)
+
+    # Validity checker
+    if args.remove_static_examples:
+        print('Removing examples where the arm is static (this also excludes examples with just gripper motion)')
 
     ### Load functions
     block_data = read_block_sim_dataset(args.data,
@@ -486,7 +515,8 @@ def parse_options_and_setup_block_dataset_loader(args):
                                         seq_len=args.seq_len,
                                         train_per=args.train_per,
                                         val_per=args.val_per,
-                                        use_failures=args.use_failures)
+                                        use_failures=args.use_failures,
+                                        remove_static_examples=args.remove_static_examples)
     disk_read_func = lambda d, i: read_block_sequence_from_disk(d, i, ctrl_type=args.ctrl_type, robot=args.robot,
                                                                 gripper_ctrl_type=args.gripper_ctrl_type,
                                                                 compute_bwdflows=False,
@@ -592,6 +622,7 @@ if __name__ == '__main__':
     args.add_noise = False
     args.train_per, args.val_per = 0.6, 0.15
     args.use_failures = False
+    args.remove_static_examples = True
     args.ctrl_type, args.robot, args.gripper_ctrl_type = 'actdiffvel', 'yumi', 'compos'
 
     # Setup datasets

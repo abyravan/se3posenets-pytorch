@@ -46,6 +46,65 @@ def kl_normal_normal(p, q):
     else:
         return torch.distributions.kl._kl_normal_normal(p, q)
 
+#################
+### Basic Conv + Pool + BN + Non-linearity structure
+class BasicConv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, use_pool=False, norm_type='bn', nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
+        super(BasicConv2D, self).__init__()
+        if coord_conv:
+            self.conv = ctrlnets.CoordConv(in_channels, out_channels, **kwargs)
+        else:
+            self.conv = nn.Conv2d(in_channels, out_channels, **kwargs)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2) if use_pool else None
+        if norm_type == 'bn':
+            self.norm = nn.BatchNorm2d(out_channels, eps=0.001)
+        elif norm_type == 'in':
+            self.norm = nn.InstanceNorm2d(out_channels)
+        elif norm_type == 'ln':
+            self.norm = nn.LayerNorm((out_channels, out_channels))
+        else:
+            self.norm = None
+        self.nonlin = ctrlnets.get_nonlinearity(nonlinearity)
+
+    # Convolution -> Pool -> BN -> Non-linearity
+    def forward(self, x):
+        x = self.conv(x)
+        if self.pool:
+            x = self.pool(x)
+        if self.norm:
+            x = self.norm(x)
+        return self.nonlin(x)
+
+### Basic Deconv + (Optional Skip-Add) + BN + Non-linearity structure
+class BasicDeconv2D(nn.Module):
+    def __init__(self, in_channels, out_channels, norm_type='bn', nonlinearity='prelu',
+                 coord_conv=False, **kwargs):
+        super(BasicDeconv2D, self).__init__()
+        if coord_conv:
+            self.deconv = ctrlnets.CoordConvT(in_channels, out_channels, **kwargs)
+        else:
+            self.deconv = nn.ConvTranspose2d(in_channels, out_channels, **kwargs)
+        if norm_type == 'bn':
+            self.norm = nn.BatchNorm2d(out_channels, eps=0.001)
+        elif norm_type == 'in':
+            self.norm = nn.InstanceNorm2d(out_channels)
+        elif norm_type == 'ln':
+            self.norm = nn.LayerNorm((out_channels, out_channels))
+        else:
+            self.norm = None
+        self.nonlin = ctrlnets.get_nonlinearity(nonlinearity)
+
+    # BN -> Non-linearity -> Deconvolution -> (Optional Skip-Add)
+    def forward(self, x, y=None):
+        if y is not None:
+            x = self.deconv(x) + y  # Skip-Add the extra input
+        else:
+            x = self.deconv(x)
+        if self.norm:
+            x = self.norm(x)
+        return self.nonlin(x)
+
 #############################
 ##### Create Encoder
 class Encoder(nn.Module):
@@ -55,14 +114,13 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
 
         # Normalization
-        assert norm_type == 'bn', "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        assert (norm_type in ['none', 'bn', 'ln', 'in']),  "Unknown normalization type input: {}".format(norm_type)
 
         # Coordinate convolution
         if coord_conv:
             print('[Encoder] Using co-ordinate convolutional layers')
-        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
-                                                          coord_conv=coord_conv, **v)
+        ConvType = lambda x, y, **v: BasicConv2D(in_channels=x, out_channels=y,
+                                                 coord_conv=coord_conv, **v)
 
         # Input type
         print("[Encoder] Input image type: {}, Normalization type: {}, Nonliearity: {}".format(
@@ -89,7 +147,7 @@ class Encoder(nn.Module):
         kern = [9,7,5,3,3] # Kernel sizes
         self.imgencoder = nn.Sequential(
             *[ConvType(chn[k], chn[k+1], kernel_size=kern[k], stride=1, padding=kern[k]//2,
-                      use_pool=True, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
+                      use_pool=True, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
         )
 
         ###### Encode state information (jt angles, gripper position)
@@ -119,10 +177,10 @@ class Encoder(nn.Module):
             chn_out = [sdim[-1]+chn[-1], 256, 128, 64, 32] if wide_model else [sdim[-1]+chn[-1], 128, 64, 32, 16]
             pool = [True, False, False, False] # Pooling only for first layer to bring to 3x5
             nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none'] # No non linearity for last layer
-            bn = [use_bn, use_bn, use_bn, False] # No batch norm for last layer
+            norm   = [norm_type, norm_type, norm_type, 'none'] # No batch norm for last layer
             self.outencoder = nn.Sequential(
                 *[ConvType(chn_out[k], chn_out[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=pool[k], use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
+                           use_pool=pool[k], norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
             )
             self.outdim = [chn_out[-1], 3, 5] if self.deterministic else [chn_out[-1]//2, 3, 5]
         else:
@@ -205,16 +263,15 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
 
         # Normalization
-        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        assert (norm_type in ['none', 'bn', 'ln', 'in']), "Unknown normalization type input: {}".format(norm_type)
 
         # Coordinate convolution
         if coord_conv:
             print('[Decoder] Using co-ordinate convolutional layers')
-        ConvType   = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
-                                                            coord_conv=coord_conv, **v)
-        DeconvType = lambda x, y, **v: ctrlnets.BasicDeconv2D(in_channels=x, out_channels=y,
-                                                              coord_conv=coord_conv, **v)
+        ConvType   = lambda x, y, **v: BasicConv2D(in_channels=x, out_channels=y,
+                                                   coord_conv=coord_conv, **v)
+        DeconvType = lambda x, y, **v: BasicDeconv2D(in_channels=x, out_channels=y,
+                                                     coord_conv=coord_conv, **v)
 
         # Output type
         print("[Decoder] Output image type: {}, Normalization type: {}, Nonliearity: {}".format(
@@ -245,12 +302,12 @@ class Decoder(nn.Module):
         chn = [128, 128, 64, 32, 32, output_channels] if wide_model else [64, 64, 32, 16, 16, output_channels]  # Num channels
         kern = [(3,4), 4, 6, 6, 8]  # Kernel sizes
         padd = [(0,1), 1, 2, 2, 3]  # Padding
-        bn   = [use_bn, use_bn, use_bn, use_bn, False] # No batch norm for last layer (output)
+        norm = [norm_type, norm_type, norm_type, norm_type, 'none'] # No batch norm for last layer (output)
         nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none'] # No non-linearity last layer (output)
         self.idecdim = [chn[0], 7, 10]
         self.imgdecoder = nn.Sequential(
             *[DeconvType(chn[k], chn[k+1], kernel_size=kern[k], stride=2, padding=padd[k],
-                         use_bn= bn[k], nonlinearity=nonlin[k])
+                         norm_type= norm[k], nonlinearity=nonlin[k])
               for k in range(len(chn)-1)]
         )
 
@@ -283,10 +340,10 @@ class Decoder(nn.Module):
             chn_in = [16, 32, 64, 128, chn[0]] if wide_model else [8, 16, 32, 64, chn[0]]
             self.hsdecoder = nn.Sequential(
                 *[ConvType(chn_in[k], chn_in[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn_in)-2)], # Leave out last layer
+                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(chn_in)-2)], # Leave out last layer
                 nn.UpsamplingBilinear2d((7, 10)), # Upsample to (7,10)
                 ConvType(chn_in[3], chn_in[4], kernel_size=1, stride=1, padding=0,
-                         use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type), # 128 x 7 x 10
+                         use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type), # 128 x 7 x 10
             )
             self.hsdim = [chn_in[0], 3, 5]
         else:
@@ -366,8 +423,8 @@ class NonLinearTransitionModel(nn.Module):
         # Coordinate convolution
         if coord_conv:
             print('[Transition] Using co-ordinate convolutional layers')
-        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
-                                                          coord_conv=coord_conv, **v)
+        ConvType = lambda x, y, **v: BasicConv2D(in_channels=x, out_channels=y,
+                                                 coord_conv=coord_conv, **v)
 
         # Setup state encoder and decoder (conv vs FC)
         self.conv_net       = conv_net
@@ -377,23 +434,22 @@ class NonLinearTransitionModel(nn.Module):
         if conv_net:
             # Normalization
             print('[Transition] Using fully-convolutional transition network')
-            assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
-            use_bn = (norm_type == 'bn')
+            assert (norm_type in ['none', 'bn', 'ln', 'in']), "Unknown normalization type input: {}".format(norm_type)
 
             # Create 1x1 conv state encoder
             sedim = [in_dim[0], 32, 64, 128] if wide_model else [in_dim[0], 16, 32, 64]
             self.stateencoder = nn.Sequential(
                 *[ConvType(sedim[k], sedim[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(sedim)-1)],
+                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(sedim)-1)],
             )
 
             # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
             sddim = [sedim[-1]+cdim[-1], 128, 64, 32, out_dim[0]] if wide_model else [sedim[-1]+cdim[-1], 64, 32, 16, out_dim[0]]
             nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none']  # No non linearity for last layer
-            bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer
+            norm   = [norm_type, norm_type, norm_type, False]  # No batch norm for last layer
             self.statedecoder = nn.Sequential(
                 *[ConvType(sddim[k], sddim[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+                           use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
             )
         else:
             # Create FC state encoder
@@ -610,14 +666,13 @@ class ConvEncoder(nn.Module):
         super(ConvEncoder, self).__init__()
 
         # Normalization
-        assert norm_type == 'bn', "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        assert (norm_type in ['none', 'bn', 'ln', 'in']), "Unknown normalization type input: {}".format(norm_type)
 
         # Coordinate convolution
         if coord_conv:
             print('[Encoder] Using co-ordinate convolutional layers')
-        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
-                                                          coord_conv=coord_conv, **v)
+        ConvType = lambda x, y, **v: BasicConv2D(in_channels=x, out_channels=y,
+                                                 coord_conv=coord_conv, **v)
 
         # Input type
         print("[Encoder] Input image type: {}, Normalization type: {}, Nonliearity: {}".format(
@@ -651,7 +706,7 @@ class ConvEncoder(nn.Module):
             assert False, "Unknown image size input: {}".format(self.img_size)
         self.imgencoder = nn.Sequential(
             *[ConvType(chn[k], chn[k+1], kernel_size=kern[k], stride=1, padding=pad[k],
-                      use_pool=True, use_bn=use_bn, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
+                      use_pool=True, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(chn)-1)]
         )
 
         ###### Encode state information (jt angles, gripper position)
@@ -673,10 +728,10 @@ class ConvEncoder(nn.Module):
         out_chn = 64 if deterministic else 128 # Predict mean/var if not deterministic
         chn_out = [sdim[-1]+chn[-1], 128, out_chn]
         nonlin  = [nonlin_type, 'none'] # No non linearity for last layer
-        bn      = [use_bn, False]       # No batch norm for last layer
+        norm    = [norm_type, 'none']       # No batch norm for last layer
         self.outencoder = nn.Sequential(
             *[ConvType(chn_out[k], chn_out[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
         )
         self.outdim = [chn_out[-1], 8, 8] if deterministic else [chn_out[-1]//2, 8, 8]
 
@@ -736,14 +791,13 @@ class ConvDecoder(nn.Module):
         super(ConvDecoder, self).__init__()
 
         # Normalization
-        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        assert (norm_type in ['none', 'bn', 'ln', 'in']), "Unknown normalization type input: {}".format(norm_type)
 
         # Coordinate convolution
         if coord_conv:
             print('[Decoder] Using co-ordinate convolutional layers')
-        DeconvType = lambda x, y, **v: ctrlnets.BasicDeconv2D(in_channels=x, out_channels=y,
-                                                              coord_conv=coord_conv, **v)
+        DeconvType = lambda x, y, **v: BasicDeconv2D(in_channels=x, out_channels=y,
+                                                     coord_conv=coord_conv, **v)
 
         # Output type
         print("[Decoder] Output image type: {}, Normalization type: {}, Nonliearity: {}".format(
@@ -774,20 +828,20 @@ class ConvDecoder(nn.Module):
             chn = [input_size[0], 64, 64, 32, 32, output_channels] # Num channels
             kern = [(3,6), (4,6), 6, 6, 6] # Kernel sizes
             padd = [1, (1,0), 2, 2, 2] # Padding
-            bn = [use_bn, use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
+            norm = [norm_type, norm_type, norm_type, norm_type, 'none']  # No batch norm for last layer (output)
             nonlin = [nonlin_type, nonlin_type, nonlin_type, nonlin_type, 'none']  # No non-linearity last layer
         elif self.img_size == (128,128):
             print('[Decoder] Image size: {}, Using 4-deconv layers'.format(self.img_size))
             chn = [input_size[0], 64, 64, 32, output_channels] # Num channels
             kern = [4, 4, 6, 6] # Kernel sizes
             padd = [1, 1, 2, 2] # Padding
-            bn = [use_bn, use_bn, use_bn, False]  # No batch norm for last layer (output)
+            norm = [norm_type, norm_type, norm_type, 'none']  # No batch norm for last layer (output)
             nonlin = [nonlin_type, nonlin_type, nonlin_type, 'none']  # No non-linearity last layer
         else:
             assert False, "Unknown image size input: {}".format(self.img_size)
         self.imgdecoder = nn.Sequential(
             *[DeconvType(chn[k], chn[k+1], kernel_size=kern[k], stride=2, padding=padd[k],
-                         use_bn= bn[k], nonlinearity=nonlin[k])
+                         norm_type= norm[k], nonlinearity=nonlin[k])
               for k in range(len(chn)-1)]
         )
 
@@ -868,8 +922,8 @@ class ConvTransitionModel(nn.Module):
         # Coordinate convolution
         if coord_conv:
             print('[Transition] Using co-ordinate convolutional layers')
-        ConvType = lambda x, y, **v: ctrlnets.BasicConv2D(in_channels=x, out_channels=y,
-                                                          coord_conv=coord_conv, **v)
+        ConvType = lambda x, y, **v: BasicConv2D(in_channels=x, out_channels=y,
+                                                 coord_conv=coord_conv, **v)
 
         # Setup state encoder and decoder (conv vs FC)
         self.in_dim         = in_dim
@@ -878,25 +932,24 @@ class ConvTransitionModel(nn.Module):
 
         # Normalization
         print('[Transition] Using convolutional transition network')
-        assert (norm_type == 'bn') or (norm_type == 'none'), "Unknown normalization type input: {}".format(norm_type)
-        use_bn = (norm_type == 'bn')
+        assert (norm_type in ['none', 'bn', 'ln', 'in']), "Unknown normalization type input: {}".format(norm_type)
 
         # Create 1x1 conv state encoder
         sedim = [in_dim[0], 128, 128]
         nonlin = [nonlin_type, 'none']
-        bn     = [use_bn, False]
+        norm   = [norm_type, 'none']
         self.stateencoder = nn.Sequential(
             *[ConvType(sedim[k], sedim[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sedim)-1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sedim)-1)],
         )
 
         # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
         sddim = [sedim[-1]+cdim[-1], 128, 128, out_dim[0]]
         nonlin = [nonlin_type, nonlin_type, 'none']  # No non linearity for last layer
-        bn = [use_bn, use_bn, False]  # No batch norm for last layer
+        norm   = [norm_type, norm_type, 'none']  # No batch norm for last layer
         self.statedecoder = nn.Sequential(
             *[ConvType(sddim[k], sddim[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, use_bn=bn[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
         )
 
         # Prints

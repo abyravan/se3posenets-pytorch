@@ -40,6 +40,8 @@ def setup_common_options():
     # Block dataset options
     parser.add_argument('--use-failures', action='store_true', default=False,
                         help='Use examples where the task planner fails. (default: False)')
+    parser.add_argument('--remove-static-examples', action='store_true', default=False,
+                        help='Remove examples where the right arm is static (excludes gripper motion) (default: False)')
     parser.add_argument('--robot', default='yumi', type=str, metavar='STR',
                         help='Robot to use: [yumi] | baxter')
     parser.add_argument('--gripper-ctrl-type', default='vel', type=str, metavar='STR',
@@ -71,7 +73,7 @@ def setup_common_options():
 
     # General options
     parser.add_argument('--norm-type', default='bn', type=str,
-                        help='Type of norm to add to conv layers (none | [bn])')
+                        help='Type of norm to add to conv layers (none | [bn] | in)')
     parser.add_argument('--nonlin-type', default='prelu', type=str, metavar='NONLIN',
                         help='type of non-linearity to use: [prelu] | relu | tanh | sigmoid | elu | selu')
     parser.add_argument('--wide-model', action='store_true', default=False,
@@ -86,6 +88,8 @@ def setup_common_options():
                        help='Reconstruction loss type: [mse] | abs )')
     parser.add_argument('--recons-wt', default=1.0, type=float,
                        metavar='WT', help='Weight for the reconstruction loss (default: 1.0)')
+    parser.add_argument('--aerecons-wt', default=0.0, type=float,
+                        metavar='WT', help='Weight for the auto-encoder reconstruction loss (t=1-N) (default: 0.0)')
     parser.add_argument('--varkl-wt', default=1.0, type=float,
                        metavar='WT', help='Weight for the variational KL loss (default: 1.0)')
     parser.add_argument('--transenckl-wt', default=1.0, type=float,
@@ -164,10 +168,10 @@ def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yu
         ##### Get joint state and controls
         dt = step_len * (1.0/30.0)
         if robot == 'yumi':
-            # Indices for extracting current position with gripper, arm, etc. when
+            # Indices for extracting current arm position (excluding gripper). When
             # computing the state and controls for YUMI robot.
-            arm_l_idx = [0, 2, 4, 6, 8, 10, 12, 15] # Last ID is gripper (left)
-            arm_r_idx = [1, 3, 5, 7, 9, 11, 13, 14] # Last ID is gripper (right)
+            arm_l_idx = [0, 2, 4, 6, 8, 10, 12] #, 15] # Last ID is gripper (left)
+            arm_r_idx = [1, 3, 5, 7, 9, 11, 13] #, 14] # Last ID is gripper (right)
 
             # Get joint angles of right arm and gripper
             states   = torch.from_numpy(h5data['robot_positions'][seq][:, arm_r_idx]).float()
@@ -180,16 +184,16 @@ def read_block_sequence_from_disk(dataset, id, ctrl_type='actdiffvel', robot='yu
             else:
                 assert False, "Unknown control type input for the YUMI: {}".format(ctrl_type)
 
-            # Gripper control
-            if gripper_ctrl_type == 'vel':
-                pass # This is what we have already
-            elif gripper_ctrl_type == 'compos':
-                ming, maxg = 0.015, 0.025 # Min/Max gripper positions
-                gripper_cmds = (torch.from_numpy(h5data['right_gripper_cmd'][seq[:-1]]) - ming) / (maxg - ming)
-                gripper_cmds.clamp_(0,1) # Normalize and clamp to 0/1
-                controls[:,-1] = gripper_cmds # Update the gripper controls to be the actual position commands
-            else:
-                assert False, "Unknown gripper control type input for the YUMI: {}".format(gripper_ctrl_type)
+            # # Gripper control
+            # if gripper_ctrl_type == 'vel':
+            #     pass # This is what we have already
+            # elif gripper_ctrl_type == 'compos':
+            #     ming, maxg = 0.015, 0.025 # Min/Max gripper positions
+            #     gripper_cmds = (torch.from_numpy(h5data['right_gripper_cmd'][seq[:-1]]) - ming) / (maxg - ming)
+            #     gripper_cmds.clamp_(0,1) # Normalize and clamp to 0/1
+            #     controls[:,-1] = gripper_cmds # Update the gripper controls to be the actual position commands
+            # else:
+            #     assert False, "Unknown gripper control type input for the YUMI: {}".format(gripper_ctrl_type)
         else:
             assert False, "Unknown robot type input: {}".format(robot)
 
@@ -226,7 +230,7 @@ def parse_options_and_setup_block_dataset_loader(args):
 
     # YUMI robot
     if args.robot == "yumi":
-        args.num_ctrl = 8
+        args.num_ctrl = 7
         if args.half_res_data:
             args.img_ht, args.img_wd = 128, 128
         else:
@@ -235,6 +239,10 @@ def parse_options_and_setup_block_dataset_loader(args):
     else:
         assert False, "Unknown robot type input: {}".format(args.robot)
 
+    # Validity checker
+    if args.remove_static_examples:
+        print('Removing examples where the arm is static (this also excludes examples with just gripper motion)')
+
     ########################
     ### Load functions
     block_data = BD.read_block_sim_dataset(args.data,
@@ -242,7 +250,8 @@ def parse_options_and_setup_block_dataset_loader(args):
                                            seq_len=args.seq_len,
                                            train_per=args.train_per,
                                            val_per=args.val_per,
-                                           use_failures=args.use_failures)
+                                           use_failures=args.use_failures,
+                                           remove_static_examples=args.remove_static_examples)
     disk_read_func = lambda d, i: read_block_sequence_from_disk(d, i, ctrl_type=args.ctrl_type, robot=args.robot,
                                                                 gripper_ctrl_type=args.gripper_ctrl_type)
     train_dataset = BD.BlockSeqDataset(block_data, disk_read_func, 'train')  # Train dataset

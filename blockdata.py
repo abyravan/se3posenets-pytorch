@@ -125,6 +125,10 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
                 else:
                     validids = range(0, nexamples)  # Is just the same as ids, all samples are valid
 
+                # Discard this h5
+                if len(validids) == 0:
+                    continue
+
                 # Valid training motion
                 numdata += nexamples
                 numvaliddata.append(len(validids))

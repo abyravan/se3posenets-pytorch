@@ -198,7 +198,7 @@ def main():
             'train_iter' : num_train_iter,
             'model_state_dict' : model.state_dict(),
             'optimizer_state_dict' : optimizer.state_dict(),
-        }, is_best, savedir=args.save_dir, filename='checkpoint.pth.tar')
+        }, is_best, savedir=args.save_dir, filename='checkpoint{}.pth.tar'.format(epoch+1))
         print('\n')
 
     # Delete train and val data loaders
@@ -262,6 +262,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats.loss, stats.reconsloss                = util.AverageMeter(), util.AverageMeter()
     stats.varklloss, stats.transencklloss       = util.AverageMeter(), util.AverageMeter()
     stats.aereconsloss                          = util.AverageMeter()
+    stats.encstateerrs_t, stats.transstateerrs_t = util.AverageMeter(), util.AverageMeter()
     stats.data_ids = []
 
     # Switch model modes
@@ -397,6 +398,22 @@ def iterate(data_loader, model, tblogger, num_iters,
             # Start timer
             start = time.time()
 
+            # Compute errors that are relevant for control
+            # todo: matplotlib plots of all the sequence values saved as images and shown with tensorboard
+            encstateerrs_t, transstateerrs_t = torch.zeros(args.seq_len+1), torch.zeros(args.seq_len)
+            tarstate = encstates[-1] if args.deterministic else encsamples[-1] # Target state
+            for k in range(args.seq_len):
+                # Get the errors between transition model states and target encoder state
+                transstate          = transstates[k] if args.deterministic else transsamples[k]
+                transstateerrs_t[k] = (transstate - tarstate).pow(2).mean()
+
+                # Get the errors between encoder states and target encoder state
+                # NOTE: Last encstateerrs_t is always zero so we don't compute it
+                encstate            = encstates[k] if args.deterministic else encsamples[k]
+                encstateerrs_t[k]   = (encstate - tarstate).pow(2).mean()
+            stats.encstateerrs_t.update(encstateerrs_t)
+            stats.transstateerrs_t.update(transstateerrs_t)
+
             # Display/Print frequency
             bsz = pts.size(0)
             if i % args.disp_freq == 0:
@@ -417,10 +434,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                 iterct = data_loader.iteration_count()  # Get total number of iterations so far
                 info = {
                     mode + '-loss'          : loss.item(),
-                    mode + '-reconsloss'    : reconsloss.mean(),
-                    mode + '-varklloss'     : varklloss.mean(),
-                    mode + '-transencklloss': transencklloss.mean(),
-                    mode + '-aereconsloss'  : aereconsloss.mean(),
+                    mode + '-reconsloss'    : (reconsloss.mean() / recons_wt) if (recons_wt > 0) else 0,
+                    mode + '-varklloss'     : (varklloss.mean() / varkl_wt) if (varkl_wt > 0) else 0,
+                    mode + '-transencklloss': (transencklloss.mean() / transenckl_wt) if (transenckl_wt > 0) else 0,
+                    mode + '-aereconsloss'  : (aereconsloss.mean() / aerecons_wt) if (aerecons_wt > 0) else 0,
+                    mode + '-encstateerrs_t': encstateerrs_t.sum(),
+                    mode + '-transstateerrs_t': transstateerrs_t.sum()
                 }
                 if mode == 'train':
                     info[mode + '-lr'] = args.curr_lr  # Plot current learning rate
@@ -447,17 +466,19 @@ def iterate(data_loader, model, tblogger, num_iters,
                     if predrgbs[0] is not None:
                         predrgbs = torch.cat(predrgbs, 0).cpu().float() # (S+1) x 3 x ht x wd
                         gtrgbs   = rgbs[id].cpu().float()               # (S+1) x 3 x ht x wd
+                        diffrgbs = (predrgbs-gtrgbs).clamp_(-1.0,1.0).add_(1.0).mul_(0.5) # (S+1) x 3 x ht x wd
                         catrgbs  = torchvision.utils.make_grid(
-                            torch.cat([predrgbs, gtrgbs],0).view(-1,3,args.img_ht,args.img_wd),
+                            torch.cat([predrgbs, gtrgbs, diffrgbs],0).view(-1,3,args.img_ht,args.img_wd),
                             nrow=args.seq_len+1, normalize=True, range=(0.0, 1.0))
                         imginfo[mode+'-rgbs'] = util.to_np(catrgbs.unsqueeze(0))
 
                     if preddepths[0] is not None:
                         preddepths = torch.cat(preddepths, 0).cpu().float() # (S+1) x 1 x ht x wd
                         gtdepths   = pts[id,:,2:].cpu().float() / 3.0       # (S+1) x 1 x ht x wd
+                        diffdepths = (preddepths-gtdepths).clamp_(-1.0,1.0).add_(1.0).mul_(0.5) # (S+1) x 1 x ht x wd
                         catdepths  = torchvision.utils.make_grid(
-                            torch.cat([preddepths, gtdepths],0).view(-1,1,args.img_ht,args.img_wd).expand(
-                                (args.seq_len+1)*2,3,args.img_ht, args.img_wd),
+                            torch.cat([preddepths, gtdepths, diffdepths],0).view(-1,1,args.img_ht,args.img_wd).expand(
+                                (args.seq_len+1)*3,3,args.img_ht, args.img_wd),
                             nrow=args.seq_len+1, normalize=True, range=(0.0, 1.0))
                         imginfo[mode + '-depths'] = util.to_np(catdepths.unsqueeze(0))
 
@@ -500,8 +521,10 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     for k in range(args.seq_len+1):
         print('\tStep: {}, Recons: {:.3f} ({:.3f}), '
               'Var-KL: {:.3f} ({:.4f}), '
-              'TransEnc-KL => {:.3f} ({:.3f}), '
-              'AE-Recons: {:.3f} ({:.3f})'
+              'TransEnc-KL: {:.4f} ({:.4f}), '
+              'AE-Recons: {:.3f} ({:.3f}), '
+              'Enc-Sterr-T: {:.4f} ({:.4f}), '
+              'Trans-Sterr-T: {:.4f} ({:.4f})'
             .format(
             1 + k * args.step_len,
             stats.reconsloss.val[k], stats.reconsloss.avg[k],
@@ -510,6 +533,9 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.transencklloss.avg[k-1] if (k > 0) else 0,
             stats.aereconsloss.val[k-1] if (k > 0) else 0,
             stats.aereconsloss.avg[k-1] if (k > 0) else 0,
+            stats.encstateerrs_t.val[k], stats.encstateerrs_t.avg[k],
+            stats.transstateerrs_t.val[k-1] if (k > 0) else 0,
+            stats.transstateerrs_t.avg[k-1] if (k > 0) else 0,
         ))
 
 ################ RUN MAIN

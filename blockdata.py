@@ -102,6 +102,11 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
             # Read number of example images in the file
             max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows
             with h5py.File(os.path.join(load_dir, file), 'r') as h5data:
+                # Throw away file based on Jesse's test
+                validh5 = test_h5_validity(h5data)
+                if not validh5:
+                    continue
+
                 # Get number of examples from that h5
                 nexamples = len(h5data['images_rgb']) - max_flow_step  # We only have flows for these many images!
                 if (nexamples < 1):
@@ -205,6 +210,65 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
 
     # Return
     return datasets
+
+##### Check if a h5 file is valid (from Jesse's script: https://github.com/ybisk/LanguageToControl/blob/master/scripts/clean_h5_dir.py)
+# Disabled the rotation check as we have babbling data which might have block rotation
+def test_h5_validity(h5data):
+    ## Set some parameters
+    target_block_moved_epsilon = 0.1  # target block must move more than this (pilot july 24 showed 0.05 too small)
+    nontarget_block_moved_epsilon = 0.01  # non-target blocks must move less than this
+    #maximum_rotation_epsilon = 0.05  # change in quaternion distance from start to end position must not exceed this
+    max_scene_objects = 20
+
+    ## Check validity of h5
+    potential_targets = 0
+    moved_potential_nontargets = 0
+    block_fell = False
+    #rotated = False
+
+    ## From Chris: pose0 is table, pose1 is robot, pose-1 is junk.
+    ## From Chris: poseL for L a large value are robot links and should be ignored by this script.
+    for i in range(2, 2 + max_scene_objects):
+        varname = "pose%d" % i
+        if varname in h5data:
+            poses = np.array(h5data[varname])
+        else:
+            # poseN are sequential for 2,3,...,k for k the obstacle (if any) and (2, ..., k-1) the blocks.
+            # So if we don't see the next pose, we know there aren't any more.
+            break
+
+        if poses.shape[0] == 0:
+            # Block not instantiated.
+            continue
+        elif abs(poses[-1][0]) > 3 or abs(poses[-1][1] > 3):
+            # Block not on table.
+            continue
+        else:
+            first = poses[0][:3]  # x-,y-,z-coordinates
+            last = poses[-1][:3]
+            dist = np.linalg.norm(first - last)
+            if dist > target_block_moved_epsilon:
+                potential_targets += 1
+            elif dist > nontarget_block_moved_epsilon:
+                moved_potential_nontargets += 1
+
+            # If z-coordinate less than zero for an object on the table, the block fell.
+            if poses[-1][2] < 0:
+                block_fell = True
+
+            # q_first = Quaternion(poses[0][3:])
+            # q_last = Quaternion(poses[-1][3:])
+            # rot_dist = Quaternion.distance(q_first, q_last)
+            # rots.append(rot_dist)
+            # if rot_dist > maximum_rotation_epsilon:
+            #     rotated = True
+
+    ## Allows to only move target (or no object, in case the target is placed back where it was) & rejects cases where
+    ## the block falls down. No rotation check
+    if (potential_targets <= 1) and (moved_potential_nontargets == 0) and not block_fell: #and not rotated
+        return True
+    else:
+        return False
 
 ##### Generate the data files (with all the depth, flow etc.) for each sequence
 def generate_block_sequence(dataset, idx):

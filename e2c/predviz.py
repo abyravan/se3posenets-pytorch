@@ -287,6 +287,7 @@ def main():
                 plt.plot(mean, label=key)
             plt.legend()
             plt.title(plkeys[k])
+            plt.savefig(vargs.save_dir + "/" + plkeys[k] + ".pdf", bbox_inches='tight')
         plt.show()
 
 ################ RUN MAIN

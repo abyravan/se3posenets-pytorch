@@ -1,7 +1,6 @@
 ---
 # Dataset options
-model-dict: {"5step_bn_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_bn/model_best.pth.tar", "5step_bn_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_bn_trans10/model_best.pth.tar"}
-#,"5step_in_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_in/model_best.pth.tar","5step_in_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_in_trans10/model_best.pth.tar","5step_none_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_none/model_best.pth.tar","5step_none_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_none_trans10/model_best.pth.tar"}
+model-dict: {"5step_bn_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_bn/model_best.pth.tar", "5step_bn_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_bn_trans10/model_best.pth.tar","5step_in_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_in/model_best.pth.tar","5step_in_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_in_trans10/model_best.pth.tar","5step_none_wt1": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_none/model_best.pth.tar","5step_none_wt10": "trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_hs1024_none_trans10/model_best.pth.tar"}
 batch-size:   16
 num-examples: 500
 seq-len:      50

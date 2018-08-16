@@ -291,39 +291,47 @@ def main():
         mkeys = [key for key, _ in models.items()]
         mkeys.insert(0, 'gt')
         nrows, ncols = len(mkeys), outputimgs_f.size(1)
+
+        # Setup figure and axes (RGB)
+        pad = 5  # in points
+        fig1, axes1 = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2))
+        for ax, row in zip(axes1[:, 0], mkeys):
+            ax.annotate(row, xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - pad, 0),
+                        xycoords=ax.yaxis.label, textcoords='offset points',
+                        size='large', ha='right', va='center')
+        fig1.subplots_adjust(left=0.15, top=0.95) # tight_layout doesn't take these labels into account. We'll need
+
+        # Setup figure and axes (RGB)
+        fig2, axes2 = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * 2, nrows * 2))
+        for ax, row in zip(axes2[:, 0], mkeys):
+            ax.annotate(row, xy=(0, 0.5), xytext=(-ax.yaxis.labelpad - pad, 0),
+                        xycoords=ax.yaxis.label, textcoords='offset points',
+                        size='large', ha='right', va='center')
+        fig2.subplots_adjust(left=0.15, top=0.95)  # tight_layout doesn't take these labels into account. We'll need
+
         for j in range(len(imgids)):
-            pid = 1
             for i in range(nrows):
                 mkey = mkeys[i]
-                if mkey is not 'gt':
-                    pid += 1 # Increment by 1 as we do not use first column
                 # Get RGB/Depth
                 rgb, depth, _ = e2chelpers.split_image_data(imgexamples[mkey][j], args.dec_img_type, split_dim=3)
                 nimgs = rgb.size(0)
                 for k in range(nimgs):
                     # RGB
+                    ax1 = axes1[i][k] if mkey is 'gt' else axes1[i][k+1]
                     if rgb is not None:
-                        plt.figure(10)
-                        plt.subplot(nrows, ncols, pid)
-                        plt.axis('off')
-                        plt.imshow(rgb[k].numpy()) # H x W x 3
-                        if (k == 0):
-                            plt.ylabel(mkey)
+                        ax1.axis('off')
+                        ax1.imshow(rgb[k].numpy()) # H x W x 3
                     # Depth
+                    ax2 = axes2[i][k] if mkey is 'gt' else axes2[i][k+1]
                     if depth is not None:
-                        plt.figure(11)
-                        plt.subplot(nrows, ncols, pid)
-                        plt.axis('off')
-                        plt.imshow(depth[k].squeeze().numpy()) # H x W x 1
-                        if (k == 0):
-                            plt.ylabel(mkey)
-                    pid += 1 # Increment ID
+                        ax2.axis('off')
+                        ax2.imshow(depth[k].squeeze().numpy()) # H x W x 1
 
             # Save the images
-            plt.figure(10)
-            plt.savefig(vargs.save_dir + "/rgb-{}.png".format(j), bbox_inches='tight')
-            plt.figure(11)
-            plt.savefig(vargs.save_dir + "/depth-{}.png".format(j), bbox_inches='tight')
+            fig1.tight_layout()
+            fig1.savefig(vargs.save_dir + "/rgb-{}.png".format(j), bbox_inches='tight')
+            fig2.tight_layout()
+            fig2.savefig(vargs.save_dir + "/depth-{}.png".format(j), bbox_inches='tight')
 
         ### Save stuff to disk now
         torch.save({'stats': stats,

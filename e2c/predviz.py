@@ -48,6 +48,8 @@ parser.add_argument('--jt-mean-thresh', default=1e-3, type=float,
                     help='Threshold for avg. jt angle differences for an example (default: 1e-3)')
 parser.add_argument('-s', '--save-dir', type=str, required=True,
                     metavar='PATH', help='Directory to save results in. If it doesnt exist, will be created. (default: )')
+parser.add_argument('--remove-static-examples', action='store_true', default=False,
+                        help='Remove examples where the right arm is static (excludes gripper motion) (default: False)')
 
 ################ MAIN
 #@profile
@@ -122,7 +124,7 @@ def main():
 
     # Update the sequence length in the dataset
     args.seq_len = vargs.seq_len
-    args.remove_static_examples = False
+    args.remove_static_examples = vargs.remove_static_examples
 
     # Setup datasets
     train_dataset, val_dataset, test_dataset = e2chelpers.parse_options_and_setup_block_dataset_loader(args)
@@ -150,13 +152,14 @@ def main():
 
             # Check changes to state
             statediff   = sample['states'][1:] - sample['states'][:-1]
-            meanjtdiff  = statediff[:,:-1].abs().mean(1).gt(vargs.jt_mean_thresh)
-            meanjtper   = meanjtdiff.float().sum().item() / statediff.size(0) # % of sequence with value > 1e-3
-            gripdiff    = statediff[:,-1].abs().gt(5e-4)
-            gripnum     = gripdiff.float().sum().item()
+            meanjtdiff  = statediff[:,:-1].abs().mean(1).le(vargs.jt_mean_thresh)
+            numstatic   = int(meanjtdiff.float().sum().item())
+            #meanjtper   = meanjtdiff.float().sum().item() / statediff.size(0) # % of sequence with value > 1e-3
+            #gripdiff    = statediff[:,-1].abs().gt(5e-4)
+            #gripnum     = gripdiff.float().sum().item()
 
             # Threshold to get good examples
-            if (meanjtper > 0.85) or (gripnum > 2):
+            if (numstatic <= 1): # or (gripnum > 2):
                 exampleids.append(id)
                 if (len(exampleids) % 10) == 0:
                     print('Loaded example {}/{}'.format(len(exampleids), vargs.num_examples))
@@ -167,8 +170,8 @@ def main():
                 states_f.append(sample['states'])  # Joint angles, gripper states
                 ctrls_f.append(sample['controls'])  # Controls
             else:
-                print('Discarding. % mean jt angle diff > {} is {}/0.85. Gripper num: {}/2'.format(
-                    vargs.jt_mean_thresh, meanjtper, gripnum))
+                print('Discarding. Num static examples {} > 1'.format(numstatic)) #. Gripper num: {}/2
+                    #vargs.jt_mean_thresh, meanjtper)) #, gripnum))
 
         # Stack data
         pts_f, rgbs_f, states_f, ctrls_f = torch.stack(pts_f, 0), torch.stack(rgbs_f, 0), \

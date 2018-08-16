@@ -122,6 +122,7 @@ def main():
 
     # Update the sequence length in the dataset
     args.seq_len = vargs.seq_len
+    args.remove_static_examples = False
 
     # Setup datasets
     train_dataset, val_dataset, test_dataset = e2chelpers.parse_options_and_setup_block_dataset_loader(args)
@@ -270,16 +271,16 @@ def main():
                     MST['transdterrs_t'][st:ed] = torch.stack(transdisterrs_tar, 1).cpu() # B x S
                     MST['encdterrs_t'][st:ed]   = torch.stack(encdisterrs_tar, 1).cpu()   # B x S
 
-                    # Choose a random example to save, this id is constant across all models for comparison
-                    # Save corresponding GT output
-                    if len(imgids) < len(idseq)-1:
-                        imgids.append(np.random.randint(bsz))
-                        imgexamples['gt'].append(outputimgs[imgids[-1]].permute(0,2,3,1).cpu()) # Save GT outputs
+                # Choose a random example to save, this id is constant across all models for comparison
+                # Save corresponding GT output
+                if len(imgids) < len(idseq)-1:
+                    imgids.append(np.random.randint(bsz))
+                    imgexamples['gt'].append(outputimgs[imgids[-1]].permute(0,2,3,1).cpu()) # Save GT outputs
 
-                    # Save corresponding model output
-                    imgexamples[key].append(transdecimgs[imgids[j]].permute(0,2,3,1).cpu()) # Save predicted transition model outputs
+                # Save corresponding model output
+                imgexamples[key].append(transdecimgs[imgids[j]].permute(0,2,3,1).cpu()) # Save predicted transition model outputs
 
-                    ### todo: Save some image sequences (keep those in memory?)
+                ### todo: Save some image sequences (keep those in memory?)
 
             ### Save stats
             stats[key] = MST
@@ -296,33 +297,33 @@ def main():
                 mkey = mkeys[i]
                 if mkey is not 'gt':
                     pid += 1 # Increment by 1 as we do not use first column
-                    # Get RGB/Depth
-                    rgb, depth, _ = e2chelpers.split_image_data(imgexamples[mkey][j], args.dec_img_type, split_dim=3)
-                    nimgs = rgb.size(0)
-                    for k in range(nimgs):
-                        # RGB
-                        if rgb is not None:
-                            plt.figure(10)
-                            plt.subplot(nrows, ncols, pid)
-                            plt.axes('off')
-                            plt.imshow(rgb[k].numpy()) # H x W x 3
-                            if (k == 0):
-                                plt.ylabel(mkey)
-                        # Depth
-                        if depth is not None:
-                            plt.figure(11)
-                            plt.subplot(nrows, ncols, pid)
-                            plt.axes('off')
-                            plt.imshow(depth[k].squeeze().numpy()) # H x W x 1
-                            if (k == 0):
-                                plt.ylabel(mkey)
-                        pid += 1 # Increment ID
+                # Get RGB/Depth
+                rgb, depth, _ = e2chelpers.split_image_data(imgexamples[mkey][j], args.dec_img_type, split_dim=3)
+                nimgs = rgb.size(0)
+                for k in range(nimgs):
+                    # RGB
+                    if rgb is not None:
+                        plt.figure(10)
+                        plt.subplot(nrows, ncols, pid)
+                        plt.axis('off')
+                        plt.imshow(rgb[k].numpy()) # H x W x 3
+                        if (k == 0):
+                            plt.ylabel(mkey)
+                    # Depth
+                    if depth is not None:
+                        plt.figure(11)
+                        plt.subplot(nrows, ncols, pid)
+                        plt.axis('off')
+                        plt.imshow(depth[k].squeeze().numpy()) # H x W x 1
+                        if (k == 0):
+                            plt.ylabel(mkey)
+                    pid += 1 # Increment ID
 
             # Save the images
             plt.figure(10)
-            plt.savefig(vargs.save_dir + "/rgb-{}.pdf".format(j), bbox_inches='tight')
+            plt.savefig(vargs.save_dir + "/rgb-{}.png".format(j), bbox_inches='tight')
             plt.figure(11)
-            plt.savefig(vargs.save_dir + "/depth-{}.pdf".format(j), bbox_inches='tight')
+            plt.savefig(vargs.save_dir + "/depth-{}.png".format(j), bbox_inches='tight')
 
         ### Save stuff to disk now
         torch.save({'stats': stats,

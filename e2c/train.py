@@ -144,8 +144,8 @@ def main():
     ## Create a file to log different validation errors over training epochs
     statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
     statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
-    statstfile.write("Epoch, Loss\n")
-    statsvfile.write("Epoch, Loss\n")
+    statstfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t\n")
+    statsvfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t\n")
 
     ########################
     ############ Train / Validate
@@ -176,8 +176,22 @@ def main():
                                     epoch+1, s, prev_best_loss, prev_best_epoch, best_loss, best_epoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}\n".format(epoch+1, train_stats.loss.avg))
-        statsvfile.write("{}, {}\n".format(epoch+1, val_stats.loss.avg))
+        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
+                                           train_stats.loss.avg,
+                                           train_stats.reconsloss.avg.sum(),
+                                           train_stats.varklloss.avg.sum(),
+                                           train_stats.transencklloss.avg.sum(),
+                                           train_stats.aereconsloss.avg.sum(),
+                                           train_stats.encstateerrs_t.avg.sum(),
+                                           train_stats.transstateerrs_t.avg.sum()))
+        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
+                                           val_stats.loss.avg,
+                                           val_stats.reconsloss.avg.sum(),
+                                           val_stats.varklloss.avg.sum(),
+                                           val_stats.transencklloss.avg.sum(),
+                                           val_stats.aereconsloss.avg.sum(),
+                                           val_stats.encstateerrs_t.avg.sum(),
+                                           val_stats.transstateerrs_t.avg.sum()))
 
         # Save checkpoint
         e2chelpers.save_checkpoint({
@@ -239,7 +253,14 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg))
+    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'],
+                                       test_stats.loss.avg,
+                                       test_stats.reconsloss.avg.sum(),
+                                       test_stats.varklloss.avg.sum(),
+                                       test_stats.transencklloss.avg.sum(),
+                                       test_stats.aereconsloss.avg.sum(),
+                                       test_stats.encstateerrs_t.avg.sum(),
+                                       test_stats.transstateerrs_t.avg.sum()))
     statsvfile.close(); statstfile.close()
 
     # Close log file

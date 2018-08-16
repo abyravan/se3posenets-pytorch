@@ -117,10 +117,10 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
                 if (nexamples < 1):
                     continue
 
-                # Throw away file based on Jesse's test
-                validh5 = test_h5_validity(h5data)
-                if not validh5:
-                    continue
+                # # Throw away file based on Jesse's test
+                # validh5 = test_h5_validity(h5data)
+                # if not validh5:
+                #     continue
 
                 # Get the joint angles and filter examples where the joints don't move
                 # This function checks all examples "apriori" to see if they are valid

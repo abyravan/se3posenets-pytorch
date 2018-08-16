@@ -4,6 +4,7 @@ import os
 import numpy as np
 import io
 from PIL import Image
+import time
 
 # Torch imports
 import torch
@@ -87,12 +88,20 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
     assert (train_per + val_per <= 1)  # Train + val + test <= 1
 
     # Iterate over each load directory to find the datasets
-    datasets = []
+    datasets, dirctr = [], 0
+    start = time.time()
     for load_dir in load_dirs:
         # Get h5 file names & number of examples
         files = os.listdir(load_dir)
-        filenames, numvaliddata, validdataids, numdata = [], [], [], 0
+        filenames, numvaliddata, validdataids, numdata, ctr = [], [], [], 0, 0
+        dirctr += 1
         for file in files:
+            # Print ctr
+            if (ctr % 1000) == 0:
+                print('Processing directory {}/{}, File: {}/{}, Time elapsed so far: {}'.format(
+                    dirctr, len(load_dirs), ctr+1, len(files), time.time()-start))
+            ctr += 1
+
             # Discard non-valid files
             if file.find('.h5') == -1:
                 continue # Skip non h5 files

@@ -278,10 +278,12 @@ def main():
                 # Save corresponding GT output
                 if len(imgids) < len(idseq)-1:
                     imgids.append(np.random.randint(bsz))
-                    imgexamples['gt'].append(outputimgs[imgids[-1]].permute(0,2,3,1).cpu()) # Save GT outputs
+                    imgexamples['gt'].append(e2chelpers.normalize_img(outputimgs[imgids[-1]],
+                                                                      0.0, 1.0).permute(0,2,3,1).cpu()) # Save GT outputs
 
                 # Save corresponding model output
-                imgexamples[key].append(transdecimgs[imgids[j]].permute(0,2,3,1).cpu()) # Save predicted transition model outputs
+                imgexamples[key].append(e2chelpers.normalize_img(transdecimgs[imgids[j]],
+                                                                 0.0, 1.0).permute(0,2,3,1).cpu()) # Save predicted transition model outputs
 
                 ### todo: Save some image sequences (keep those in memory?)
 
@@ -313,6 +315,7 @@ def main():
         fig2.subplots_adjust(left=0.15, top=0.95)  # tight_layout doesn't take these labels into account. We'll need
 
         for j in range(len(imgids)):
+            print('Saving image: {}/{}'.format(j+1, len(imgids)))
             for i in range(nrows):
                 mkey = mkeys[i]
                 # Get RGB/Depth

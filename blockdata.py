@@ -111,14 +111,15 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
             # Read number of example images in the file
             max_flow_step = int(step_len * seq_len)  # This is the maximum future step (k) for which we need flows
             with h5py.File(os.path.join(load_dir, file), 'r') as h5data:
+                # Get number of examples from that h5
+                nexamples = len(h5data['images_rgb']) - max_flow_step  # We only have flows for these many images!
+                numdata  += nexamples # Count all examples
+                if (nexamples < 1):
+                    continue
+
                 # Throw away file based on Jesse's test
                 validh5 = test_h5_validity(h5data)
                 if not validh5:
-                    continue
-
-                # Get number of examples from that h5
-                nexamples = len(h5data['images_rgb']) - max_flow_step  # We only have flows for these many images!
-                if (nexamples < 1):
                     continue
 
                 # Get the joint angles and filter examples where the joints don't move
@@ -144,7 +145,6 @@ def read_block_sim_dataset(load_dirs, step_len, seq_len, train_per=0.6, val_per=
                     continue
 
                 # Valid training motion
-                numdata += nexamples
                 numvaliddata.append(len(validids))
                 validdataids.append(validids)
                 filenames.append(file)

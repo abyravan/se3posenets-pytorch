@@ -144,8 +144,8 @@ def main():
     ## Create a file to log different validation errors over training epochs
     statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
     statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
-    statstfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t\n")
-    statsvfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t\n")
+    statstfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t, GoalDirloss\n")
+    statsvfile.write("Epoch, Loss, Reconsloss, VarKLloss, TransEncKLloss, AEReconsloss, Encsterrs_t, Transsterrs_t, GoalDirloss\n")
 
     ########################
     ############ Train / Validate
@@ -176,22 +176,24 @@ def main():
                                     epoch+1, s, prev_best_loss, prev_best_epoch, best_loss, best_epoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
+        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
                                            train_stats.loss.avg,
                                            train_stats.reconsloss.avg.sum(),
                                            train_stats.varklloss.avg.sum(),
                                            train_stats.transencklloss.avg.sum(),
                                            train_stats.aereconsloss.avg.sum(),
                                            train_stats.encstateerrs_t.avg.sum(),
-                                           train_stats.transstateerrs_t.avg.sum()))
-        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
+                                           train_stats.transstateerrs_t.avg.sum(),
+                                           train_stats.goaldirloss.avg.sum()))
+        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1,
                                            val_stats.loss.avg,
                                            val_stats.reconsloss.avg.sum(),
                                            val_stats.varklloss.avg.sum(),
                                            val_stats.transencklloss.avg.sum(),
                                            val_stats.aereconsloss.avg.sum(),
                                            val_stats.encstateerrs_t.avg.sum(),
-                                           val_stats.transstateerrs_t.avg.sum()))
+                                           val_stats.transstateerrs_t.avg.sum(),
+                                           val_stats.goaldirloss.avg.sum()))
 
         # Save checkpoint
         e2chelpers.save_checkpoint({
@@ -253,14 +255,15 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'],
+    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'],
                                        test_stats.loss.avg,
                                        test_stats.reconsloss.avg.sum(),
                                        test_stats.varklloss.avg.sum(),
                                        test_stats.transencklloss.avg.sum(),
                                        test_stats.aereconsloss.avg.sum(),
                                        test_stats.encstateerrs_t.avg.sum(),
-                                       test_stats.transstateerrs_t.avg.sum()))
+                                       test_stats.transstateerrs_t.avg.sum(),
+                                       test_stats.goaldirloss.avg.sum()))
     statsvfile.close(); statstfile.close()
 
     # Close log file
@@ -282,7 +285,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     stats = argparse.Namespace()
     stats.loss, stats.reconsloss                = util.AverageMeter(), util.AverageMeter()
     stats.varklloss, stats.transencklloss       = util.AverageMeter(), util.AverageMeter()
-    stats.aereconsloss                          = util.AverageMeter()
+    stats.aereconsloss, stats.goaldirloss       = util.AverageMeter(), util.AverageMeter()
     stats.encstateerrs_t, stats.transstateerrs_t = util.AverageMeter(), util.AverageMeter()
     stats.data_ids = []
 
@@ -299,6 +302,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     recons_wt, varkl_wt = args.recons_wt * args.loss_scale, args.varkl_wt * args.loss_scale
     transenckl_wt       = args.transenckl_wt * args.loss_scale
     aerecons_wt         = args.aerecons_wt * args.loss_scale
+    goaldir_wt          = args.goaldir_wt * args.loss_scale
     recons_loss_fn      = e2chelpers.get_loss_function(args.recons_loss_type)
 
     # Run an epoch
@@ -342,7 +346,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         ### Compute losses
         loss, reconsloss, varklloss, transencklloss = 0, torch.zeros(args.seq_len+1), \
                               torch.zeros(args.seq_len+1), torch.zeros(args.seq_len)
-        aereconsloss = torch.zeros(args.seq_len) # Not for t = 0
+        aereconsloss, goaldirloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len) # Not for t = 0 / t = N
         for k in range(args.seq_len+1):
             # Reconstruction loss between decoded images & true images
             currreconsloss = recons_wt * recons_loss_fn(decimgs[k], outputimgs[:,k]) # Output imgs are B x (S+1)
@@ -382,14 +386,41 @@ def iterate(data_loader, model, tblogger, num_iters,
             else:
                 curraereconsloss = 0
 
+            # Directional loss that says that the vector (trans_state_t+1 - trans_state_t)
+            # has to align with the vector (encoder_state_N - trans_state_t)
+            # So that the states are essentially linearly separated and are straight lines towards the goal
+            if (k < args.seq_len) and (goaldir_wt > 0):
+                # Compute the state @ t, t+1 and goal state @ t = N
+                if args.deterministic:
+                    curr_state, next_state, goal_state = encstates[0] if (k == 0) else transstates[k-1], \
+                                                         transstates[k], encstates[-1]
+                else:
+                    if transdists[k] is None:
+                        curr_state, next_state, goal_state = encsamples[0] if (k == 0) else transsamples[k-1], \
+                                                             transsamples[k], encsamples[-1]
+                    else:
+                        curr_state, next_state, goal_state = encdists[0].mean if (k == 0) else transdists[k-1].mean, \
+                                                             transdists[k].mean, encdists[-1].mean
+
+                # Compute the vectors between the states
+                next_curr, goal_curr = (next_state - curr_state).view(pts.size(0), -1), \
+                                       (goal_state - curr_state).view(pts.size(0), -1)
+
+                # Compue 1 - cosine distance as we are minimizing this loss
+                currgoaldirloss = goaldir_wt * (1.0 - F.cosine_similarity(next_curr, goal_curr, dim=1)).mean()
+                goaldirloss[k]  = currgoaldirloss.item()
+            else:
+                currgoaldirloss = 0
+
             # Append to total loss
-            loss += currreconsloss + currvarklloss + currtransencklloss + curraereconsloss
+            loss += currreconsloss + currvarklloss + currtransencklloss + curraereconsloss + currgoaldirloss
 
         # Update stats
         stats.reconsloss.update(reconsloss)
         stats.varklloss.update(varklloss)
         stats.transencklloss.update(transencklloss)
         stats.aereconsloss.update(aereconsloss)
+        stats.goaldirloss.update(goaldirloss)
         stats.loss.update(loss.item())
 
         # Measure FWD time
@@ -459,6 +490,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                     mode + '-varklloss'     : (varklloss.mean() / varkl_wt) if (varkl_wt > 0) else 0,
                     mode + '-transencklloss': (transencklloss.mean() / transenckl_wt) if (transenckl_wt > 0) else 0,
                     mode + '-aereconsloss'  : (aereconsloss.mean() / aerecons_wt) if (aerecons_wt > 0) else 0,
+                    mode + '-goaldirloss'   : (goaldirloss.mean() / goaldir_wt) if (goaldir_wt > 0) else 0,
                     mode + '-encstateerrs_t': encstateerrs_t.sum(),
                     mode + '-transstateerrs_t': transstateerrs_t.sum()
                 }
@@ -545,7 +577,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
               'TransEnc-KL: {:.4f} ({:.4f}), '
               'AE-Recons: {:.3f} ({:.3f}), '
               'Enc-Sterr-T: {:.4f} ({:.4f}), '
-              'Trans-Sterr-T: {:.4f} ({:.4f})'
+              'Trans-Sterr-T: {:.4f} ({:.4f}), '
+              'Goal-Dir: {:.4f} ({:.4f})'
             .format(
             1 + k * args.step_len,
             stats.reconsloss.val[k], stats.reconsloss.avg[k],
@@ -557,6 +590,8 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
             stats.encstateerrs_t.val[k], stats.encstateerrs_t.avg[k],
             stats.transstateerrs_t.val[k-1] if (k > 0) else 0,
             stats.transstateerrs_t.avg[k-1] if (k > 0) else 0,
+            stats.goaldirloss.val[k] if (k < args.seq_len) else 0,
+            stats.goaldirloss.avg[k] if (k < args.seq_len) else 0,
         ))
 
 ################ RUN MAIN

@@ -95,6 +95,8 @@ def setup_common_options():
     parser.add_argument('--transenckl-wt', default=1.0, type=float,
                         metavar='WT', help='Weight for the KL consistency loss between transition '
                                            'model & encoder (default: 1.0)')
+    parser.add_argument('--goaldir-wt', default=0.0, type=float,
+                        metavar='WT', help='Weight for the goal directed loss (t=0-N-1) (default: 0.0)')
     parser.add_argument('--loss-scale', default=1000, type=float,
                        metavar='WT', help='Default scale factor for all the losses (default: 1000)')
 
@@ -215,8 +217,8 @@ def parse_options_and_setup_block_dataset_loader(args):
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
 
     # Loss parameters
-    print('Loss scale: {}, Weights => RECONS: {}, VARKL: {}, TRANSENCKL: {}'.format(
-        args.loss_scale, args.recons_wt, args.varkl_wt, args.transenckl_wt))
+    print('Loss scale: {}, Weights => RECONS: {}, VARKL: {}, TRANSENCKL: {}, AERECONS:{}, GOALDIR:{}'.format(
+        args.loss_scale, args.recons_wt, args.varkl_wt, args.transenckl_wt, args.aerecons_wt, args.goaldir_wt))
 
     # Wide model
     if args.wide_model:

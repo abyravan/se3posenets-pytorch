@@ -725,7 +725,7 @@ class ConvEncoder(nn.Module):
         ###### Concat img + state information and get encoded outputs
         # Convolutional network with 5x5 convolutions to get some global information
         print("[Encoder] Using convolutional network for state prediction")
-        out_chn = 64 if deterministic else 128 # Predict mean/var if not deterministic
+        out_chn = 16 if deterministic else 128 # Predict mean/var if not deterministic
         chn_out = [sdim[-1]+chn[-1], 128, out_chn]
         nonlin  = [nonlin_type, 'none'] # No non linearity for last layer
         norm    = [norm_type, 'none']       # No batch norm for last layer

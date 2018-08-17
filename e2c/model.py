@@ -947,14 +947,18 @@ class ConvTransitionModel(nn.Module):
         sddim = [sedim[-1]+cdim[-1], 128, 128, out_dim[0]]
         nonlin = [nonlin_type, nonlin_type, 'none']  # No non linearity for last layer
         norm   = [norm_type, norm_type, 'none']  # No batch norm for last layer
+        bias   = [True, True, False if (predict_deltas) else True] # we want the output predictions to be zero centered if we are predicting diffs
         self.statedecoder = nn.Sequential(
             *[ConvType(sddim[k], sddim[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k],
+                       bias=bias[k]) for k in range(len(sddim) - 1)],
         )
 
         # Prints
         if predict_deltas:
-            print('[Transition] Model predicts deltas, not full state')
+            print('[Transition] Model predicts deltas, not full state. Initializing last conv layer (no bias) to identity')
+            # Init the last layer of the transition model to predict identity
+            self.statedecoder[-1].conv.weight.data.uniform_(-0.0001, 0.0001)  # Initialize weights to near identity (no bias)
 
     def forward(self, ctrl, inpsample=None, inpdist=None):
         # Generate the state input based on the setting

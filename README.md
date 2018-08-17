@@ -12,6 +12,12 @@ Setting up training:
      For an example config file, look at config/icra18final/simdata/se3pose/def_rmsprop.yaml
      At the least, you might have to change the “data” path inside the config file to be your path to the dataset
 
+Setting up ROS compatibility:
+1) After sourcing the correct conda version (2.7 default), run the following install command:
+    pip install -U rospkg catkin_pkg
+  This should install the necessary bridge between ROS and conda.
+2) To check if this works and in general to run a ROS workspace you need to first source the correct conda version (sourceconda2) and then source the ROS workspace (such as for baxter it could be . baxter.sh sim or .baxter.sh). Then to test, go to the terminal and type: import rospy. If this succeeds, you should be set.
+
 Setting up control:
 1) You need to install Pangolin (https://github.com/stevenlovegrove/Pangolin)
 2) Next, you need to compile the code in lib/:
@@ -21,6 +27,30 @@ Setting up control:
      This will create a window so it can’t be run over ssh
 4) To test the open loop controller (conjugate gradient) on the simulated baxter data (se3compose branch) do:
      python run_control_openloop.py --checkpoint <path-to-pre-trained-se3-pose-net> --only-top4-jts --loss-thresh 2e-3 --num-configs 5 --save-dir temp --ctrl-init zero --optimizer xalglib_cg --max-iter 200 --horizon 10 --goal-horizon 5 --loss-scale 100
+
+Setting up Chris's pybullet interface:
+1) Setup ROS workspace:
+    sourceconda2 # Source your conda version
+    sourceindigo # Source Indigo/Kinetic ROS
+    pip install -U rospkg catkin_pkg
+    pip install catkin_tools empy
+    mkdir workspace && cd workspace
+    catkin init
+    mkdir src && cd src
+    git clone https://github.com/cpaxton/gazebo-learning-planning.git gazebo_learning_planning
+    git clone https://github.com/clemense/yumi.git
+    git clone https://github.com/orocos/orocos_kinematics_dynamics.git
+    touch yumi/yumi_hw/CATKIN_IGNORE
+    touch yumi/yumi_launch/CATKIN_IGNORE
+    catkin build
+    pip install -U pybullet
+2) To test:
+    source ../devel/setup.bash
+    ./gazebo_learning_planning/posetest
+
+    In a separate terminal, do:
+    sourceconda2 && source ../devel/setup.bash
+    ./gazebo_learning_planning/nodes/control.py <path-to-saved-h5-data>
 
 # Details
 

@@ -11,9 +11,11 @@ import ctrlnets
 
 ##### Override the multi-variate normal distribution to add a distribution with v & r terms for the E2C transition model
 class MVNormal(torch.distributions.MultivariateNormal):
-    def __init__(self, *args, v=None, r=None, **kwargs):
+    #def __init__(self, *args, v=None, r=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(MVNormal, self).__init__(*args, **kwargs)
-        self.v, self.r = v, r
+        self.v = kwargs.get("v", None)  # if v is not set use None
+        self.r = kwargs.get("r", None)  # if r is not set use None
 
     def rsample_e2c(self, sample_shape=torch.Size()):
         return self.rsample(sample_shape=sample_shape)
@@ -27,9 +29,11 @@ def kl_mvnormal_mvnormal(p, q):
 
 ##### Override the independent normal distribution to add a distribution with v & r terms for the E2C transition model
 class Normal(torch.distributions.Normal):
-    def __init__(self, *args, v=None, r=None, **kwargs):
+    #def __init__(self, *args, v=None, r=None, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(Normal, self).__init__(*args, **kwargs)
-        self.v, self.r = v, r
+        self.v = kwargs.get("v", None)  # if v is not set use None
+        self.r = kwargs.get("r", None)  # if r is not set use None
 
     def rsample_e2c(self, sample_shape=torch.Size()):
         # Use torch.distributions.normal rsample if not E2C style distribution
@@ -180,7 +184,7 @@ class Encoder(nn.Module):
             norm   = [norm_type, norm_type, norm_type, 'none'] # No batch norm for last layer
             self.outencoder = nn.Sequential(
                 *[ConvType(chn_out[k], chn_out[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=pool[k], norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
+                           use_pool=pool[k], norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)]
             )
             self.outdim = [chn_out[-1], 3, 5] if self.deterministic else [chn_out[-1]//2, 3, 5]
         else:
@@ -339,12 +343,13 @@ class Decoder(nn.Module):
             print("[Decoder] Using convolutional network with 1x1 convolutions for predicting output image")
             chn_in = [16, 32, 64, 128, chn[0]] if wide_model else [8, 16, 32, 64, chn[0]]
             self.hsdecoder = nn.Sequential(
-                *[ConvType(chn_in[k], chn_in[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(chn_in)-2)], # Leave out last layer
-                nn.UpsamplingBilinear2d((7, 10)), # Upsample to (7,10)
-                ConvType(chn_in[3], chn_in[4], kernel_size=1, stride=1, padding=0,
-                         use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type), # 128 x 7 x 10
+                [ConvType(chn_in[k], chn_in[k+1], kernel_size=1, stride=1, padding=0,
+                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(chn_in)-2)] + # Leave out last layer
+                [nn.UpsamplingBilinear2d((7, 10)), # Upsample to (7,10)
+                 ConvType(chn_in[3], chn_in[4], kernel_size=1, stride=1, padding=0,
+                         use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type)] # 128 x 7 x 10
             )
+
             self.hsdim = [chn_in[0], 3, 5]
         else:
             # Fully connected output network
@@ -374,7 +379,7 @@ class Decoder(nn.Module):
         if (self.img_type.find('rgb') != -1) and self.rgb_normalize:
             splits = imgout.split(3, dim=1) # RGB is first element
             rgb    = F.sigmoid(splits[0]) # First 3 channels
-            output = torch.cat([rgb, *splits[1:]], 1) if len(splits) > 1 else rgb
+            output = torch.cat([rgb] + splits[1:], 1) if len(splits) > 1 else rgb
         else:
             output = imgout
 
@@ -440,7 +445,7 @@ class NonLinearTransitionModel(nn.Module):
             sedim = [in_dim[0], 32, 64, 128] if wide_model else [in_dim[0], 16, 32, 64]
             self.stateencoder = nn.Sequential(
                 *[ConvType(sedim[k], sedim[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(sedim)-1)],
+                           use_pool=False, norm_type=norm_type, nonlinearity=nonlin_type) for k in range(len(sedim)-1)]
             )
 
             # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
@@ -449,7 +454,7 @@ class NonLinearTransitionModel(nn.Module):
             norm   = [norm_type, norm_type, norm_type, False]  # No batch norm for last layer
             self.statedecoder = nn.Sequential(
                 *[ConvType(sddim[k], sddim[k+1], kernel_size=1, stride=1, padding=0,
-                           use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)],
+                           use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sddim) - 1)]
             )
         else:
             # Create FC state encoder
@@ -731,7 +736,7 @@ class ConvEncoder(nn.Module):
         norm    = [norm_type, 'none']       # No batch norm for last layer
         self.outencoder = nn.Sequential(
             *[ConvType(chn_out[k], chn_out[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(chn_out)-1)]
         )
         self.outdim = [chn_out[-1], 8, 8] if deterministic else [chn_out[-1]//2, 8, 8]
 
@@ -875,7 +880,7 @@ class ConvDecoder(nn.Module):
         if (self.img_type.find('rgb') != -1) and self.rgb_normalize:
             splits = imgout.split(3, dim=1) # RGB is first element
             rgb    = F.sigmoid(splits[0]) # First 3 channels
-            output = torch.cat([rgb, *splits[1:]], 1) if len(splits) > 1 else rgb
+            output = torch.cat([rgb], splits[1:], 1) if len(splits) > 1 else rgb
         else:
             output = imgout
 
@@ -900,12 +905,12 @@ class ConvTransitionModel(nn.Module):
             "Unknown setting {} for the transition model".format(setting)
         assert(type(state_dim) == list)
         if setting == 'samp2samp':
-            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+            in_dim, out_dim = list(state_dim), list(state_dim)
         elif setting == 'samp2dist':
-            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+            in_dim, out_dim = list(state_dim), list(state_dim)
             out_dim[0] *= 2 # Predict both mean/var
         else: #setting == 'dist2dist':
-            in_dim, out_dim = state_dim.copy(), state_dim.copy()
+            in_dim, out_dim = list(state_dim), list(state_dim)
             in_dim[0]  *= 2
             out_dim[0] *= 2
         print('[Transition] Setting: {}, Nonlinearity: {}, Normalization type: {}'.format(
@@ -940,7 +945,7 @@ class ConvTransitionModel(nn.Module):
         norm   = [norm_type, 'none']
         self.stateencoder = nn.Sequential(
             *[ConvType(sedim[k], sedim[k+1], kernel_size=5, stride=1, padding=2,
-                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sedim)-1)],
+                       use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k]) for k in range(len(sedim)-1)]
         )
 
         # Create 1x1 conv state decoder (use dimensions of control encoding as channels, replicate values in height & width)
@@ -951,7 +956,7 @@ class ConvTransitionModel(nn.Module):
         self.statedecoder = nn.Sequential(
             *[ConvType(sddim[k], sddim[k+1], kernel_size=5, stride=1, padding=2,
                        use_pool=False, norm_type=norm[k], nonlinearity=nonlin[k],
-                       bias=bias[k]) for k in range(len(sddim) - 1)],
+                       bias=bias[k]) for k in range(len(sddim) - 1)]
         )
 
         # Prints

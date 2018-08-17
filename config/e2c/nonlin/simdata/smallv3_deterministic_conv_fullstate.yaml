@@ -24,7 +24,7 @@ conv-enc-dec:      True
 
 # Transition model options
 trans-setting:     samp2samp
-trans-pred-deltas: True
+trans-pred-deltas: False
 trans-model-type:  nonlin
 
 # General model options
@@ -62,4 +62,4 @@ min-lr:       1e-5
 
 # Display/Save options
 disp-freq: 50
-save-dir:  trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_bn
+save-dir:  trained_nets/e2c/nonlin/simdata/smallv3/det_step2_seq5_conv_fullstate_bn

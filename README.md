@@ -48,9 +48,14 @@ Setting up Chris's pybullet interface:
     source ../devel/setup.bash
     ./gazebo_learning_planning/posetest
 
-    In a separate terminal, do:
+   In a separate terminal, do:
     sourceconda2 && source ../devel/setup.bash
     ./gazebo_learning_planning/nodes/control.py <path-to-saved-h5-data>
+3) To run the closed loop controller with pybullet:
+    sourceblocks && cd ~/Projects/blocks/workspace/src && ./gazebo_learning_planning/posetest
+
+   In a separate terminal, run:
+    sourceblocks && python e2c/closedloopcontrol.py -c <yaml>
 
 # Details
 

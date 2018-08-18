@@ -28,7 +28,7 @@ Setting up control:
 4) To test the open loop controller (conjugate gradient) on the simulated baxter data (se3compose branch) do:
      python run_control_openloop.py --checkpoint <path-to-pre-trained-se3-pose-net> --only-top4-jts --loss-thresh 2e-3 --num-configs 5 --save-dir temp --ctrl-init zero --optimizer xalglib_cg --max-iter 200 --horizon 10 --goal-horizon 5 --loss-scale 100
 
-Setting up Chris's pybullet interface:
+Setting up Chris's pybullet interface (tested with Python 2.x & ROS-Indigo):
 1) Setup ROS workspace:
     sourceconda2 # Source your conda version
     sourceindigo # Source Indigo/Kinetic ROS
@@ -51,7 +51,7 @@ Setting up Chris's pybullet interface:
    In a separate terminal, do:
     sourceconda2 && source ../devel/setup.bash
     ./gazebo_learning_planning/nodes/control.py <path-to-saved-h5-data>
-3) To run the closed loop controller with pybullet:
+3) To run the closed loop controller with pybullet (Python 2.x):
     sourceblocks && cd ~/Projects/blocks/workspace/src && ./gazebo_learning_planning/posetest
 
    In a separate terminal, run:

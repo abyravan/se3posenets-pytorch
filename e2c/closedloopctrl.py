@@ -47,6 +47,7 @@ class YUMIInterface(object):
     def _depth_cb(self, msg):
         try:
             frame      = self.bridge.imgmsg_to_cv2(msg)
+            print(frame.dtype)
             self.depth = np.array(frame, dtype=np.float32)
         except CvBridgeError as e:
             print(e)
@@ -61,7 +62,7 @@ class YUMIInterface(object):
         self.js_cmd = rospy.Publisher(YumiSimulation.listen_topic, JointState, queue_size=1000)
         self.q      = None
         self.dq     = None
-        self.qdict  = None
+        self.qdict  = {}
         self.hz     = hz
 
         # Setup callback for RGB/D images

@@ -369,9 +369,9 @@ def run_local_controller(goaldata, model, interface, args, pargs):
             break
 
         # Initialize controls
-        if pargs.ctrl_init is 'zero':
+        if pargs.ctrl_init == 'zero':
             currcontrols = torch.zeros(1, args.num_ctrl).type_as(currjts) # 1 x num_ctrl
-        elif pargs.ctrl_init is 'random1em1': # uniform random between -0.1, 0.1
+        elif pargs.ctrl_init == 'random1em1': # uniform random between -0.1, 0.1
             currcontrols = ((torch.rand(1, args.num_ctrl)*0.2) - 0.1).type_as(currjts) # 1 x num_ctrl
         else:
             assert False, "Unknown control initialization option: {}".format(pargs.ctrl_init)

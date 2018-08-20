@@ -408,14 +408,14 @@ def run_local_controller(goaldata, model, interface, args, pargs):
 
         # Use the gradient to get the next velocities
         if pargs.alpha_dir > 0:
-            controlgraddirn = F.normalize(controlgrad.squeeze(), p=2, dim=0) # Dirn
+            controlgraddirn = F.normalize(controlgrad.squeeze(), p=2, dim=0).view_as(currcontrols) # Dirn
             optcontrols     = currcontrols - (controlgraddirn * controlmag)  # Scale dirn by mag (step in -ve dirn of gradient)
             controlmag     *= pargs.alpha_dir_decay # Decay control magnitude
         else:
-            optcontrols = currcontrols - (pargs.alpha * controlgrad.squeeze()) # Alpha is step size
+            optcontrols = currcontrols - (pargs.alpha * controlgrad.view_as(currcontrols)) # Alpha is step size
 
         # Send controls to the robot
-        interface.commandRightArmJtVelocities(optcontrols.cpu().float())
+        interface.commandRightArmJtVelocities(optcontrols.squeeze().cpu().float().numpy())
 
         # Save stats
         stats['initctrls'].append(currcontrols)

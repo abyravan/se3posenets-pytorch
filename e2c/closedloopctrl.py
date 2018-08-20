@@ -343,12 +343,12 @@ def run_local_controller(goaldata, model, interface, args, pargs):
              'success': False}
     for k in range(pargs.max_iter):
         # Get latest RGB/D image
-        currrgb   = torch.from_numpy(interface.rgb).clone().permute(2,0,1).unsqueeze(0).type_as(goaldata) / 255.0 # 1 x 3 x H x W
-        currdepth = torch.from_numpy(interface.depth).clone().unsqueeze(0).unsqueeze(0).type_as(goaldata) / 3.0   # 1 x 1 x H x W
+        currrgb   = torch.from_numpy(interface.rgb).clone().permute(2,0,1).unsqueeze(0).type_as(goalimg) / 255.0 # 1 x 3 x H x W
+        currdepth = torch.from_numpy(interface.depth).clone().unsqueeze(0).unsqueeze(0).type_as(goalimg) / 3.0   # 1 x 1 x H x W
         currimg   = torch.cat([currrgb, currdepth], 1) # 1 x 4 x H x W
 
         # Get latest joint angles
-        currjts   = torch.from_numpy(interface.q).clone()[arm_r_idx].view(1,len(arm_r_idx)).type_as(goaldata) # 1 x 7
+        currjts   = torch.from_numpy(interface.q).clone()[arm_r_idx].view(1,len(arm_r_idx)).type_as(goalimg) # 1 x 7
         stats['jtangles'].append(currjts)
 
         # Run a forward pass through the encoder to get the current state encoding

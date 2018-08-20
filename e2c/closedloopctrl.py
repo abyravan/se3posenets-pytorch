@@ -385,7 +385,7 @@ def run_local_controller(goaldata, model, interface, args, pargs):
                 currcontrols_p[1:] += I * eps # Perturb the controls with eps
 
                 # FWD pass
-                predencstate_p = model.transitionmodel.forward(currcontrols_p, currencstate_p, None)
+                predencstate_p = model.transition.forward(currcontrols_p, currencstate_p, None)
 
                 # Compute optimization error between predicted & goal states, compute gradients w.r.t pred states
                 opterror = 0.5 * (predencstate_p[0:1] - goalencstate).pow(2).mean()

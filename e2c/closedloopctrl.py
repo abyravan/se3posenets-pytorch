@@ -116,6 +116,17 @@ class YUMIInterface(object):
         msg.position = self.q + cmd*dt
         self.js_cmd.publish(msg)
 
+    # Send commands only to the right arm, set all other joint positions to latest read position
+    def commandRightArmJtVelocities(self, cmd, dt=None):
+        if dt is None:
+            dt = 1./self.hz
+        msg          = JointState()
+        msg.name     = YumiSimulation.yumi_joint_names
+        msg.position = np.copy(self.q)
+        for j in range(len(arm_r_idx)):
+            msg.position[arm_r_idx[j]] += cmd[j] * dt # Integrate velocities only for right arm
+        self.js_cmd.publish(msg)
+
     # Replay the commands from a h5 data file
     def replayH5(self, h5, start=None, goal=None):
         # Get the commands from the h5 data
@@ -202,18 +213,20 @@ def setup_control_options():
                         help='Damping constant (default: 1e-4)')
     parser.add_argument('--gn-jac-check', action='store_true', default=False,
                         help='check FD jacobian & gradient against the numerical jacobian & backprop gradient (default: False)')
-    parser.add_argument('--max-ctrl-mag', default=1.0, type=float, metavar='UMAX',
-                        help='Maximum allowable control magnitude (default: 1 rad/s)')
-    parser.add_argument('--ctrl-mag-decay', default=0.99, type=float, metavar='W',
+    parser.add_argument('--alpha', default=0.0, type=float, metavar='STEP_SIZE',
+                        help='Step size scaling the gradient to get next control (default: 0.0)')
+    parser.add_argument('--alpha-dir', default=1.0, type=float, metavar='UMAX',
+                        help='Step size scaling the gradient direction. Equiv to max allowable control magnitude (default: 1 rad/s)')
+    parser.add_argument('--alpha-dir-decay', default=0.99, type=float, metavar='W',
                         help='Decay the control magnitude by scaling by this weight after each iter (default: 0.99)')
-    parser.add_argument('--loss-scale', default=1000, type=float, metavar='WT',
-                        help='Scaling factor for the loss (default: 1000)')
-    parser.add_argument('--loss-threshold', default=0, type=float, metavar='EPS',
-                        help='Threshold for convergence check based on the losses (default: 0)')
+    parser.add_argument('--conv-threshold', default=1e-3, type=float, metavar='EPS',
+                        help='Threshold for optimization convergence check (default: 0)')
+    parser.add_argument('--ctrl-init', default='zero', type=str,
+                        help='Initial values for the controls: [zero] | random1em1')
 
     # Misc options
-    parser.add_argument('--disp-freq', '-p', default=20, type=int,
-                        metavar='N', help='print/disp/save frequency (default: 10)')
+    parser.add_argument('--disp-iter', default=10, type=int,
+                        metavar='N', help='print once every this many iters (default: 10)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA testing (default: False)')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -225,6 +238,12 @@ def setup_control_options():
 
     # Return
     return parser
+
+def set_bn_eval(model):
+    # Set all BN layers to eval mode
+    for layer in model.children():
+        if isinstance(layer, nn.BatchNorm2d):
+            layer.train(False) # Set to eval mode
 
 def load_checkpoint(path, use_cuda=True):
     if os.path.isfile(path):
@@ -291,11 +310,146 @@ def get_label_changes(h5):
     return ids, idlabels
 
 ################ Controller using trained network
-def run_local_controller(goaldata, model, args, pargs):
+def run_local_controller(goaldata, model, interface, args, pargs):
     # todo: Get latest RGB/Depth image, combine, get latest state, run fwd pass,
     # todo: compute error, get gradients, update control, execute, plot stuff,
     # todo: check convergence, accumulate stats
-    stats = {}
+    # Get the goal image, jt angles & run through encoder, convert to goal state
+    goalimg, goaljts = goaldata
+    with torch.no_grad(): # No gradient here
+        goalencstate = model.encoder.forward(goalimg, goaljts)
+
+    # Sanity check
+    if pargs.alpha_dir > 0:
+        controlmag = pargs.alpha_dir
+        assert(pargs.alpha == 0), "Cannot have both alpha and alpha_dir set"
+    else:
+        assert(pargs.alpha > 0), "Need one of alpha or alpha_dir to be set"
+
+    # Setup some stuff for the optimization
+    eps, nperturb = pargs.gn_perturb, args.num_ctrl
+    repeatstdims = [1]*goalencstate.dim(); repeatstdims[0] = nperturb+1
+    I = torch.eye(nperturb).type_as(goalencstate)
+    assert args.deterministic, "Currently the controller only works with deterministic models"
+
+    # Run the optimization
+    stats = {'initctrls': [], 'optctrls': [], 'ctrlgrad': [], 'initerror': [],
+             'opterror': [], 'imgerror': [], 'jterror': [], 'jtangles': [],
+             'success': False}
+    for k in range(pargs.max_iter):
+        # Get latest RGB/D image
+        currrgb   = torch.from_numpy(interface.rgb).clone().permute(2,0,1).unsqueeze(0).type_as(goaldata) / 255.0 # 1 x 3 x H x W
+        currdepth = torch.from_numpy(interface.depth).clone().unsqueeze(0).unsqueeze(0).type_as(goaldata) / 3.0   # 1 x 1 x H x W
+        currimg   = torch.cat([currrgb, currdepth], 1) # 1 x 4 x H x W
+
+        # Get latest joint angles
+        currjts   = torch.from_numpy(interface.q).clone()[arm_r_idx].view(1,len(arm_r_idx)).type_as(goaldata) # 1 x 7
+        stats['jtangles'].append(currjts)
+
+        # Run a forward pass through the encoder to get the current state encoding
+        with torch.no_grad():
+            currencstate = model.encoder.forward(currimg, currjts)
+
+        # Check for convergence
+        currerror = 0.5 * (currencstate - goalencstate).pow(2).mean()
+        if currerror < pargs.conv_threshold:
+            print('Iter: {}/{}, Error ({}) is lesser than threshold ({}). Converged.'.format(
+                k+1, pargs.max_iter, currerror.item(), pargs.conv_threshold))
+            stats['success']       = True
+            stats['finalopterror'] = currerror.item()
+            stats['finalimgerror'] = (currimg - goalimg).pow(2).mean().item()
+            stats['finaljterror']  = (currjts - goaljts).pow(2).mean().item()
+            stats['finaljtangles'] = currjts
+            stats['iters']         = k+1
+            break
+
+        # Initialize controls
+        if pargs.ctrl_init is 'zero':
+            currcontrols = torch.zeros(1, args.num_ctrl).type_as(currjts) # 1 x num_ctrl
+        elif pargs.ctrl_init is 'random1em1': # uniform random between -0.1, 0.1
+            currcontrols = ((torch.rand(1, args.num_ctrl)*0.2) - 0.1).type_as(currjts) # 1 x num_ctrl
+        else:
+            assert False, "Unknown control initialization option: {}".format(pargs.ctrl_init)
+
+        # Based on the optimization type, run the fwd/bwd pass to get gradients w.r.t ctrls
+        if pargs.optimization == 'gn':
+            with torch.no_grad(): # no need for gradients!
+                # Compute finite differenced controls
+                currencstate_p = currencstate.repeat(repeatstdims)      # Replicate state
+                currcontrols_p = currcontrols.repeat((nperturb+1, 1))   # Replicate ctrls
+                currcontrols_p[1:] += I * eps # Perturb the controls with eps
+
+                # FWD pass
+                predencstate_p = model.transitionmodel.forward(currcontrols_p, currencstate_p, None)
+
+                # Compute optimization error between predicted & goal states, compute gradients w.r.t pred states
+                opterror = 0.5 * (predencstate_p[0:1] - goalencstate).pow(2).mean()
+                optgrad  = (predencstate_p[0:1] - goalencstate) / goalencstate.nelement() # Get gradient
+
+                # Compute Jacobian
+                Jt  = predencstate_p[1:].view(nperturb, -1).clone() # nperturb x statedim
+                Jt -= predencstate_p[0].view(1, -1).expand_as(Jt)   # [ f(x+eps) - f(x) ]
+                Jt.div_(eps)  # [ f(x+eps) - f(x) ] / eps
+
+                # Compute GN-gradient using torch stuff by inverting Jt*J
+                # This is incredibly slow at the first iteration
+                Jinv        = torch.inverse(torch.mm(Jt, Jt.t()) + pargs.gn_lambda * I) # (J^t * J + \lambda I)^-1
+                controlgrad = torch.mm(Jinv, torch.mm(Jt, optgrad.view(-1, 1)))         # (J^t*J + \lambda I)^-1 * (Jt * g)
+        elif pargs.optimization == 'backprop':
+            # todo: need gradients here, model.train(), set BN to eval mode
+            assert NotImplementedError, "Backprop optimization not implemented"
+        else:
+            assert False, "Unknown optimization option: {}".format(pargs.optimization)
+
+        # Use the gradient to get the next velocities
+        if pargs.alpha_dir > 0:
+            controlgraddirn = F.normalize(controlgrad.squeeze(), p=2, dim=0).cpu().float() # Dirn
+            optcontrols     = currcontrols + (controlgraddirn * controlmag)  # Scale dirn by mag (step in dirn of gradient)
+            controlmag     *= pargs.alpha_dir_decay # Decay control magnitude
+        else:
+            optcontrols = currcontrols + (pargs.alpha * controlgrad.squeeze().cpu().float()) # Alpha is step size
+
+        # Send controls to the robot
+        interface.commandRightArmJtVelocities(optcontrols)
+
+        # Save stats
+        stats['initctrls'].append(currcontrols)
+        stats['optctrls'].append(optcontrols)
+        stats['ctrlgrad'].append(controlgrad)
+        stats['initerror'].append(currerror.item())
+        stats['opterror'].append(opterror.item())
+        stats['imgerror'].append((currimg-goalimg).pow(2).mean())
+        stats['jterror'].append((currjts-goaljts).pow(2).mean())
+        print('Iter: {}/{}, Errors => Opt: {}, Img: {}, Jts: {}'.format(
+            k+1, pargs.max_iter, stats['opterror'][-1], stats['imgerror'][-1], stats['jterror'][-1]))
+
+        # Update display
+        if k % pargs.disp_iter:
+            # Print jt angle stats
+            jtanglestats = torch.cat([(goaljts - stats['jtangles'][0]),
+                                      (goaljts - currjts)], 0).permute(1, 0) * (180.0 / np.pi)
+            print('Joint angle errors in degrees: ', jtanglestats)
+
+            #todo: add a matplotlib plot of the errors -- this can get slow
+
+    # Save some final stats
+    if stats['success']:
+        print('Controller successfully converged after {} iterations.'.format(stats['iters']))
+    else:
+        stats['finalopterror'] = stats['opterror'][-1]
+        stats['finalimgerror'] = stats['imgerror'][-1]
+        stats['finaljterror']  = stats['jterror'][-1]
+        stats['finaljtangles'] = stats['jtangles'][-1]
+        stats['iters'] = pargs.max_iter
+        print('Controller failed to converge after {} iterations.'.format(stats['iters']))
+
+    # Print final stats
+    print('Final errors => Opt: {}, Img: {}, Jts: {}'.format(
+        stats['finalopterror'], stats['finalimgerror'], stats['finaljterror']))
+    jtanglestats = torch.cat([(goaljts - stats['jtangles'][0]),
+                              (goaljts - stats['finaljtangles'])], 0).permute(1, 0) * (180.0 / np.pi)
+    print('Final joint angle errors in degrees: ', jtanglestats)
+
     return stats
 
 ################ MAIN
@@ -398,9 +552,9 @@ def main():
                 goalstate = torch.from_numpy(h5data['robot_positions'][glid:glid+1][:, arm_r_idx]).float().to(device)
 
                 # Run the optimization with the input parameters
-                optimstats = run_local_controller((goalimg, goalstate), model, args, pargs)
-                print('Final error after optimization (Opt/Jt/Img): {}/{}/{}'.format(
-                    optimstats['finalopterr'], optimstats['finaljterr'], optimstats['finalimgerr']))
+                print('Running local controller: {}, Max iters: {}, Convergence threshold: {}'.format(
+                    pargs.optimization, pargs.max_iter, pargs.conv_threshold))
+                optimstats = run_local_controller((goalimg, goalstate), model, interface, args, pargs)
                 if (optimstats['success']):
                     print('Test: {}/{}, Step: {}/{}, Local controller converged in {} iterations. '
                           .format(k+1, pargs.num_configs, j+1, numsteps, optimstats['iters']))

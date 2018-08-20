@@ -467,7 +467,7 @@ def main():
 
     ###### Setup ros node & jt space controller
     print("Initializing ROS node... ")
-    rospy.init_node("yumi_closed_loop_ctrl", anonymous=False)
+    rospy.init_node("yumi_closed_loop_ctrl", anonymous=True)
 
     # Create save directory and start tensorboard logger
     util.create_dir(pargs.save_dir)  # Create directory
@@ -493,6 +493,9 @@ def main():
 
     # Load YUMI interface
     interface = YUMIInterface(hz=30.)
+    while (interface.rgb is None) or (interface.depth is None):
+        print('Waiting for RGB/D images...')
+        rospy.sleep(0.1) # Wait till we see an RGB image
 
     #### Setup h5 datasets for control
     args.remove_static_examples = False # Shouldn't change the train/val/test h5 files

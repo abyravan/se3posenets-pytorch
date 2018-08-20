@@ -286,6 +286,9 @@ def load_checkpoint(path, use_cuda=True):
         # Update model params with trained checkpoint
         model.load_state_dict(checkpoint['model_state_dict'])  # Load network
 
+        # Set model to eval mode by default
+        model.eval()
+
         # Return model & args
         return model, args
     else:

@@ -590,13 +590,14 @@ def main():
                                                                 succper.median().item()))
 
 if __name__ == "__main__":
-    # TODO(@cpaxton):
-    if len(sys.argv) < 2:
-        print("usage: %s [filename]" % str(sys.argv[0]))
-
-    rospy.init_node("control_robot")
-    filename = sys.argv[1]
-    h5 = h5py.File(os.path.expanduser(filename))
-    iface = YUMIInterface(hz=30.)
-    iface.configureH5(h5)
-    iface.replayH5(h5)
+    main()
+    # # TODO(@cpaxton):
+    # if len(sys.argv) < 2:
+    #     print("usage: %s [filename]" % str(sys.argv[0]))
+    #
+    # rospy.init_node("control_robot")
+    # filename = sys.argv[1]
+    # h5 = h5py.File(os.path.expanduser(filename))
+    # iface = YUMIInterface(hz=30.)
+    # iface.configureH5(h5)
+    # iface.replayH5(h5)

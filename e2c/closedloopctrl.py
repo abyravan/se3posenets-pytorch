@@ -193,6 +193,8 @@ def setup_control_options():
     parser = configargparse.ArgumentParser(description='Closed-loop control using Enc-Trans-Dec networks')
 
     # Required params
+    parser.add_argument('-c', '--config', required=True, is_config_file=True,
+                        help='Path to config file for parameters')
     parser.add_argument('--checkpoint', default='', type=str, metavar='PATH', required=True,
                         help='path to saved network to use for training (default: none)')
 

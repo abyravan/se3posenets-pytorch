@@ -21,7 +21,6 @@ torch.multiprocessing.set_sharing_strategy('file_system')
 import se3layers as se3nn
 import data
 import ctrlnets
-import se2nets
 import util
 from util import AverageMeter, Tee, DataEnumerator
 import helperfuncs as helpers
@@ -142,7 +141,7 @@ def main():
             # Read from file
             intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
             print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-            if args.se2_data or args.full_res:
+            if args.full_res:
                 args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
             else:
                 args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
@@ -417,10 +416,7 @@ def main():
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
     print('Using multi-step Flow-Model')
-    if args.se2_data:
-        print('Using the smaller multi-step SE2-Pose-Model')
-    else:
-        print('Using multi-step SE3-Pose-Model')
+    print('Using multi-step SE3-Pose-Model')
 
     ### Load the model
     num_train_iter = 0
@@ -432,13 +428,13 @@ def main():
     if args.use_gt_masks:
         print('Using GT masks. Model predicts only poses & delta-poses')
         assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
-        modelfn = se2nets.MultiStepSE2OnlyPoseModel if args.se2_data else ctrlnets.MultiStepSE3OnlyPoseModel
+        modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
     elif args.use_gt_poses:
         print('Using GT poses & delta poses. Model predicts only masks')
         assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
-        modelfn = se2nets.MultiStepSE2OnlyMaskModel if args.se2_data else ctrlnets.MultiStepSE3OnlyMaskModel
+        modelfn = ctrlnets.MultiStepSE3OnlyMaskModel
     else:
-        modelfn = se2nets.MultiStepSE2PoseModel if args.se2_data else ctrlnets.MultiStepSE3PoseModel
+        modelfn = ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
                     se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,

@@ -2,13 +2,14 @@
 # Intro
 
 Setting up training:
-1) Install the following packages:
+1) Install the Anaconda package manager (https://repo.continuum.io/archive/). Code works with Python 2 & 3.
+2) Install the following packages:
      PyTorch: conda install pytorch=0.4.0 cuda90 torchvision -c pytorch (0.4.1 has some compile issues) 
      Tensorflow (only the CPU version - for tensor board visualisation), 
-     OpenCV (condo install opencv -c menpo)
+     OpenCV (conda install opencv -c menpo)
      configargparse
-2) Compile the code with: sh make.sh (in the main se3nets-pytorch folder)
-3) To train (npc-pivot branch): python train_se3posenets.py -c <config_file>
+3) Compile the code with: sh make.sh (in the main se3nets-pytorch folder)
+4) To train (npc-pivot branch): python train_se3posenets.py -c <config_file>
      For an example config file, look at config/icra18final/simdata/se3pose/def_rmsprop.yaml
      At the least, you might have to change the “data” path inside the config file to be your path to the dataset
 

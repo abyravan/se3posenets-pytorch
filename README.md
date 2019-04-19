@@ -12,3 +12,6 @@ Setting up training:
 5) To train the baseline se3/flow networks: python train_flow_se3_nets.py -c <config_file>
      For the flow network, the config file is at config/icra18final/simdata/flow/def.yaml
      For the se3 net, the config file is at config/icra18final/simdata/se3/def.yaml
+6) You can visualize the errors and predictions using tensorboard:
+     tensorboard --logdir=<log_dir> --port=8000
+   where log_dir can be the path to the directory specified in the config file as save-dir.

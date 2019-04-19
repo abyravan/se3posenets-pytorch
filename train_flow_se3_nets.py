@@ -245,7 +245,7 @@ def main():
                                                                        #ctrl_ids=ctrlids_in_state,
                                                                        #camera_extrinsics = args.cam_extrinsics,
                                                                        #camera_intrinsics = args.cam_intrinsics,
-                                                                       compute_bwdflows=args.use_gt_masks,
+                                                                       compute_bwdflows=False,
                                                                        load_color=load_color,
                                                                        #num_tracker=args.num_tracker,
                                                                        dathreshold=args.da_threshold, dawinsize=args.da_winsize,

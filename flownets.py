@@ -1,8 +1,5 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from  torch.autograd import Variable
-import se3layers as se3nn
 import ctrlnets
 
 ### Initialize the SE3 prediction layer to identity
@@ -20,7 +17,7 @@ def init_flowlayer_identity(layer):
 class FlowNet(nn.Module):
     def __init__(self, num_ctrl, num_state=0, input_channels=3, use_bn=True, pre_conv=False,
                  nonlinearity='prelu', init_flow_iden = False,
-                 use_jt_angles=False, use_lstm=False):
+                 use_jt_angles=False):
         super(FlowNet, self).__init__()
 
         ###### Choose type of convolution
@@ -65,17 +62,12 @@ class FlowNet(nn.Module):
                 ctrlnets.get_nonlinearity(nonlinearity),
             )
 
-        ###### Hidden layer (either a single step or LSTM)
+        ###### Hidden layer
         self.combined1 = nn.Sequential(
             nn.Linear(self.celem + cdim + jdim, 256),
             ctrlnets.get_nonlinearity(nonlinearity)
         )
-        self.use_lstm = use_lstm
-        if self.use_lstm:
-            self.hiddenlayer = nn.LSTM(256, 256)
-            self.hiddenstate = ()  # Hidden state for LSTM
-        else:
-            self.hiddenlayer = nn.Linear(256, 256)
+        self.hiddenlayer = nn.Linear(256, 256)
         self.combined2 = nn.Sequential(
             nn.Linear(256, self.celem),
             ctrlnets.get_nonlinearity(nonlinearity),
@@ -105,7 +97,7 @@ class FlowNet(nn.Module):
         if init_flow_iden:
             init_flowlayer_identity(self.deconv5)
 
-    def forward(self, x, reset_hidden_state=False):
+    def forward(self, x):
         # Run the forward pass
         p, j, c = x  # Pose, Jtangles, Control
 
@@ -127,16 +119,9 @@ class FlowNet(nn.Module):
         else:
             e = torch.cat([pe,ce], 1)    # Concatenate encoded vectors
 
-        # Use the hidden layer network (either single-step or LSTM)
+        # Use the hidden layer network
         h1 = self.combined1(e)
-        if self.use_lstm:
-            if reset_hidden_state: # Reset the LSTM hidden state to all zeros
-                self.hiddenstate = (Variable(torch.zeros(1, h1.size(0), h1.size(1)).type_as(p.data)),
-                                    Variable(torch.zeros(1, h1.size(0), h1.size(1)).type_as(p.data))) # Seq length = 1
-            ls, self.hiddenstate = self.hiddenlayer(h1.unsqueeze(0), self.hiddenstate)
-            ls = ls.squeeze()
-        else:
-            ls = self.hiddenlayer(h1)
+        ls = self.hiddenlayer(h1)
         h2 = self.combined2(ls)
 
         # Deconv net to produce flows

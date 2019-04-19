@@ -32,14 +32,10 @@ import options
 parser = options.setup_comon_options()
 
 # Loss options
-parser.add_argument('--use-gt-pts-seq', action='store_true', default=False,
-                    help='Use a sequence of GT points as inputs instead of the network predicted pts (default: False)')
 parser.add_argument('--init-flow-iden', action='store_true', default=False,
                     help='Initialize the flow network to predict zero flow at the start (default: False)')
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
-parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
-                    help='Use angles of all joints as inputs to the networks (default: False)')
 parser.add_argument('--use-se3-nets', action='store_true', default=False,
                     help='Use SE3 nets instead of flow nets (default: False)')
 
@@ -58,6 +54,7 @@ def main():
     args = parser.parse_args()
     args.cuda       = not args.no_cuda and torch.cuda.is_available()
     args.batch_norm = not args.no_batch_norm
+    assert(args.seq_len == 1)
 
     ### Create save directory and start tensorboard logger
     util.create_dir(args.save_dir)  # Create directory
@@ -85,10 +82,7 @@ def main():
             # Read from file
             intrinsics = data.read_intrinsics_file(load_dir + "/intrinsics.txt")
             print("Reading camera intrinsics from: " + load_dir + "/intrinsics.txt")
-            if args.se2_data:
-                args.img_ht, args.img_wd = int(intrinsics['ht']), int(intrinsics['wd'])
-            else:
-                args.img_ht, args.img_wd = 240, 320  # All data except SE(2) data is at 240x320 resolution
+            args.img_ht, args.img_wd = 240, 320  # All data is at 240x320 resolution
             args.img_scale = 1.0 / intrinsics['s']  # Scale of the image (use directly from the data)
 
             # Setup camera intrinsics
@@ -214,20 +208,10 @@ def main():
     else:
         print("Computing flows using tracker poses. Can get flows for all input points")
 
-    # XYZ-RGB
-    if args.use_xyzrgb:
-        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
-    elif args.use_xyzhue:
-        print("Using XYZ-Hue input - 4 channels. Assumes registered depth/RGB")
-
     ########################
     ############ Load datasets
     # Get datasets
     load_color = None
-    if args.use_xyzrgb:
-        load_color = 'rgb'
-    elif args.use_xyzhue:
-        load_color = 'hsv'
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
@@ -297,7 +281,6 @@ def main():
     ########################
     ############ Load models & optimization stuff
 
-    assert not args.use_full_jt_angles, "Can only use as many jt angles as the control dimension"
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
@@ -305,27 +288,23 @@ def main():
 
     ## Num input channels
     num_input_channels = 3 # Num input channels
-    if args.use_xyzrgb:
-        num_input_channels = 6
-    elif args.use_xyzhue:
-        num_input_channels = 4 # Use only hue as input
 
     ### Load the model
     num_train_iter = 0
     if args.use_se3_nets:
         model = se3nets.SE3Model(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                        se3_type=args.se3_type, use_pivot=args.pred_pivot, use_kinchain=False,
+                        se3_type=args.se3_type, use_pivot=args.pred_pivot,
                         input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                         init_transse3_iden=args.init_transse3_iden,
                         use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                         sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv,
-                        wide=args.wide_model, se2_data=False, use_jt_angles=args.use_jt_angles,
-                        num_state=args.num_state_net, use_lstm=(args.seq_len > 1))
+                        wide=args.wide_model, use_jt_angles=args.use_jt_angles,
+                        num_state=args.num_state_net)
     else:
         model = flownets.FlowNet(num_ctrl=args.num_ctrl, num_state=args.num_state_net,
                                  input_channels=num_input_channels, use_bn=args.batch_norm, pre_conv=args.pre_conv,
                                  nonlinearity=args.nonlin, init_flow_iden=args.init_flow_iden,
-                                 use_jt_angles=args.use_jt_angles, use_lstm=(args.seq_len>1))
+                                 use_jt_angles=args.use_jt_angles)
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -537,21 +516,7 @@ def iterate(data_loader, model, tblogger, num_iters,
         fwdflows  = util.req_grad(sample['fwdflows'].to(device), False)  # No gradients
         fwdvis    = util.req_grad(sample['fwdvisibilities'].float().to(device), False)
 
-        # Get XYZRGB input
-        if args.use_xyzrgb:
-            rgb = util.req_grad(sample['rgbs'].to(device) / 255.0, train)  # Normalize RGB to 0-1
-            netinput = torch.cat([pts, rgb], 2)  # Concat along channels dimension
-        elif args.use_xyzhue:
-            hue = util.req_grad(sample['rgbs'].narrow(2, 0, 1).to(device) / 179.0,
-                                train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
-            netinput = torch.cat([pts, hue], 2)  # Concat along channels dimension
-        else:
-            netinput = pts  # XYZ
-
         # Get jt angles
-        # if args.use_full_jt_angles:
-        #    jtangles = util.req_grad(sample['actconfigs'].to(device), train)
-        # else:
         jtangles = util.req_grad(sample['actctrlconfigs'].to(device), train)  # [:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
@@ -561,49 +526,35 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Start timer
         start = time.time()
 
-        ### Run a FWD pass through the network (multi-step)
-        predflows, predpts, flowloss, loss = [], [], torch.zeros(args.seq_len), 0
+        ### Run a FWD pass through the network
+        # Make flow prediction
         deltaposes, masks = [], []
-        for k in xrange(args.seq_len):
-            # Get current input to network
-            if (k == 0):
-                currpts = pts[:,0]
-            else:
-                assert (not args.use_xyzrgb), "Does not work with xyzrgb set"
-                currpts = predpts[k-1]
+        if args.use_se3_nets:
+            flows, [deltapose, mask] = model([pts[:, 0], jtangles[:, 0], ctrls[:, 0]],
+                                             train_iter=num_train_iter)
+            deltaposes.append(deltapose)
+            masks.append(mask)
+        else:
+            flows = model([pts[:, 0], jtangles[:, 0], ctrls[:, 0]])
+        nextpts = pts[:, 0] + flows  # Add flow to get next prediction
 
-            # Make flow prediction
-            if args.use_se3_nets:
-                flows, [deltapose, mask] = model([netinput[:,k], jtangles[:,k], ctrls[:,k]],
-                                                 reset_hidden_state=(k==0),
-                                                 train_iter = num_train_iter) # Reset hidden state at start of sequence
-                deltaposes.append(deltapose)
-                masks.append(mask)
-            else:
-                flows = model([netinput[:,k], jtangles[:,k], ctrls[:,k]], reset_hidden_state=(k==0)) # Reset hidden state at start of sequence
-            nextpts = currpts + flows  # Add flow to get next prediction
+        # Append to list of predictions
+        predflows = [flows,]
+        predpts = [nextpts,]
 
-            # Append to list of predictions
-            predflows.append(flows)
-            predpts.append(nextpts)
+        # Get loss function inputs and targets
+        inputs = flows  # Predicted flow for that step (note that gradients only go to the mask & deltas)
+        targets = fwdflows[:, 0]
 
-            # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
-            # and compare that against the predicted flows for that step alone!
-            inputs = flows  # Predicted flow for that step (note that gradients only go to the mask & deltas)
-            targets = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1])  # Flow for those points in that step alone!
-
-            ### 3D loss
-            # If motion-normalized loss, pass in GT flows
-            if args.motion_norm_loss:
-                motion = targets  # Use either delta-flows or full-flows
-                currloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                   loss_type=args.loss_type, wts=fwdvis[:, k])
-            else:
-                currloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
-
-            # Append to total loss
-            loss += currloss
-            flowloss[k] = currloss.item()
+        ### 3D loss
+        # If motion-normalized loss, pass in GT flows
+        if args.motion_norm_loss:
+            motion = targets  # Use either delta-flows or full-flows
+            loss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
+                                                           loss_type=args.loss_type, wts=fwdvis[:, 0])
+        else:
+            loss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, 0])
+        flowloss = torch.Tensor([loss.item()])
 
         # Update stats
         stats.flowloss.update(flowloss)
@@ -713,23 +664,10 @@ def iterate(data_loader, model, tblogger, num_iters,
                                                             nrow=args.seq_len, normalize=True, range=(-0.01, 0.01))
                     depthdisp = torchvision.utils.make_grid(sample['points'][id].narrow(1,2,1), normalize=True, range=(0.0,3.0))
 
-                    # Display RGB
-                    if args.use_xyzrgb:
-                        rgbdisp = torchvision.utils.make_grid(
-                            sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
-                            nrow=args.seq_len, normalize=True, range=(0.0, 255.0))
-                    elif args.use_xyzhue:
-                        rgbdisp = torchvision.utils.make_grid(
-                            sample['rgbs'][id, :, 0].float().view(-1, 1, args.img_ht, args.img_wd),
-                            nrow=args.seq_len, normalize=True,
-                            range=(0.0, 179.0))  # Show only hue, goes from 0-179 in OpenCV
-
                     # Show as an image summary
                     info = {mode + '-depths': util.to_np(depthdisp.unsqueeze(0)),
                             mode + '-flows': util.to_np(flowdisp.unsqueeze(0)),
                             }
-                    if args.use_xyzrgb or args.use_xyzhue:
-                        info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
                     if args.use_se3_nets:
                         maskdisp = torchvision.utils.make_grid(
                             torch.cat([masks[0].narrow(0, id, 1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),

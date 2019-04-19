@@ -1,4 +1,4 @@
-Setting up training:
+# Setting up training:
 1) Install the Anaconda package manager (https://repo.continuum.io/archive/). Code works with Python 2 & 3.
 2) Install the following packages:
      PyTorch: ```conda install pytorch=0.4.0 cuda90 torchvision -c pytorch``` (>= 0.4.1 has some compile issues) 
@@ -15,3 +15,13 @@ Setting up training:
 6) You can visualize the errors and predictions using tensorboard:
      ```tensorboard --logdir=<log_dir> --port=8000```
    where log_dir can be the path to the directory specified in the config file as save-dir.
+
+# Simulated Baxter Data:
+You can download the simulated Baxter dataset described in the paper here: https://drive.google.com/open?id=1CifjZXKL7pnJgAaTenAFSuGuUGsBmUaZ
+
+Use [rclone](https://rclone.org/drive/) to download from the drive link as there are multiple small files in the dataset.
+
+Once done, you should change the "data" path in the config giles to the correct root directory.
+
+# Paper:
+Byravan, Arunkumar, et al. ["Se3-pose-nets: Structured deep dynamics models for visuomotor planning and control."](https://rse-lab.cs.washington.edu/papers/se3posenets_icra18.pdf), ICRA 2018.

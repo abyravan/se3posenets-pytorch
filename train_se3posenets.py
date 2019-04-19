@@ -256,7 +256,7 @@ def main():
                                                  #ctrl_ids=ctrlids_in_state,
                                                  #camera_extrinsics = args.cam_extrinsics,
                                                  #camera_intrinsics = args.cam_intrinsics,
-                                                 compute_bwdflows=args.use_gt_masks,
+                                                 compute_bwdflows=False,
                                                  #num_tracker=args.num_tracker,
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
@@ -634,9 +634,9 @@ def iterate(data_loader, model, tblogger, num_iters,
         if args.motion_norm_loss:
             motion = targets  # Use either delta-flows or full-flows
             currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                 loss_type=args.loss_type, wts=fwdvis[:, k])
+                                                                 loss_type=args.loss_type, wts=fwdvis[:, 0])
         else:
-            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
+            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, 0])
 
         ### Consistency loss (between t & t+1)
         # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
@@ -745,7 +745,7 @@ def iterate(data_loader, model, tblogger, num_iters,
                             stats=stats, bsz=bsz)
 
                 ### Print stuff if we have weight sharpening enabled
-                if args.use_wt_sharpening and not args.use_gt_masks:
+                if args.use_wt_sharpening:
                     try:
                         noise_std, pow = model.posemaskmodel.compute_wt_sharpening_stats(train_iter=num_train_iter)
                     except:
@@ -856,10 +856,9 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
     # Print loss
     bsz = args.batch_size if bsz is None else bsz
     print('Mode: {}, Epoch: [{}/{}], Iter: [{}/{}], Sample: [{}/{}], Batch size: {}, '
-          'Loss: {loss.val:.4f} ({loss.avg:.4f}), '
-          'Seg : {seg.val:.4f} ({seg.avg:.4f}) '.format(
+          'Loss: {loss.val:.4f} ({loss.avg:.4f})'.format(
         mode, epoch, args.epochs, curr, total, samplecurr,
-        sampletotal, bsz, loss=stats.loss, seg=stats.segloss))
+        sampletotal, bsz, loss=stats.loss))
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):

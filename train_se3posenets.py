@@ -32,62 +32,10 @@ import options
 parser = options.setup_comon_options()
 
 # Loss options
-parser.add_argument('--backprop-only-first-delta', action='store_true', default=False,
-                    help='Backprop gradients only to the first delta. Switches from using delta-flow-loss to'
-                         'full-flow-loss with copied composed deltas if this is set (default: False)')
 parser.add_argument('--pt-wt', default=1, type=float,
                     metavar='WT', help='Weight for the 3D point loss - only FWD direction (default: 1)')
 parser.add_argument('--use-full-jt-angles', action='store_true', default=False,
                     help='Use angles of all joints as inputs to the networks (default: False)')
-
-# Pivot options
-parser.add_argument('--pose-center', default='pred', type=str,
-                    metavar='STR', help='Different options for pose center positions: [pred] | predwmaskmean | predwmaskmeannograd')
-parser.add_argument('--delta-pivot', default='', type=str,
-                    metavar='STR', help='Pivot prediction for the delta-tfm: [] | pred | ptmean | maskmean | '
-                                        'maskmeannograd | posecenter')
-parser.add_argument('--consis-rt-loss', action='store_true', default=False,
-                    help='Use RT loss for the consistency measure (default: False)')
-
-# Loss between pose center and mask mean
-parser.add_argument('--pose-anchor-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for the loss anchoring pose center to be close to the mean mask value')
-parser.add_argument('--pose-anchor-maskbprop', action='store_true', default=False,
-                    help='Backprop gradient from pose anchor loss to mask mean if set to true (default: False)')
-parser.add_argument('--pose-anchor-grad-clip', default=0.0, type=float,
-                    metavar='WT', help='Gradient clipping for the pose anchor gradient (to account for outliers) (default: 0.0)')
-
-# Box data
-parser.add_argument('--box-data', action='store_true', default=False,
-                    help='Dataset has box/ball data (default: False)')
-
-# Use normal data
-parser.add_argument('--normal-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for the cosine distance of normal loss (default: 1)')
-parser.add_argument('--normal-max-depth-diff', default=0.05, type=float,
-                    metavar='WT', help='Max allowed depth difference for a valid normal computation (default: 0.05)')
-parser.add_argument('--motion-norm-normal-loss', action='store_true', default=False,
-                    help='normalize the normal loss by number of points that actually move instead of all pts (default: False)')
-parser.add_argument('--bilateral-depth-smoothing', action='store_true', default=False,
-                    help='do bilateral depth smoothing before computing normals (default: False)')
-parser.add_argument('--bilateral-window-width', default=9, type=int,
-                    metavar='K', help='Size of window for bilateral filtering (default: 9x9)')
-parser.add_argument('--bilateral-depth-std', default=0.005, type=float,
-                    metavar='WT', help='Standard deviation in depth for bilateral filtering kernel (default: 0.005)')
-
-# Supervised segmentation loss
-parser.add_argument('--seg-wt', default=0.0, type=float,
-                    metavar='WT', help='Weight for a supervised mask segmentation loss (both @ t & t+1)')
-
-# Transition model type
-parser.add_argument('--trans-type', default='default', type=str,
-                    metavar='TRANS', help='type of transition model: [default] | linear | simple | simplewide | '
-                                          'locallinear | locallineardelta')
-
-# Pose-Mask model type
-parser.add_argument('--posemask-type', default='default', type=str,
-                    metavar='POSEMASK', help='type of pose-mask model: [default] | unet')
-
 
 # Define xrange
 try:
@@ -126,11 +74,6 @@ def main():
     # 480 x 640 or 240 x 320
     if args.full_res:
         print("Using full-resolution images (480x640)")
-    # XYZ-RGB
-    if args.use_xyzrgb:
-        print("Using XYZ-RGB input - 6 channels. Assumes registered depth/RGB")
-    elif args.use_xyzhue:
-        print("Using XYZ-Hue input - 4 channels. Assumes registered depth/RGB")
 
     # Get default options & camera intrinsics
     args.cam_intrinsics, args.cam_extrinsics, args.ctrl_ids = [], [], []
@@ -172,48 +115,34 @@ def main():
                                                                               cam_intrinsics)
         args.cam_intrinsics.append(cam_intrinsics) # Add to list of intrinsics
 
-        ### BOX (vs) BAXTER DATA
-        if args.box_data:
-            # Get ctrl dimension
-            if args.ctrl_type == 'ballposforce':
-                args.num_ctrl = 6
-            elif args.ctrl_type == 'ballposeforce':
-                args.num_ctrl = 10
-            elif args.ctrl_type == 'ballposvelforce':
-                args.num_ctrl = 9
-            elif args.ctrl_type == 'ballposevelforce':
-                args.num_ctrl = 13
-            else:
-                assert False, "Ctrl type unknown: {}".format(args.ctrl_type)
-            print('Num ctrl: {}'.format(args.num_ctrl))
-        else:
-            # Compute extrinsics
-            cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
+        ### BAXTER DATA
+        # Compute extrinsics
+        cam_extrinsics = data.read_cameradata_file(load_dir + '/cameradata.txt')
 
-            # Get dimensions of ctrl & state
-            try:
-                statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
-                print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
-            except:
-                statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
-                ctrllabels = statelabels  # Just use the labels
-                trackerlabels = []
-                print("Could not read statectrllabels file. Reverting to labels in statelabels file")
-            #args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
-            #print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
-            args.num_ctrl = len(ctrllabels)
-            print('Num ctrl: {}'.format(args.num_ctrl))
+        # Get dimensions of ctrl & state
+        try:
+            statelabels, ctrllabels, trackerlabels = data.read_statectrllabels_file(load_dir + "/statectrllabels.txt")
+            print("Reading state/ctrl joint labels from: " + load_dir + "/statectrllabels.txt")
+        except:
+            statelabels = data.read_statelabels_file(load_dir + '/statelabels.txt')['frames']
+            ctrllabels = statelabels  # Just use the labels
+            trackerlabels = []
+            print("Could not read statectrllabels file. Reverting to labels in statelabels file")
+        #args.num_state, args.num_ctrl, args.num_tracker = len(statelabels), len(ctrllabels), len(trackerlabels)
+        #print('Num state: {}, Num ctrl: {}'.format(args.num_state, args.num_ctrl))
+        args.num_ctrl = len(ctrllabels)
+        print('Num ctrl: {}'.format(args.num_ctrl))
 
-            # Find the IDs of the controlled joints in the state vector
-            # We need this if we have state dimension > ctrl dimension and
-            # if we need to choose the vals in the state vector for the control
-            ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
-            print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
+        # Find the IDs of the controlled joints in the state vector
+        # We need this if we have state dimension > ctrl dimension and
+        # if we need to choose the vals in the state vector for the control
+        ctrlids_in_state = torch.LongTensor([statelabels.index(x) for x in ctrllabels])
+        print("ID of controlled joints in the state vector: ", ctrlids_in_state.view(1, -1))
 
-            # Add to list of intrinsics
-            args.cam_extrinsics.append(cam_extrinsics)
-            args.ctrl_ids.append(ctrlids_in_state)
-            args.state_labels.append(statelabels)
+        # Add to list of intrinsics
+        args.cam_extrinsics.append(cam_extrinsics)
+        args.ctrl_ids.append(ctrlids_in_state)
+        args.state_labels.append(statelabels)
 
     # Data noise
     if not hasattr(args, "add_noise_data") or (len(args.add_noise_data) == 0):
@@ -242,21 +171,13 @@ def main():
     print('Ht: {}, Wd: {}, Suffix: {}, Num ctrl: {}'.format(args.img_ht, args.img_wd, args.img_suffix, args.num_ctrl))
 
     # Read mesh ids and camera data (for baxter)
-    if (not args.box_data):
-        args.baxter_labels = data.read_statelabels_file(args.data[0] + '/statelabels.txt')
-        args.mesh_ids      = args.baxter_labels['meshIds']
+    args.baxter_labels = data.read_statelabels_file(args.data[0] + '/statelabels.txt')
+    args.mesh_ids      = args.baxter_labels['meshIds']
 
     # SE3 stuff
     assert (args.se3_type in ['se3euler', 'se3aa', 'se3quat', 'affine', 'se3spquat', 'se3aar']), 'Unknown SE3 type: ' + args.se3_type
-    args.delta_pivot = '' if (args.delta_pivot == 'None') else args.delta_pivot # Workaround since we can't specify empty string in the yaml
-    assert (args.delta_pivot in ['', 'pred', 'ptmean', 'maskmean', 'maskmeannograd', 'posecenter']),\
-        'Unknown delta pivot type: ' + args.delta_pivot
-    delta_pivot_type = ' Delta pivot type: {}'.format(args.delta_pivot) if (args.delta_pivot != '') else ''
-    #args.se3_dim       = ctrlnets.get_se3_dimension(args.se3_type)
-    #args.delta_se3_dim = ctrlnets.get_se3_dimension(args.se3_type, (args.delta_pivot != '')) # Delta SE3 type
-    if args.se3_type == 'se3aar':
-        assert(args.delta_pivot == '')
-    print('Predicting {} SE3s of type: {}.{}'.format(args.num_se3, args.se3_type, delta_pivot_type))
+    args.delta_pivot = ''
+    print('Predicting {} SE3s of type: {}'.format(args.num_se3, args.se3_type))
 
     # Sequence stuff
     print('Step length: {}, Seq length: {}'.format(args.step_len, args.seq_len))
@@ -270,39 +191,13 @@ def main():
         print('Using weight sharpening to encourage binary mask prediction. Start iter: {}, Rate: {}, Noise stop iter: {}'.format(
             args.sharpen_start_iter, args.sharpen_rate, args.noise_stop_iter))
 
-    # Normal loss
-    if (args.normal_wt > 0):
-        print('Using cosine similarity loss on the predicted normals. Loss wt: {}'.format(args.normal_wt))
-        if args.bilateral_depth_smoothing:
-            print('Applying bi-lateral filter to smooth the depths before computing normals.'
-                  ' Window size: {}x{}, Depth std: {}'.format(args.bilateral_window_width, args.bilateral_window_width,
-                                                              args.bilateral_depth_std))
-
-    # Pose center anchor loss
-    if (args.pose_anchor_wt > 0):
-        print('Adding loss encouraging pose centers to be close to mask mean. Loss wt: {}'.format(args.pose_anchor_wt))
-        if args.pose_anchor_maskbprop:
-            print("Will backprop pose anchor error gradient to mask mean")
-
     # Loss type
-    delta_loss = ', Penalizing the delta-flow loss per unroll'
     norm_motion = ', Normalizing loss based on GT motion' if args.motion_norm_loss else ''
-    print('3D loss type: ' + args.loss_type + norm_motion + delta_loss)
-
-    # Supervised segmentation loss
-    if (args.seg_wt > 0):
-        print("Using supervised segmentation loss with weight: {}".format(args.seg_wt))
+    print('3D loss type: ' + args.loss_type + norm_motion)
 
     # Wide model
     if args.wide_model:
         print('Using a wider network!')
-
-    # Box data
-    if args.box_data:
-        assert (not args.use_jt_angles), "Cannot use joint angles as input to the encoder for box data"
-        assert (not args.use_jt_angles_trans), "Cannot use joint angles as input to the transition model for box data"
-        assert (not args.reject_left_motion), "Cannot filter left arm motions for box data"
-        assert (not args.reject_right_still), "Cannot filter right arm still cases for box data"
 
     if args.use_jt_angles:
         print("Using Jt angles as input to the pose encoder")
@@ -322,10 +217,6 @@ def main():
     ############ Load datasets
     # Get datasets
     load_color = None
-    if args.use_xyzrgb:
-        load_color = 'rgb'
-    elif args.use_xyzhue:
-        load_color = 'hsv'
     if args.reject_left_motion:
         print("Examples where any joint of the left arm moves by > 0.005 radians inter-frame will be discarded. \n"
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
@@ -334,18 +225,14 @@ def main():
               "NOTE: This test will be slow on any machine where the data needs to be fetched remotely")
     if args.add_noise:
         print("Adding noise to the depths, actual configs & ctrls")
-    ### Box dataset (vs) Other options
-    if args.box_data:
-        print("Box dataset")
-        valid_filter, args.mesh_ids = None, None # No valid filter
-        read_seq_func = data.read_box_sequence_from_disk
-    else:
-        print("Baxter dataset")
-        valid_filter = lambda p, n, st, se, slab: data.valid_data_filter(p, n, st, se, slab,
-                                                                         mean_dt=args.mean_dt, std_dt=args.std_dt,
-                                                                         reject_left_motion=args.reject_left_motion,
-                                                                         reject_right_still=args.reject_right_still)
-        read_seq_func = data.read_baxter_sequence_from_disk
+
+    print("Baxter dataset")
+    valid_filter = lambda p, n, st, se, slab: data.valid_data_filter(p, n, st, se, slab,
+                                                                     mean_dt=args.mean_dt, std_dt=args.std_dt,
+                                                                     reject_left_motion=args.reject_left_motion,
+                                                                     reject_right_still=args.reject_right_still)
+    read_seq_func = data.read_baxter_sequence_from_disk
+
     ### Noise function
     #noise_func = lambda d, c: data.add_gaussian_noise(d, c, std_d=0.02,
     #                                                  scale_d=True, std_j=0.02) if args.add_noise else None
@@ -374,13 +261,7 @@ def main():
                                                  dathreshold=args.da_threshold, dawinsize=args.da_winsize,
                                                  use_only_da=args.use_only_da_for_flows,
                                                  noise_func=noise_func,
-                                                 load_color=load_color,
-                                                 compute_normals=(args.normal_wt > 0),
-                                                 maxdepthdiff=args.normal_max_depth_diff,
-                                                 bismooth_depths=args.bilateral_depth_smoothing,
-                                                 bismooth_width=args.bilateral_window_width,
-                                                 bismooth_std=args.bilateral_depth_std,
-                                                 supervised_seg_loss=(args.seg_wt > 0)) # Need BWD flows / masks if using GT masks
+                                                 load_color=load_color) # Need BWD flows / masks if using GT masks
     train_dataset = data.BaxterSeqDataset(baxter_data, disk_read_func, 'train')  # Train dataset
     val_dataset   = data.BaxterSeqDataset(baxter_data, disk_read_func, 'val')  # Val dataset
     test_dataset  = data.BaxterSeqDataset(baxter_data, disk_read_func, 'test')  # Test dataset
@@ -415,37 +296,21 @@ def main():
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
-    print('Using multi-step Flow-Model')
-    print('Using multi-step SE3-Pose-Model')
-
     ### Load the model
     num_train_iter = 0
     num_input_channels = 3 # Num input channels
-    if args.use_xyzrgb:
-        num_input_channels = 6
-    elif args.use_xyzhue:
-        num_input_channels = 4 # Use only hue as input
-    if args.use_gt_masks:
-        print('Using GT masks. Model predicts only poses & delta-poses')
-        assert not args.use_gt_poses, "Cannot set option for using GT masks and poses together"
-        modelfn = ctrlnets.MultiStepSE3OnlyPoseModel
-    elif args.use_gt_poses:
-        print('Using GT poses & delta poses. Model predicts only masks')
-        assert not args.use_gt_masks, "Cannot set option for using GT masks and poses together"
-        modelfn = ctrlnets.MultiStepSE3OnlyMaskModel
-    else:
-        modelfn = ctrlnets.MultiStepSE3PoseModel
+    modelfn = ctrlnets.MultiStepSE3PoseModel
     model = modelfn(num_ctrl=args.num_ctrl, num_se3=args.num_se3,
-                    se3_type=args.se3_type, delta_pivot=args.delta_pivot, use_kinchain=False,
+                    se3_type=args.se3_type, delta_pivot=args.delta_pivot,
                     input_channels=num_input_channels, use_bn=args.batch_norm, nonlinearity=args.nonlin,
                     init_posese3_iden=args.init_posese3_iden, init_transse3_iden=args.init_transse3_iden,
                     use_wt_sharpening=args.use_wt_sharpening, sharpen_start_iter=args.sharpen_start_iter,
                     sharpen_rate=args.sharpen_rate, pre_conv=args.pre_conv, decomp_model=args.decomp_model,
-                    use_sigmoid_mask=args.use_sigmoid_mask, local_delta_se3=args.local_delta_se3,
+                    local_delta_se3=args.local_delta_se3,
                     wide=args.wide_model, use_jt_angles=args.use_jt_angles,
                     use_jt_angles_trans=args.use_jt_angles_trans, num_state=args.num_state_net,
                     full_res=args.full_res, noise_stop_iter=args.noise_stop_iter,
-                    trans_type=args.trans_type, posemask_type=args.posemask_type) # noise_stop_iter not available for SE2 models
+                    trans_type="default", posemask_type="default")
     if args.cuda:
         model.cuda() # Convert to CUDA if enabled
 
@@ -517,8 +382,8 @@ def main():
     ## Create a file to log different validation errors over training epochs
     statstfile = open(args.save_dir + '/epochtrainstats.txt', 'w')
     statsvfile = open(args.save_dir + '/epochvalstats.txt', 'w')
-    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr\n")
-    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Normalloss, Anchorloss, Flowerrsum, Flowerravg, Consiserr\n")
+    statstfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg, Consiserr\n")
+    statsvfile.write("Epoch, Loss, Ptloss, Consisloss, Flowerrsum, Flowerravg, Consiserr\n")
 
     ########################
     ############ Train / Validate
@@ -560,19 +425,15 @@ def main():
                                     epoch+1, sfc, prev_best_fcloss, prev_best_fcepoch, best_loss, best_fcepoch))
 
         # Write losses to stats file
-        statstfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
+        statstfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch+1, train_stats.loss.avg,
                                                                        train_stats.ptloss.avg.sum(),
                                                                        train_stats.consisloss.avg.sum(),
-                                                                       train_stats.normalloss.avg.sum(),
-                                                                       train_stats.anchorloss.avg.sum(),
                                                                        train_stats.flowerr_sum.avg.sum()/args.batch_size,
                                                                        train_stats.flowerr_avg.avg.sum()/args.batch_size,
                                                                        train_stats.consiserr.avg.sum()))
-        statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
+        statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(epoch + 1, val_stats.loss.avg,
                                                                        val_stats.ptloss.avg.sum(),
                                                                        val_stats.consisloss.avg.sum(),
-                                                                       val_stats.normalloss.avg.sum(),
-                                                                       val_stats.anchorloss.avg.sum(),
                                                                        val_stats.flowerr_sum.avg.sum() / args.batch_size,
                                                                        val_stats.flowerr_avg.avg.sum() / args.batch_size,
                                                                        val_stats.consiserr.avg.sum()))
@@ -654,11 +515,9 @@ def main():
     }, is_best=False, savedir=args.save_dir, filename='test_stats.pth.tar')
 
     # Write test stats to val stats file at the end
-    statsvfile.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
+    statsvfile.write("{}, {}, {}, {}, {}, {}, {}\n".format(checkpoint['epoch'], test_stats.loss.avg,
                                                                    test_stats.ptloss.avg.sum(),
                                                                    test_stats.consisloss.avg.sum(),
-                                                                   test_stats.normalloss.avg.sum(),
-                                                                   test_stats.anchorloss.avg.sum(),
                                                                    test_stats.flowerr_sum.avg.sum() / args.batch_size,
                                                                    test_stats.flowerr_avg.avg.sum() / args.batch_size,
                                                                    test_stats.consiserr.avg.sum()))
@@ -681,9 +540,6 @@ def iterate(data_loader, model, tblogger, num_iters,
     # Save all stats into a namespace
     stats = argparse.Namespace()
     stats.loss, stats.ptloss, stats.consisloss  = AverageMeter(), AverageMeter(), AverageMeter()
-    stats.dissimposeloss, stats.dissimdeltaloss = AverageMeter(), AverageMeter()
-    stats.normalloss, stats.anchorloss          = AverageMeter(), AverageMeter()
-    stats.segloss                               = AverageMeter()
     stats.flowerr_sum, stats.flowerr_avg        = AverageMeter(), AverageMeter()
     stats.motionerr_sum, stats.motionerr_avg    = AverageMeter(), AverageMeter()
     stats.stillerr_sum, stats.stillerr_avg      = AverageMeter(), AverageMeter()
@@ -727,8 +583,7 @@ def iterate(data_loader, model, tblogger, num_iters,
     print('========== Mode: {}, Starting epoch: {}, Num iters: {} =========='.format(
         mode, epoch, num_iters))
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    pt_wt, consis_wt, normal_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale, args.normal_wt * args.loss_scale
-    anchor_wt, seg_wt = args.pose_anchor_wt * args.loss_scale, args.seg_wt * args.loss_scale
+    pt_wt, consis_wt = args.pt_wt * args.loss_scale, args.consis_wt * args.loss_scale
     identfm = util.req_grad(torch.eye(4).view(1,1,4,4).expand(1,args.num_se3-1,4,4).narrow(2,0,3).to(device), False)
     for i in xrange(num_iters):
         # ============ Load data ============#
@@ -746,34 +601,8 @@ def iterate(data_loader, model, tblogger, num_iters,
         fwdflows = util.req_grad(sample['fwdflows'].to(device), False)  # No gradients
         fwdvis   = util.req_grad(sample['fwdvisibilities'].float().to(device), False)
 
-        # Get XYZRGB input
-        if args.use_xyzrgb:
-            rgb      = util.req_grad(sample['rgbs'].to(device) / 255.0, train)  # Normalize RGB to 0-1
-            netinput = torch.cat([pts, rgb], 2)  # Concat along channels dimension
-        elif args.use_xyzhue:
-            hue      = util.req_grad(sample['rgbs'].narrow(2, 0, 1).to(device) / 179.0, train)  # Normalize Hue to 0-1 (Opencv has hue from 0-179)
-            netinput = torch.cat([pts, hue], 2)  # Concat along channels dimension
-        else:
-            netinput = pts  # XYZ
-
         # Get jt angles
-        #if args.use_full_jt_angles:
-        #    jtangles = util.req_grad(sample['actconfigs'].to(device), train)
-        #else:
-        if args.box_data:
-            jtangles = util.req_grad(sample['states'].to(device), train)
-        else:
-            jtangles = util.req_grad(sample['actctrlconfigs'].to(device), train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
-
-        # Get normals (if computed)
-        if (args.normal_wt > 0):
-            initnormals = util.req_grad(sample['initnormals'].to(device), train)
-            tarnormals  = util.req_grad(sample['tarnormals'].to(device),  train)
-            validinitnormals = util.req_grad(sample['validinitnormals'].to(device), train)
-
-        # Get segmentation labels
-        if (args.seg_wt > 0):
-            seglabels = util.req_grad(sample['labels'].to(device), False)
+        jtangles = util.req_grad(sample['actctrlconfigs'].to(device), train) #[:, :, args.ctrlids_in_state].type(deftype), requires_grad=train)
 
         # Measure data loading time
         data_time.update(time.time() - start)
@@ -782,217 +611,49 @@ def iterate(data_loader, model, tblogger, num_iters,
         # Start timer
         start = time.time()
 
-        ### Run a FWD pass through the network (multi-step)
+        ########## Run a FWD pass through the network
         # Predict the poses and masks
-        poses, initmask = [], None
-        masks, pivots = [], []
-        maskcenters, posecenters = [], []
-        se3poses = []
-        for k in xrange(pts.size(1)):
-            if ((args.delta_pivot == '') or (args.delta_pivot == 'pred')) and args.pose_center == 'pred':
-                # Predict the pose and mask at time t = 0
-                # For all subsequent timesteps, predict only the poses
-                if(k == 0):
-                    if args.use_gt_masks:
-                        p = model.forward_only_pose([netinput[:,k], jtangles[:,k]]) # We can only predict poses
-                        initmask = util.req_grad(sample['masks'][:,0].to(device).clone(), False) # Use GT masks
-                    elif args.use_gt_poses:
-                        p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
-                        initmask = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter)  # Predict masks
-                    else:
-                        p, initmask = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter)
-                else:
-                    if args.use_gt_poses:
-                        p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
-                    else:
-                        p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])
-                poses.append(p)
-                if args.trans_type == 'locallinear' or args.trans_type == 'locallineardelta':
-                    se3poses.append(model.posemaskmodel.se3output.clone()) # SE3 poses (TODO: only works for not GT stuff, no pivots)
-            else:
-                # Predict the poses and masks for all timesteps
-                if args.use_gt_masks:
-                    p = model.forward_only_pose([netinput[:,k], jtangles[:,k]])  # We can only predict poses
-                    m = util.req_grad(sample['masks'][:,k].to(device).clone(), False)  # Use GT masks
-                elif args.use_gt_poses:
-                    p = util.req_grad(sample['poses'][:,k].to(device).clone(), False)  # Use GT poses
-                    m = model.forward_only_mask(netinput[:,k], train_iter=num_train_iter) # Predict masks
-                else:
-                    p, m = model.forward_pose_mask([netinput[:,k], jtangles[:,k]], train_iter=num_train_iter) # TODO: Mask computations only needed for "maskmean" & "maskmeannograd"
-                masks.append(m)
-                # Update poses if there is a center option provided
-                p, pc, mc = ctrlnets.update_pose_centers(pts[:,k], m, p, args.pose_center)
-                poses.append(p)
-                if pc is not None:
-                    posecenters.append(pc)
-                    maskcenters.append(mc)
-                # Compute pivots
-                pivots.append(ctrlnets.compute_pivots(pts[:,k], m, p, args.delta_pivot))
-                # Get initial mask
-                if (k == 0):
-                    initmask = masks[0]
+        pose0, initmask = model.forward_pose_mask([pts[:, 0], jtangles[:, 0]], train_iter=num_train_iter)
+        pose1 = model.forward_only_pose([pts[:, 1], jtangles[:, 1]])
+        poses = [pose0, pose1]
 
-        ## Make next-pose predictions & corresponding 3D point predictions using the transition model
-        ## We use pose_0 and [ctrl_0, ctrl_1, .., ctrl_(T-1)] to make the predictions
-        ## NOTE: Here, each step is independent of the previous and we do not want to backprop across the chains.
-        ## NOTE: We also need to make copies of the deltas and compose them over time. Again, the key is that we do not
-        ## have any chains between the deltas - for delta_k, delta_0->k-1 is a fixed input, not a variable
-        deltaposes, transposes, compdeltaposes = [], [], []
-        for k in xrange(args.seq_len):
-            # Get current pose (backwards graph only connects to encoder through poses[0])
-            # No gradient feedback within multiple steps of the transition model
-            if (k == 0):
-                pose = poses[0] # Use initial pose (NOTE: We want to backprop to the pose model here)
-            else:
-                pose = transposes[k-1].detach() # Use previous predicted pose (NOTE: This is a copy with the graph cut)
+        # Make next-pose predictions & corresponding 3D point predictions using the transition model
+        deltapose, transpose = model.forward_next_pose(pose0, ctrls[:, 0], jtangles[:, 0], None)
+        deltaposes = [deltapose]
+        transposes = [transpose]
 
-            # Predict next pose based on curr pose, control
-            if args.trans_type == 'locallinear' or args.trans_type == 'locallineardelta':
-                delta, trans = model.transitionmodel.forward([se3poses[k], pose, ctrls[:,k]]) # TODO: Only works for 1-step
-            else:
-                delta, trans = model.forward_next_pose(pose, ctrls[:,k], jtangles[:,k],
-                                                       pivots[k] if (len(pivots) > 0) else None)
-            deltaposes.append(delta)
-            transposes.append(trans)
+        # Make prediction of next pts
+        nextpts = ptpredlayer(pts[:,0], initmask, deltapose)
+        predpts = [nextpts]
 
-            # Compose the deltas over time (T4 = T4 * T3^-1 * T3 * T2^-1 * T2 * T1^-1 * T1 = delta_4 * delta_3 * delta_2 * T1
-            # NOTE: This is only used if backprop-only-first-delta is set. Otherwise we use the deltas directly
-            if args.backprop_only_first_delta:
-                if (k == 0):
-                    compdeltaposes.append(delta) # This keeps the graph intact
-                else:
-                    prevcompdelta = compdeltaposes[k-1].detach() # Cut graph here, no gradient feedback in transition model
-                    compdeltaposes.append(se3nn.ComposeRtPair()(delta, prevcompdelta)) # delta_full = delta_curr * delta_prev
+        ########## Losses
+        ### 3D loss
+        # If motion-normalized loss, pass in GT flows
+        inputs = nextpts - pts[:, 0]  # Delta flow for that step (note that gradients only go to the mask & deltas)
+        targets = fwdflows[:, 0]
+        if args.motion_norm_loss:
+            motion = targets  # Use either delta-flows or full-flows
+            currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
+                                                                 loss_type=args.loss_type, wts=fwdvis[:, k])
+        else:
+            currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
 
-        # Now compute the losses across the sequence
-        # We use point loss in the FWD dirn and Consistency loss between poses
-        predpts, ptloss, consisloss, loss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len), 0
-        dissimposeloss, dissimdeltaloss = torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-        prednormals, normalloss, anchorloss = [], torch.zeros(args.seq_len), torch.zeros(args.seq_len)
-        segloss = 0
-        for k in xrange(args.seq_len):
-            ### Make the 3D point predictions and set up loss
-            # Separate between using the full gradient & gradient only for the first delta pose
-            if args.backprop_only_first_delta:
-                # Predict transformed 3D points
-                # We back-propagate only to the first predicted delta, so we break the graph between the later deltas and the predicted 3D points
-                compdelta = compdeltaposes[k] if (k == 0) else compdeltaposes[k].detach()
-                nextpts = ptpredlayer(pts[:,0], initmask, compdelta)
+        ### Consistency loss (between t & t+1)
+        # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
+        # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
+        delta = deltapose.detach()  # Break the graph here
+        nextpose_trans = se3nn.ComposeRtPair()(delta, poses[0])
+        currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[1])
 
-                # Predict transformed normals and normalize them to get "unit" vectors
-                if (args.normal_wt > 0):
-                    compdeltarot    = compdelta.clone(); compdeltarot[:,:,:,3] = 0 # No translation
-                    nextnormals     = ptpredlayer(initnormals[:,0], initmask, compdeltarot)
-                    nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
-                    prednormals.append(nextunitnormals.unsqueeze(1))
-
-                # Setup inputs & targets for loss
-                # NOTE: These losses are correct for the masks, but for any delta other than the first, the errors are
-                # not correct since we will have a credit assignment problem where each step's delta has to optimize for the complete errors
-                # So we only backprop to the first delta
-                inputs = nextpts - pts[:,0]
-                targets = fwdflows[:,k]
-            else:
-                # Predict transformed 3D points
-                # We do not want to backpropagate across the chain of predicted points so we break the graph here
-                currpts = pts[:,0] if (k == 0) else predpts[k-1].detach()
-                nextpts = ptpredlayer(currpts, initmask, deltaposes[k]) # We do want to backpropagate to all the deltas in this case
-
-                # Predict transformed normals and normalize them to get "unit" vectors
-                if (args.normal_wt > 0):
-                    deltarot        = deltaposes[k].clone(); deltarot[:,:,:,3] = 0 # No translation
-                    nextnormals     = ptpredlayer(initnormals[:,0], initmask, deltarot)
-                    nextunitnormals = F.normalize(nextnormals, p=2, dim=1)
-                    prednormals.append(nextunitnormals.unsqueeze(1)) # B x 1 x 3 x H x W
-
-                # Setup inputs & targets for loss
-                # For each step, we only look at the target flow for that step (how much do those points move based on that control alone)
-                # and compare that against the predicted flows for that step alone!
-                # TODO: This still is wrong as "currpts" will be wrong if at the previous timestep the deltas were incorrect.
-                # TODO: So the gradients will not be totally correct since even though we look at delta-flow errors here, the points which
-                # TODO: are transformed to compute those errors are not correct which can lead to incorrect motion predictions
-                inputs = nextpts - currpts  # Delta flow for that step (note that gradients only go to the mask & deltas)
-                targets = fwdflows[:,k] - (0 if (k == 0) else fwdflows[:,k-1])  # Flow for those points in that step alone!
-            predpts.append(nextpts) # Save predicted pts
-
-            ### 3D loss
-            # If motion-normalized loss, pass in GT flows
-            if args.motion_norm_loss:
-                motion  = targets # Use either delta-flows or full-flows
-                currptloss = pt_wt * ctrlnets.MotionNormalizedLoss3D(inputs, targets, motion=motion,
-                                                                     loss_type=args.loss_type, wts=fwdvis[:, k])
-            else:
-                currptloss = pt_wt * ctrlnets.Loss3D(inputs, targets, loss_type=args.loss_type, wts=fwdvis[:, k])
-
-            ### Normal loss
-            if (args.normal_wt > 0):
-                # Compute loss only for those points which have valid normals & only those which are visible
-                currnormalloss = normal_wt * ctrlnets.NormalLoss(nextunitnormals, tarnormals[:,k],
-                                                                 wts=fwdvis[:,k] * validinitnormals[:,k],
-                                                                 motion=targets if args.motion_norm_normal_loss else None)
-                loss += currnormalloss
-                normalloss[k] = currnormalloss.item()
-                prednormals = torch.cat(prednormals, 1) # B x S x 3 x H x W
-
-            ### Segmentation loss (only for mask at t = 0)
-            if (args.seg_wt > 0) and (k == 0):
-                currsegloss = seg_wt * nn.NLLLoss2d(weight=None, size_average=True)(initmask.log(), seglabels[:,0])
-                loss += currsegloss
-                segloss = currsegloss.item()
-
-            ### Pose anchor loss
-            if (args.pose_anchor_wt > 0):
-                # Get pose centers and mask mean
-                # We do not want to backpropagate across the chain of predicted points so we break the graph here
-                currpts = pts[:,0] if (k == 0) else predpts[k-1].detach()
-                maskmeanp  = se3nn.WeightedAveragePoints()(currpts, initmask) # (B x K x 3)
-                if (not args.pose_anchor_maskbprop):
-                    maskmean = maskmeanp.detach() # Break graph to backprop to mask
-                else:
-                    maskmean = maskmeanp # Backprop to mask mean
-                posecenter = poses[k][:,:,:,3] # Translation points (B x K x 3)
-                # Compute loss
-                curranchorloss = anchor_wt * ctrlnets.BiMSELoss(maskmean, posecenter)
-                if args.pose_anchor_grad_clip and mode =='train':
-                    curranchorloss = helpers.clip_grad(curranchorloss, -args.pose_anchor_grad_clip, args.pose_anchor_grad_clip)  # avoid explosive gradient
-                loss += curranchorloss
-                anchorloss[k] = curranchorloss.item()
-
-            ### Consistency loss (between t & t+1)
-            # Poses from encoder @ t & @ t+1 should be separated by delta from t->t+1
-            # NOTE: For the consistency loss, the loss is only backpropagated to the encoder poses, not to the deltas
-            delta = deltaposes[k].detach()  # Break the graph here
-            nextpose_trans = se3nn.ComposeRtPair()(delta, poses[k])
-            if args.consis_rt_loss:
-                currconsisloss = consis_wt * ctrlnets.PoseC(nextpose_trans, poses[k+1])
-            else:
-                currconsisloss = consis_wt * ctrlnets.BiMSELoss(nextpose_trans, poses[k+1])
-
-            # Add a loss for pose dis-similarity & delta dis-similarity
-            dissimpose_wt, dissimdelta_wt = args.pose_dissim_wt * args.loss_scale, args.delta_dissim_wt * args.loss_scale
-            currdissimposeloss  = dissimpose_wt * ctrlnets.DisSimilarityLoss(poses[k][:,1:],
-                                                                             poses[k+1][:,1:],
-                                                                             size_average=True)  # Enforce dis-similarity in pose space
-            currdissimdeltaloss = dissimdelta_wt * ctrlnets.DisSimilarityLoss(deltaposes[k][:,1:],
-                                                                      identfm.expand_as(deltaposes[k][:,1:]),
-                                                                      size_average=True) # Change in pose > 0
-
-            # Append to total loss
-            loss += currptloss + currconsisloss # + currdissimposeloss + currdissimdeltaloss
-            ptloss[k]     = currptloss.item()
-            consisloss[k] = currconsisloss.item()
-            dissimposeloss[k]  = currdissimposeloss.item()
-            dissimdeltaloss[k] = currdissimdeltaloss.item()
+        # Append to total loss
+        loss = currptloss + currconsisloss
+        ptloss     = torch.Tensor([currptloss.item()])
+        consisloss = torch.Tensor([currconsisloss.item()])
 
         # Update stats
         stats.ptloss.update(ptloss)
         stats.consisloss.update(consisloss)
         stats.loss.update(loss.item())
-        stats.dissimposeloss.update(dissimposeloss)
-        stats.dissimdeltaloss.update(dissimdeltaloss)
-        stats.normalloss.update(normalloss)
-        stats.anchorloss.update(anchorloss)
-        stats.segloss.update(segloss)
 
         # Measure FWD time
         fwd_time.update(time.time() - start)
@@ -1106,10 +767,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                     mode+'-loss': loss.item(),
                     mode+'-pt3dloss': ptloss.sum(),
                     mode+'-consisloss': consisloss.sum(),
-                    mode+'-normalloss': normalloss.sum(),
-                    mode+'-anchorloss': anchorloss.sum(),
-                    mode+'-dissimposeloss': dissimposeloss.sum(),
-                    mode+'-dissimdeltaloss': dissimdeltaloss.sum(),
                     mode+'-consiserr': consiserror.sum(),
                     mode+'-consiserrmax': consiserrormax.sum(),
                     mode+'-flowerrsum': flowerr_sum.sum()/bsz,
@@ -1118,7 +775,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                     mode+'-motionerravg': motionerr_avg.sum()/bsz,
                     mode+'-stillerrsum': stillerr_sum.sum() / bsz,
                     mode+'-stillerravg': stillerr_avg.sum() / bsz,
-                    mode+'-segloss': segloss
                 }
                 if mode == 'train':
                     info[mode+'-lr'] = args.curr_lr # Plot current learning rate
@@ -1157,30 +813,12 @@ def iterate(data_loader, model, tblogger, num_iters,
                     maskdisp  = torchvision.utils.make_grid(torch.cat([initmask.narrow(0,id,1)], 0).cpu().view(-1, 1, args.img_ht, args.img_wd),
                                                             nrow=args.num_se3, normalize=True, range=(0,1))
 
-                    # Display RGB
-                    if args.use_xyzrgb:
-                        rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id].float().view(-1, 3, args.img_ht, args.img_wd),
-                                                                nrow=args.seq_len, normalize=True, range=(0.0,255.0))
-                    elif args.use_xyzhue:
-                        rgbdisp = torchvision.utils.make_grid(sample['rgbs'][id,:,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                                nrow=args.seq_len, normalize=True, range=(0.0, 179.0)) # Show only hue, goes from 0-179 in OpenCV
 
                     # Show as an image summary
                     info = { mode+'-depths': util.to_np(depthdisp.unsqueeze(0)),
                              mode+'-flows' : util.to_np(flowdisp.unsqueeze(0)),
                              mode+'-masks' : util.to_np(maskdisp.narrow(0,0,1))
                     }
-                    if args.use_xyzrgb or args.use_xyzhue:
-                        info[mode+'-rgbs'] = util.to_np(rgbdisp.unsqueeze(0)) # Optional RGB
-                    if (args.normal_wt > 0):
-                        normdisp = torchvision.utils.make_grid(torch.cat([tarnormals.narrow(0, id, 1),
-                                                                          prednormals.narrow(0, id, 1)], 0).cpu().view(-1, 3, args.img_ht, args.img_wd),
-                                                               nrow=args.seq_len, normalize=True, range=(-1, 1))
-                        info[mode+'-normals'] = util.to_np(normdisp.unsqueeze(0))  # Optional normals
-                    if (args.seg_wt > 0):
-                        segdisp = torchvision.utils.make_grid(sample['labels'][id,0].float().view(-1, 1, args.img_ht, args.img_wd),
-                                                                nrow=1, normalize=True, range=(0, len(args.mesh_ids)))
-                        info[mode+'-seglabels'] = util.to_np(segdisp.unsqueeze(0))  # Optional segmentation labels
                     for tag, images in info.items():
                         tblogger.image_summary(tag, images, iterct)
 
@@ -1189,11 +827,6 @@ def iterate(data_loader, model, tblogger, num_iters,
                     #if len(pivots) > 0:
                     #    deltase3s = torch.cat([deltase3s, pivots[-1][id].view(args.num_se3,-1).cpu()], 1)
                     #print('\tPredicted delta-SE3s @ t=2:', deltase3s)
-
-                    ## Details on the centers
-                    if len(posecenters) > 0:
-                        centers = torch.cat([maskcenters[-1][id].cpu(), posecenters[-1][id].cpu(), poses[-1][id,:,:,3].cpu()], 1)
-                        print('\tMaskCenters | PoseCenters (Init) | PoseCenters (Final)', centers)
 
                     ## Print the predicted mask values
                     print('\tPredicted mask stats:')
@@ -1230,20 +863,15 @@ def print_stats(mode, epoch, curr, total, samplecurr, sampletotal,
 
     # Print flow loss per timestep
     for k in xrange(args.seq_len):
-        print('\tStep: {}, Pt: {:.3f} ({:.3f}), Norm:  {:.3f} ({:.3f}),'
-              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), Anchor: {:.3f}/{:.4f}, '
-              'Pose-Dissim: {:.3f} ({:.3f}), Delta-Dissim: {:.3f} ({:.3f}), '
+        print('\tStep: {}, Pt: {:.3f} ({:.3f}), '
+              'Consis: {:.3f}/{:.4f} ({:.3f}/{:.4f}), '
               'Flow => Sum: {:.3f} ({:.3f}), Avg: {:.3f} ({:.3f}), '
               'Motion/Still => Sum: {:.3f}/{:.3f}, Avg: {:.3f}/{:.3f}'
             .format(
             1 + k * args.step_len,
             stats.ptloss.val[k], stats.ptloss.avg[k],
-            stats.normalloss.val[k], stats.normalloss.avg[k],
             stats.consisloss.val[k], stats.consisloss.avg[k],
             stats.consiserr.val[k], stats.consiserr.avg[k],
-            stats.anchorloss.val[k], stats.anchorloss.avg[k],
-            stats.dissimposeloss.val[k], stats.dissimposeloss.avg[k],
-            stats.dissimdeltaloss.val[k], stats.dissimdeltaloss.avg[k],
             stats.flowerr_sum.val[k] / bsz, stats.flowerr_sum.avg[k] / bsz,
             stats.flowerr_avg.val[k] / bsz, stats.flowerr_avg.avg[k] / bsz,
             stats.motionerr_sum.avg[k] / bsz, stats.stillerr_sum.avg[k] / bsz,

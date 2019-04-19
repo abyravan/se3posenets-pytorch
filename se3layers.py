@@ -7,13 +7,8 @@ from layers.Dense3DPointsToRenderedSubPixelDepth import Dense3DPointsToRenderedS
 from layers.DepthImageToDense3DPoints import DepthImageToDense3DPoints
 from layers.HuberLoss import HuberLoss
 from layers.Noise import Noise
-from layers.NormalizedMSELoss import NormalizedMSELoss
 from layers.NormalizedMSESqrtLoss import NormalizedMSESqrtLoss
 from layers.NTfm3D import NTfm3D
-from layers.NTfm3DDelta import NTfm3DDelta
 from layers.RtInverse import RtInverse
 from layers.SE3ToRt import SE3ToRt
-from layers.WeightedAveragePoints import WeightedAveragePoints
-from layers.Weighted3DTransformLoss import Weighted3DTransformLoss
-from layers.Weighted3DTransformNormLoss import Weighted3DTransformNormLoss
 from layers.Normalize import Normalize

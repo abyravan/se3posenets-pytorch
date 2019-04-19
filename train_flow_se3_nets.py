@@ -284,8 +284,6 @@ def main():
     print('Using state of controllable joints')
     args.num_state_net = args.num_ctrl # Use only the jt angles of the controllable joints
 
-    print('Using multi-step Flow-Model')
-
     ## Num input channels
     num_input_channels = 3 # Num input channels
 

@@ -25,4 +25,4 @@ Use [rclone](https://rclone.org/drive/) to download from the drive link as there
 Once done, you should change ```<path-to-data>``` in the config files to the correct data directory.
 
 # Paper:
-Byravan, Arunkumar, et al. ["Se3-pose-nets: Structured deep dynamics models for visuomotor planning and control."](https://rse-lab.cs.washington.edu/papers/se3posenets_icra18.pdf), ICRA 2018.
+Byravan, Arunkumar, et al. ["SE3-Pose-Nets: Structured Deep Dynamics Models for Visuomotor Planning and Control."](https://rse-lab.cs.washington.edu/papers/se3posenets_icra18.pdf), ICRA 2018.

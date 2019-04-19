@@ -8,7 +8,8 @@
 3) Compile the code with: ```sh make.sh``` (in the main se3nets-pytorch folder)
 4) To train the se3 pose nets: ```python train_se3posenets.py -c <config_file>```
      For an example config file, look at ```config/icra18final/simdata/se3pose/def_rmsprop.yaml```
-     You *need* to change the “data” path inside the config file to be your path to the dataset.
+     You *need* to change the “data” path inside the config file to be your path to the dataset, specifically the ```<path-to-data>```
+     should be set to the directory where the dataset is located (see below for link to the dataset).
 5) To train the baseline se3/flow networks: ```python train_flow_se3_nets.py -c <config_file>```
      For the flow network, the config file is at ```config/icra18final/simdata/flow/def.yaml```
      For the se3 net, the config file is at ```config/icra18final/simdata/se3/def.yaml```
@@ -17,11 +18,11 @@
    where log_dir can be the path to the directory specified in the config file as save-dir.
 
 # Simulated Baxter Data:
-You can download the simulated Baxter dataset described in the paper here: https://drive.google.com/open?id=1CifjZXKL7pnJgAaTenAFSuGuUGsBmUaZ
+You can download the simulated Baxter dataset (~72G) described in the paper here: https://drive.google.com/open?id=1CifjZXKL7pnJgAaTenAFSuGuUGsBmUaZ
 
-Use [rclone](https://rclone.org/drive/) to download from the drive link as there are multiple small files in the dataset.
+Use [rclone](https://rclone.org/drive/) to download from the drive link as there are a lot of small files in the dataset.
 
-Once done, you should change the "data" path in the config giles to the correct root directory.
+Once done, you should change ```<path-to-data>``` in the config files to the correct data directory.
 
 # Paper:
 Byravan, Arunkumar, et al. ["Se3-pose-nets: Structured deep dynamics models for visuomotor planning and control."](https://rse-lab.cs.washington.edu/papers/se3posenets_icra18.pdf), ICRA 2018.

@@ -18,7 +18,7 @@
    where log_dir can be the path to the directory specified in the config file as save-dir.
 
 # Simulated Baxter Data:
-You can download the simulated Baxter dataset (~72G) described in the paper here: https://drive.google.com/open?id=1OL08RzPXJA89KQnmbImdcZXdxkH3Ee5U
+You can download the simulated Baxter dataset (~53G) described in the paper here: https://drive.google.com/open?id=1OL08RzPXJA89KQnmbImdcZXdxkH3Ee5U
 
 Use [rclone](https://rclone.org/drive/) to download from the drive link as there are a lot of small files in the dataset.
 
